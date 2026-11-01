@@ -15,18 +15,49 @@ tracking behave — is written once, in the SDK's
 All of the player is C++ under `ss_player/`, and one copy of it builds two ways: as a
 **GDExtension** over `godot-cpp`, and as a **custom module** compiled into the engine. The
 `#ifdef SPRITESTUDIO_GODOT_EXTENSION` blocks hold only the includes and the type conversions that
-differ between the two.
+differ between the two. An arrow is a call:
 
-**Playback.** `SpriteStudioPlayer2D` is the node: its properties, methods and signals. Under it is
-a playback core with no node of its own, which drives `libssruntime` over its C API, walks each
-frame's draw batches and draws them through `RenderingServer` on one root canvas item, with one
-child core per Instance part; masks, effects and the per-part meshes live there. The canvas-item
-shader is assembled from GLSL pieces when a material is made. Sound plays through the player
-unless a `SpriteStudioAudioBackend` takes it over. `SpriteStudioPartAttachment2D` is the user's
-node that follows a part, and `SpriteStudioButton` a button drawn by the player placed under it.
-`SSABResource` and `SSQBResource` load the converted files; one
-parse of a `.ssab` is shared by every player bound to it. The runtime libraries sit under
-`ss_player/runtime/`, from `download-sdk` or `build-runtime`.
+```mermaid
+---
+config:
+  flowchart:
+    wrappingWidth: 400
+---
+flowchart TD
+    subgraph pkg ["ss_player/"]
+        subgraph nodes ["Nodes"]
+            btn["SpriteStudioButton<br/>a BaseButton"]
+            att["SpriteStudioPartAttachment2D<br/>follows a part"]
+            node["SpriteStudioPlayer2D<br/>properties · signals"]
+        end
+        core["Playback core<br/>no node · a child per Instance part"]
+        res["SSABResource · SSQBResource<br/>one parse per .ssab"]
+        sound["Sound voices<br/>or SpriteStudioAudioBackend"]
+        subgraph editor ["Editor builds only"]
+            dock["SS Importer dock<br/>FileSystem menu · Reconvert"]
+            panel["Inspector · playback panel<br/>viewport drop"]
+        end
+    end
+    rs["RenderingServer<br/>one root canvas item"]
+    Brain["Brain · libssruntime<br/>C API"]
+    conv["libssconverter"]
+    btn --> node
+    att --> node
+    panel --> node
+    node --> core
+    node --> sound
+    core --> res
+    core --> Brain
+    core --> rs
+    dock --> conv
+```
+
+**Playback.** `SpriteStudioPlayer2D` is the node: its properties, methods and signals, and the
+sound, which it plays through voices it pools unless a `SpriteStudioAudioBackend` takes it over.
+The core under it walks each frame's draw batches and draws them on its root canvas item; masks,
+effects and the per-part meshes live there, and the canvas-item shader is assembled from GLSL
+pieces when a material is made. One parse of a `.ssab` is shared by every player bound to it. The
+runtime libraries sit under `ss_player/runtime/`, from `download-sdk` or `build-runtime`.
 
 **The editor**, compiled only into editor builds: the **SS Importer** dock (drops, recent files,
 Reconvert), the FileSystem dock's right-click menu, the `SSABResource` inspector, the playback
