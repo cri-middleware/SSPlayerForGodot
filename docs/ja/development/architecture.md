@@ -6,9 +6,44 @@ SpriteStudio の Player に共通すること（再生・モーションブレ�
 
 ## 層
 
-プレイヤーはすべて `ss_player/` の下の C++ で、同じ 1 つのソースから 2 通りにビルドします。`godot-cpp` の上の **GDExtension** と、エンジンに組み込む **カスタムモジュール** です。`#ifdef SPRITESTUDIO_GODOT_EXTENSION` のブロックが持つのは、2 つで異なる include と型の変換だけです。
+プレイヤーはすべて `ss_player/` の下の C++ で、同じ 1 つのソースから 2 通りにビルドします。`godot-cpp` の上の **GDExtension** と、エンジンに組み込む **カスタムモジュール** です。`#ifdef SPRITESTUDIO_GODOT_EXTENSION` のブロックが持つのは、2 つで異なる include と型の変換だけです。矢印は呼び出しです。
 
-**再生。** `SpriteStudioPlayer2D` がノードで、プロパティ・メソッド・シグナルを持ちます。その下に、ノードを持たない再生コアがあります。コアは C API で `libssruntime` を動かし、各フレームの描画バッチをたどり、`RenderingServer` で 1 つのルートのキャンバスアイテムに描きます。Instance パーツごとに子のコアを 1 つ持ち、マスク・エフェクト・パーツごとのメッシュもそこにあります。キャンバスアイテムのシェーダーは、マテリアルを作るときに GLSL の部品から組み立てます。音は `SpriteStudioAudioBackend` が引き継がない限りプレイヤーが鳴らします。`SpriteStudioPartAttachment2D` はパーツに追従する利用者のノードで、`SpriteStudioButton` は子に置いたプレイヤーで描くボタンです。変換したファイルは `SSABResource` と `SSQBResource` が読み込み、`.ssab` の解析結果は、それに結び付いたすべてのプレイヤーで共有します。ランタイムのライブラリは `ss_player/runtime/` に、`download-sdk` か `build-runtime` が置きます。
+```mermaid
+---
+config:
+  flowchart:
+    wrappingWidth: 400
+---
+flowchart TD
+    subgraph pkg ["ss_player/"]
+        subgraph nodes ["ノード"]
+            btn["SpriteStudioButton<br/>BaseButton"]
+            att["SpriteStudioPartAttachment2D<br/>パーツに追従"]
+            node["SpriteStudioPlayer2D<br/>プロパティ · シグナル"]
+        end
+        core["再生コア<br/>ノードなし · Instance ごとに子"]
+        res["SSABResource · SSQBResource<br/>.ssab の解析を共有"]
+        sound["音のボイス<br/>または SpriteStudioAudioBackend"]
+        subgraph editor ["エディタのビルドだけ"]
+            dock["SS Importer ドック<br/>右クリックメニュー · Reconvert"]
+            panel["インスペクタ · 再生パネル<br/>ビューポートへのドロップ"]
+        end
+    end
+    rs["RenderingServer<br/>ルートのキャンバスアイテム 1 つ"]
+    Brain["Brain · libssruntime<br/>C API"]
+    conv["libssconverter"]
+    btn --> node
+    att --> node
+    panel --> node
+    node --> core
+    node --> sound
+    core --> res
+    core --> Brain
+    core --> rs
+    dock --> conv
+```
+
+**再生。** `SpriteStudioPlayer2D` がノードで、プロパティ・メソッド・シグナルと音を持ちます。音は、`SpriteStudioAudioBackend` が引き継がない限り、プールしたボイスでプレイヤーが鳴らします。その下のコアは各フレームの描画バッチをたどり、ルートのキャンバスアイテムに描きます。マスク・エフェクト・パーツごとのメッシュもそこにあり、キャンバスアイテムのシェーダーは、マテリアルを作るときに GLSL の部品から組み立てます。`.ssab` の解析結果は、それに結び付いたすべてのプレイヤーで共有します。ランタイムのライブラリは `ss_player/runtime/` に、`download-sdk` か `build-runtime` が置きます。
 
 **エディタ**（エディタのビルドにだけ入ります）: **SS Importer** ドック（ドロップ・最近使ったファイル・Reconvert）、ファイルシステムドックの右クリックメニュー、`SSABResource` のインスペクタ、プレイヤーを選んだときに出る再生パネル、`.ssab` を 2D ビューポートにドロップしてプレイヤーを作る機能です。インポーターは `libssconverter` で `.sspj` を変換し、出力フォルダごとの変換元を `res://.ssplayer_sources.cfg` に記録します。
 
