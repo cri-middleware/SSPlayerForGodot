@@ -47,18 +47,11 @@ Drag a `.sspj` onto the **SS Importer** dock, then drop the converted `.ssab` in
 
 ## Key Features
 
-This plugin brings SpriteStudio's full expressive power to Godot Engine.
-
-*   **Broad Feature Support:** Supports nearly all SpriteStudio features — bone hierarchies, mesh & deformations, and high-performance particle effects — with a few exceptions noted in [Limitations & Scope](limitations.md).
-*   **Seamless Integration and a Powerful Asset Pipeline:** In addition to easy drag-and-drop importing via the built-in "SS Importer" dock, you can open SpriteStudio directly from the Inspector and reconvert with a single click. For details, see [Asset Import and Editor Integration](workflow/usage_asset_pipeline.md).
-*   **Dynamic Customization (CellMap Overrides):** Easily swap textures at runtime to implement character equipment changes or color variations.
-*   **Signals & Events:** Receive "User Data" and "Signals" from your animation timeline directly as Godot Signals, allowing frame-perfect triggers for game logic. Every event says which part fired it.
-*   **Motion Blending:** Lay animations over one another on tracks and cross-fade between them, so a character slides from one motion into the next instead of cutting. See [Motion Blending](workflow/motion_blending.md).
-*   **Animated UI Buttons:** `SpriteStudioButton` makes an animation a Godot button that plays its own section for hover, press, disabled and focus, and can take clicks only on its artwork. See [UI Buttons](workflow/ui_buttons.md).
-*   **Audio That Just Plays:** Audio parts sound through Godot with no setup — in the editor preview too. Adjust the volume, take it over through the `audio` signal, or route every sound to your own audio middleware with a [backend resource](workflow/audio.md).
-*   **Per-Part Effects:** The thirteen SpriteStudio add-on shaders (sepia, outline, HSB, blur, pixelate, wave, noise and more) are reproduced natively — assigned in SpriteStudio, nothing to wire up in Godot.
-*   **Smooth Slow-Motion:** Built-in sub-frame interpolation ensures buttery-smooth playback even on high-refresh-rate displays or during slow-motion effects.
-*   **High Performance & Low Memory:** Backed by `libssruntime`'s SIMD optimizations and zero-parse overhead binary formats (`.ssab`), it renders massive amounts of characters efficiently, even on mobile targets.
+- **Bring your characters to life.** Breathing and blinking, swaying hair and clothes, flashy slash and magic effects — the motion is built visually in a dedicated editor (SpriteStudio) with bone rigs, mesh deformation, particles and per-part add-on shaders, and Godot just plays it. Animations crossfade and layer on tracks at runtime, so a walk eases into a run instead of snapping ([Motion Blending](workflow/motion_blending.md)). Nothing to rebuild by hand in `AnimationPlayer`.
+- **Not just characters — effects, UI and whole scenes.** Combine characters, backgrounds, effects and UI into a cutscene or a full-screen sequence in the editor, and play it in Godot as a single animation. `SpriteStudioButton` makes one a Godot button that plays its own section for hover, press, disabled and focus ([UI Buttons](workflow/ui_buttons.md)).
+- **Just another node.** `SpriteStudioPlayer2D` sits in your scene like any other node and is controlled from GDScript — with signals from timeline keys, built-in audio playback, per-part overrides, and cellmap texture swaps at runtime ([Scripting & Events](workflow/usage_scripting.md)). The animation lives in its own file rather than inside the scene, so teammates don't collide over scene merges in Git.
+- **A seamless SpriteStudio ⇄ Godot round trip.** Drop a `.sspj` onto the SS Importer dock and it is converted inside the editor ([Asset Import & Editor Integration](workflow/usage_asset_pipeline.md)). To tweak it, click **Open SSPJ** in the Inspector, save in SpriteStudio, then click **Reconvert** — no manual export step.
+- **Zero-parse loading, SIMD playback.** `.ssab` is a FlatBuffers binary read in place, so loading involves no parsing, and poses are computed by a SIMD-optimised Rust core — light enough for mobile and for scenes with many characters. Turn on **sub-frame interpolation** and motion follows high-refresh-rate displays.
 
 ## Overview
 
