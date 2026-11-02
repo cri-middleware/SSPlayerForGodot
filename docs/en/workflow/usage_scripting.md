@@ -142,12 +142,12 @@ Tracking is done with the dedicated **`SpriteStudioPartAttachment2D`** node. Pla
 
 | Property | Description |
 |---|---|
-| **Part Name** (`part_name`) | The name of the part to follow (the PartData name in the `.ssab`). The inspector offers a dropdown populated from the asset's part names (still typable, for when the player cannot be resolved). Skinned-mesh parts are left out of the dropdown — see the note below |
+| **Part Name** (`part_name`) | The name of the part to follow, as shown in SpriteStudio. The inspector offers a dropdown populated from the asset's part names (still typable, for when the player cannot be resolved). Skinned-mesh parts are left out of the dropdown — see the note below |
 | **Follow Path** (`follow_path`) | The `SpriteStudioPlayer2D` to read from. Empty (default) uses the **nearest ancestor** player |
 | **Remote Path** (`remote_path`) | The `Node2D` to drive. Empty (default) drives this node itself, and its children follow through scene-tree inheritance. Set it to push the pose to an external node instead (for assets that live outside the player's subtree) |
 | **Use Global Coordinates** (`use_global_coordinates`) | ON (default) writes the pose in global coordinates, OFF in the target's local coordinates |
-| **Update Position / Update Rotation** (`update_position` / `update_rotation`) | Reflect position / rotation (both ON by default) |
-| **Update Scale** (`update_scale`) | Reflect scale (OFF by default) |
+| **Position / Rotation** in the **Update** group (`update_position` / `update_rotation`) | Reflect position / rotation (both ON by default) |
+| **Scale** in the **Update** group (`update_scale`) | Reflect scale (OFF by default) |
 | **On Part Hidden** (`on_part_hidden`) | Behavior on frames where the part is hidden. `Follow Always` (keep following; default) / `Hide Target` (hide the target). From a script: `SpriteStudioPartAttachment2D.FOLLOW_ALWAYS` / `.HIDE_TARGET` |
 
 > **Mesh (skinned) parts cannot be followed directly.** A bone-bound mesh part (a deforming part such as a hand or a face) has its vertices drawn by bone skinning, while the part's own transform stays at its setup node position — usually near the character root. So targeting such a part makes the follower snap near the root rather than onto the visible art. To follow the position of a mesh part, add a **NULL part (a bone-point / empty part)** at that spot in SpriteStudio and target that part's name instead; a bone (armature) or joint part works the same way.
@@ -298,4 +298,4 @@ Color and cell overrides conflict with the animation, so they take a `priority` 
 - Overrides live on the runtime, which owns their lifecycle. To keep a color or cell override across animation changes, set it with `OVERRIDE_PRIORITY_PERMANENT` rather than re-applying it after each change. A visibility override has no priority mode, so it has to be set again after an animation change.
 - Assigning a different `.ssab` resource clears every override, because part identity is lost.
 - Overrides do not reach parts **inside** an instance part (the child animation runs as a separate player). Force-hiding the instance part itself does stop its contents from being drawn.
-- To tint the **whole** animation rather than one part, use the node's `modulate` / `self_modulate`, as on any `CanvasItem`. They apply last — over part colors, color overrides and add-on shaders — and they reach the parts inside instance parts as well. `self_modulate` leaves child nodes, such as the content of a `SpriteStudioPartAttachment2D`, untouched, as it does on any node.
+- To tint the **whole** animation rather than one part, use the node's `modulate` / `self_modulate`, as on any `CanvasItem`. They apply last — over part colors, color overrides and [add-on shaders](tips.md#part-add-on-shaders-per-part-effects) — and they reach the parts inside instance parts as well. `self_modulate` leaves child nodes, such as the content of a `SpriteStudioPartAttachment2D`, untouched, as it does on any node.

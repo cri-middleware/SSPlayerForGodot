@@ -19,17 +19,18 @@ func _ready() -> void:
     ssnode.play()
 ```
 
+**エディタ内プレビュー**: ノードを選択すると表示される **SpriteStudio** ボトムパネル（先頭から再生 / 現在位置から再生 / 停止、フレームスクラバ、ループと速度）で、ゲームを実行せずにプレビューできます。ショートカットは AnimationPlayer エディタと同じです（**D** 現在位置から再生 / **Shift+D** 先頭から再生 / **S** 停止）。
+
 ## 主なメソッド
 
-* `set_ssab_resource(res: SSABResource)` / `get_ssab_resource() -> SSABResource`
-* `set_animation(name: String)` / `get_current_animation() -> String`
+* `set_ssab_resource(res_ssab: SSABResource)` / `get_ssab_resource() -> SSABResource`: `ssab` プロパティです。
+* `set_animation(name: String)` / `get_current_animation() -> String`: `current_animation` プロパティの setter と getter です（`player.current_animation = "walk"` と書けます）。
 * `set_autoplay(autoplay: bool)` / `is_autoplay() -> bool`: シーン開始時に自動再生するかどうか。**既定は `true`** です。シーンに配置したノードのために `play()` を呼ぶコードは存在しないため、そのまま再生されます。自分で再生を制御したい場合や、先頭フレームをポーズとして保持したい場合はオフにしてください。
 * `set_offset(offset: Vector2)` / `get_offset() -> Vector2`: Node2D の原点を動かさずに描画位置だけをずらします。
-* `set_flip_h(flip: bool)` / `is_flipped_h() -> bool`: 水平反転。
-* `set_flip_v(flip: bool)` / `is_flipped_v() -> bool`: 垂直反転。
+* `set_flip_h(flip_h: bool)` / `is_flipped_h() -> bool`: 水平反転。
+* `set_flip_v(flip_v: bool)` / `is_flipped_v() -> bool`: 垂直反転。
 * `set_animation_process_mode(mode: AnimationProcessMode)` / `get_animation_process_mode() -> AnimationProcessMode`: `ANIMATION_PROCESS_PHYSICS`（`0`）で Physics (`_physics_process`) 同期、`ANIMATION_PROCESS_IDLE`（`1`）で Idle (`_process`) 同期、`ANIMATION_PROCESS_MANUAL`（`2`）でノード自身による更新を停止します。
 * `advance(delta: float)`: 再生を `delta` 秒ぶん進め、自動更新と同じように `frame_updated` を発行します。`ANIMATION_PROCESS_MANUAL` 向けの API です。他のモードで呼ぶと、ノード自身の更新に *加えて* アニメーションが進みます。
-* **エディタ内プレビュー**: ノードを選択すると表示される **SpriteStudio** ボトムパネル（先頭から再生 / 現在位置から再生 / 停止、フレームスクラバ、ループと速度）で、ゲームを実行せずにプレビューできます。ショートカットは AnimationPlayer エディタと同じです（**D** 現在位置から再生 / **Shift+D** 先頭から再生 / **S** 停止）。
 * `play(start_frame: float = -1.0)`: 再生を開始します。既定値の `-1.0` は、現在の再生ヘッド位置から続きを再生するのではなく、**区間の先頭に巻き戻します**（逆再生方向なら区間の末尾）。現在位置から再生したい場合は `get_frame_no()` を渡してください。
 * `pause()`: 現在のフレームを保持したまま、その場で再生を止めます。**冪等**です（2 回呼んでも一時停止のままで、再開はしません）。
 * `resume()`: 保持を解除し、同じフレームから再開します。**冪等**で、一時停止ではなく停止している場合は何もしません（停止からの開始は `play()` で、こちらは巻き戻ります）。
@@ -37,9 +38,9 @@ func _ready() -> void:
 * `is_playing() -> bool`: 再生中に `true`。**一時停止中も `true` です**（一時停止は「保持」であって「停止」ではありません）。 / `is_pausing() -> bool`: 保持中のみ `true`。一度も再生していないアニメーションと `stop()` 後は、どちらも `false` です。
 * `is_finished() -> bool`: 設定したループを全て再生し終えたかどうか。パルスではなく**状態**で、完了時に latch され次の `play()` またはアニメ切り替えまで保持されます。`animation_finished` が飛んだ時点で接続していなかった側でも「終わったか」を問えます。`loop_count` が無限のときは決して `true` にならず、**`stop()` でも立ちません** —— 命令された停止は完了ではないからで、そこが `not is_playing()` との違いです。
 * `just_looped() -> bool`: 直近の update でループ境界を跨いだかどうか。**パルス**であって状態ではありません — ランタイムが毎 update の冒頭でクリアするので、跨いだ tick の内側でのみ `true` です（だから `is_looped` ではありません。1 tick 遅れて読むと `false` になります）。ポーリングしたくなければ `animation_looped` シグナルが同じエッジを配ります。
-* `get_animation_names() -> PackedStringArray`: 割り当てた [SSABResource] のアニメーション名一覧。`current_animation` プロパティが選ぶのと同じリストです。
+* `get_animation_names() -> PackedStringArray`: 割り当てた [`SSABResource`](resource.md) のアニメーション名一覧。`current_animation` プロパティが選ぶのと同じリストです。
 * `is_playing_forward() -> bool`: 再生ヘッドが**実際に**進んでいる向きです。設定した向きを返す `get_playback_direction()` とは別物で、ピンポン再生の戻りの脚では `get_playback_direction()` が `PLAYBACK_DIRECTION_FORWARD` のままでもこちらは `false` になります（速度 0 以下は逆再生ではなく停止なので、これも反転しません）。**音声のゲートに使ってください** — SpriteStudio に逆再生音声は無いため、後ろ向きの脚で跨いだサウンドキーは鳴らすべきものではありません。`play_audio` が有効なときにプレイヤー自身が掛けている判定と同じものです。何も再生していないときは `true`（前進が既定の状態）。
-* `set_frame_no(frame: float)` / `get_frame_no() -> float` / `get_total_frames() -> int`: `get_total_frames()` は現在の再生区間のフレーム数（`get_end_frame() - get_start_frame() + 1`）です。`set_animation_section()` で区間を狭めると、アニメーション全体ではなく区間の長さを返します。
+* `set_frame_no(frame_no: float)` / `get_frame_no() -> float` / `get_total_frames() -> int`: `get_total_frames()` は現在の再生区間のフレーム数（`get_end_frame() - get_start_frame() + 1`）です。`set_animation_section()` で区間を狭めると、アニメーション全体ではなく区間の長さを返します。
 * `get_start_frame() -> int` / `get_end_frame() -> int`: 実際に再生される先頭 / 末尾フレーム、すなわち現在の再生区間です。`get_animation_section_start()` / `get_animation_section_end()` と同じ値を返します（`set_animation_section()` で狭めるまではアニメーション全体）。
 * `set_speed_scale(speed_scale: float)` / `get_speed_scale() -> float`
 * `set_frame_rate(fps: int)` / `get_frame_rate() -> int`
@@ -93,7 +94,7 @@ pivot はキャンバス内のどこに原点があるかを表します。地�
 
 ## パーツオーバーライド
 
-パーツ単位で、カラー / セル / 表示指定をキーフレームより優先して上書きします。各メソッドは成功時に `true`、パーツが不明な場合やランタイムが受け付けなかった場合に `false` を返し、出力パネルにその呼び出しと渡されたものを、それぞれ一度だけ出します。詳細と注意点は [スクリプト制御とイベント → パーツオーバーライド](../workflow/usage_scripting.md) を参照してください。
+パーツ単位で、カラー / セル / 表示指定をキーフレームより優先して上書きします。各メソッドは成功時に `true`、パーツが不明な場合やランタイムが受け付けなかった場合に `false` を返し、出力パネルにその呼び出しと渡されたものを、それぞれ一度だけ出します。詳細と注意点は [スクリプト制御とイベント駆動 → パーツオーバーライド](../workflow/usage_scripting.md) を参照してください。
 
 * `set_part_color_override(part_name: String, color: Color, blend_op: ColorBlendOperation = COLOR_BLEND_MIX, priority: OverridePriority = OVERRIDE_PRIORITY_HOLD_UNTIL_NEXT_ANIMATION) -> bool`
 * `set_part_color_override_corners(part_name: String, corners: PackedColorArray, blend_op: ColorBlendOperation = COLOR_BLEND_MIX, priority: OverridePriority = OVERRIDE_PRIORITY_HOLD_UNTIL_NEXT_ANIMATION) -> bool`: 4 頂点それぞれに色を指定して、パーツ内をグラデーションにします。`corners` には左上・右上・左下・右下の順にちょうど 4 色を入れます。`set_part_color_override` と同じオーバーライド枠を共有するので、後から呼んだ方が有効になり、`clear_part_color_override` はどちらも解除します。
@@ -153,7 +154,7 @@ pivot はキャンバス内のどこに原点があるかを表します。地�
 
 設定のメソッドは、アニメーションが設定されていないとき、アニメーション名が `.ssab` に無いとき、ランタイムが受け付けなかったときに `false` を返します。`set_track_animation()`・`crossfade()`・`add_track_source()`・`set_track_blend()`・`set_track_sync()` は、出力パネルにもその呼び出しを、呼び出しと渡されたものごとに一度だけ出します。存在しないトラックやソースの読み出しは `0` を返します（先に `get_track_count()` で確かめてください）。ただし `0` が正しい値になりうる 2 つは別で、`get_track_fade_progress()` は `-1` を返し、ソースのハンドルは `-1` です。
 
-別のアニメーションへの `set_animation()` は、トラックの設定も含めてスタックを track 0 だけに戻します。`play()` は track 0 だけを先頭へ戻し、`pause()`・`resume()`・`stop()` はすべてのトラックとフェードに効きます。track 0 が終わっても、重ねたトラックは止まりません。`is_playing()`・`is_pausing()`・`is_finished()` と `animation_*` シグナルは track 0 の状態を表します。
+別のアニメーションへの `set_animation()` は、スタックを track 0 だけに戻します。上のトラックとそのソース、各トラックの alpha・blend・sync はなくなります。track 0 の再生設定（`speed_scale`・`frame_rate`・`frame_skip_enabled`・再生方向とスタイル・`loop_count`）と、出ていく側のしきい値は残ります。`play()` は track 0 だけを先頭へ戻し、`pause()`・`resume()`・`stop()` はすべてのトラックとフェードに効きます。track 0 が終わっても、重ねたトラックは止まりません。`is_playing()`・`is_pausing()`・`is_finished()` と `animation_*` シグナルは track 0 の状態を表します。
 
 ### `TrackBlend` の値
 
@@ -258,7 +259,7 @@ func play_audio(payload: Dictionary, ssab: SSABResource, player: Node) -> void:
 
 ## AnimationPlayer から駆動する
 
-`frame_no` プロパティはアニメート可能なので、`AnimationPlayer` のタイムライン（音・メソッド呼び出し・他ノードなど他トラック）と同期させて SpriteStudio アニメをスクラブできます。
+`frame_no` プロパティはアニメート可能なので、`AnimationPlayer` のタイムライン（音・メソッド呼び出し・他ノードなど他トラック）と同期させて SpriteStudio アニメをスクラブできます。`.ssab` の全アニメーションをまとめたライブラリが欲しいときは、[AnimationPlayer 連携](../workflow/animation_player.md) を参照してください。
 
 1. `SpriteStudioPlayer2D` に通常どおり `Ssab`（SSAB リソース）を割り当て、`Current Animation` を選択。
 2. `AnimationPlayer` で、ノードの `frame_no` プロパティを対象に **プロパティトラック** を追加。

@@ -38,7 +38,7 @@ func _ready() -> void:
     player.play()
 ```
 
-Tracks are created as needed: setting track 3 creates tracks 1 and 2 empty. `alpha` is not clamped to 0–1; above 1 it extrapolates.
+Laying an animation creates the track it goes on, as needed: setting track 3 creates tracks 1 and 2 empty. `set_track_alpha()`, `set_track_blend()`, `fade_track()` and `cancel_track_fade()` do not create one: on a track that does not exist yet they return `false`, so lay the animation first, as above. `fade_track()` also returns `false` for a `duration` of 0 or less. `alpha` is not clamped to 0–1; above 1 it extrapolates.
 
 ### Additive tracks
 
@@ -71,10 +71,11 @@ player.crossfade(0, "run", 0.3)
 
 `get_track_fade_progress(track)` reads 0 to 1 during a fade and **-1** when the track is not fading.
 
-`fade_track()` is the other fade: it changes how much a track counts, not what it plays. Fading track 0 to 0 settles the character onto the setup pose:
+`fade_track()` is the other fade: it changes how much a track counts, not what it plays. Fading an overlay to 0 takes it out of the mix, and fading track 0 to 0 settles the character onto the setup pose:
 
 ```gdscript
 player.fade_track(1, 0.0, 0.2)                # fade the overlay out over 0.2 s
+player.fade_track(0, 0.0, 0.2)                # or settle the character onto the setup pose
 ```
 
 ### What a crossfade on track 0 changes, and when
@@ -102,9 +103,9 @@ func _process(_delta: float) -> void:
     player.set_source_weight(run, speed_ratio)
 ```
 
-Each animation on a track is a **source**, named by an integer handle (`-1` for none; `0` is a valid handle). A handle stays valid until its source is released — a crossfade completing, `clear_track()`, or `set_animation()` to another animation. Weights are ratios: `(0.7, 0.3)` and `(7, 3)` mix the same.
+Each animation on a track is a **source**, named by an integer handle (`-1` for none; `0` is a valid handle). A handle stays valid until its source is released — a crossfade completing, `clear_track()`, `set_track_animation()` on its track, or `set_animation()` to another animation. Weights are ratios: `(0.7, 0.3)` and `(7, 3)` mix the same.
 
-## Starting in phase (`trackSync`)
+## Starting in phase (`set_track_sync()`)
 
 An animation laid on a track starts from the head of its section. Laid over a walk half-way through its stride, a run puts its feet somewhere else. Set the track to `TRACK_SYNC_START` **before** laying, and what is laid next starts at the **phase** track 0's animation stands at — how far through its section it is, as a proportion — so animations of different lengths line up:
 

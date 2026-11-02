@@ -23,7 +23,7 @@ Godot の `Resource` を継承しています。1 つのリソースは複数の
 
 ## SSQBResource
 
-`.ssqb` (シーケンスバイナリ) に対応するリソースクラスです。
+`.ssqb` (シーケンスバイナリ) に対応するリソースクラスです。読み込みと保存はできますが、再生するノードはありません。アニメーションを続けて再生するには、GDScript で `animation_finished` に連ねてください（[SSAB と SSQB の使い分け](../workflow/tips.md#ssab-と-ssqb-の使い分け) を参照）。
 
 主なメソッド:
 

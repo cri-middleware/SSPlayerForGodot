@@ -113,6 +113,6 @@ func play_audio(payload: Dictionary, ssab: SSABResource, player: Node) -> void:
 
 ## 関連ページ
 
-- [スクリプト制御とイベント連携](usage_scripting.md) — 他のタイムラインイベント (`user_data` / `signal_emitted`) とスクリプト API 全般。
+- [スクリプト制御とイベント駆動](usage_scripting.md) — 他のタイムラインイベント (`user_data` / `signal_emitted`) とスクリプト API 全般。
 - [SpriteStudioPlayer2D API](../api/player.md#サウンド-audio) — このページのプロパティに対応するメソッドリファレンス。
-- [制限事項](../limitations.md) — サウンドが共通ランタイムから引き継ぐ制約。
+- [制約と適用範囲](../limitations.md) — サウンドが共通ランタイムから引き継ぐ制約。

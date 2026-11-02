@@ -20,17 +20,18 @@ func _ready() -> void:
     ssnode.play()
 ```
 
+**In-editor preview**: select the node and use the **SpriteStudio** bottom panel — play from start / play from current / stop, a frame scrubber, and loop and speed controls — to preview without running the game. Shortcuts mirror the AnimationPlayer editor (**D** play from current, **Shift+D** play from start, **S** stop).
+
 ## Main methods
 
-* `set_ssab_resource(res: SSABResource)` / `get_ssab_resource() -> SSABResource`
-* `set_animation(name: String)` / `get_current_animation() -> String`
+* `set_ssab_resource(res_ssab: SSABResource)` / `get_ssab_resource() -> SSABResource`: the `ssab` property.
+* `set_animation(name: String)` / `get_current_animation() -> String`: the setter and getter of the `current_animation` property (`player.current_animation = "walk"`).
 * `set_autoplay(autoplay: bool)` / `is_autoplay() -> bool`: Whether to start playing automatically when the scene starts. **Default `true`** — a node placed in a scene has no code to call `play()` for it, so it plays. Set it off for a node you drive yourself, or one that should hold its first frame as a pose.
 * `set_offset(offset: Vector2)` / `get_offset() -> Vector2`: Shifts the drawing position without moving the Node2D's origin.
-* `set_flip_h(flip: bool)` / `is_flipped_h() -> bool`: Flips the animation horizontally.
-* `set_flip_v(flip: bool)` / `is_flipped_v() -> bool`: Flips the animation vertically.
+* `set_flip_h(flip_h: bool)` / `is_flipped_h() -> bool`: Flips the animation horizontally.
+* `set_flip_v(flip_v: bool)` / `is_flipped_v() -> bool`: Flips the animation vertically.
 * `set_animation_process_mode(mode: AnimationProcessMode)` / `get_animation_process_mode() -> AnimationProcessMode`: Sets whether to sync with `_physics_process` (`ANIMATION_PROCESS_PHYSICS` / `0`) or `_process` (`ANIMATION_PROCESS_IDLE` / `1`), or to stop ticking on its own (`ANIMATION_PROCESS_MANUAL` / `2`).
 * `advance(delta: float)`: Steps playback by `delta` seconds and emits `frame_updated`, exactly as an automatic tick would. Meant for `ANIMATION_PROCESS_MANUAL` — under the other modes it advances the animation *on top of* the node's own tick.
-* **In-editor preview**: Select the node and use the **SpriteStudio** bottom panel — play from start / play from current / stop, a frame scrubber, and loop and speed controls — to preview without running the game. Shortcuts mirror the AnimationPlayer editor (**D** play from current, **Shift+D** play from start, **S** stop).
 * `play(start_frame: float = -1.0)`: Starts playback. `-1.0` (the default) **rewinds to the start of the section** — its end when the direction is backward — rather than continuing from where the playhead is. Pass `get_frame_no()` to play on from the current position.
 * `pause()`: Holds playback where it stands, keeping the current frame. **Idempotent** — pausing twice leaves it paused.
 * `resume()`: Lifts the hold and carries on from the same frame. **Idempotent**, and a no-op on an animation that is stopped rather than held — `play()` is what starts a stopped animation, and it rewinds.
@@ -38,9 +39,9 @@ func _ready() -> void:
 * `is_playing() -> bool`: `true` while playing, **including while paused** — a pause is a hold, not a stop. / `is_pausing() -> bool`: `true` only while held. Both are `false` on an animation that has never played, and after `stop()`.
 * `is_finished() -> bool`: Whether every configured loop has played. A **state**, not a pulse — it latches on completion and holds until the next `play()` or animation change, so a caller that was not connected when `animation_finished` fired can still ask whether the run is over. Never `true` under an infinite `loop_count`, and **not raised by `stop()`** — a commanded stop is not a completion, which is what separates it from `not is_playing()`.
 * `just_looped() -> bool`: Whether the last update crossed a loop boundary. A **pulse**, not a state — the runtime clears it at the top of every update, so it only reads `true` inside the tick that crossed (which is why it is not `is_looped`: reading it a tick late reads `false`). The `animation_looped` signal delivers the same edge if you would rather not poll.
-* `get_animation_names() -> PackedStringArray`: Names of the animations in the assigned [SSABResource] — the same list the `current_animation` property is chosen from.
+* `get_animation_names() -> PackedStringArray`: Names of the animations in the assigned [`SSABResource`](resource.md) — the same list the `current_animation` property is chosen from.
 * `is_playing_forward() -> bool`: Which way the playhead is **actually** travelling. Not `get_playback_direction()`, which reports the configured heading: on a ping-pong return leg this reads `false` while that still reads `PLAYBACK_DIRECTION_FORWARD` (a speed of zero or below is a stop, not a reversal, and does not flip it either). **Gate audio on it** — SpriteStudio has no reverse audio, so a sound key crossed on a backward leg is not meant to sound, and this is the test the node itself applies when `play_audio` is on. `true` before anything has played: forward is the resting state.
-* `set_frame_no(frame: float)` / `get_frame_no() -> float` / `get_total_frames() -> int`: `get_total_frames()` counts the frames of the current playback section (`get_end_frame() - get_start_frame() + 1`). Once `set_animation_section()` narrows the section, it returns the section's length, not the whole animation's.
+* `set_frame_no(frame_no: float)` / `get_frame_no() -> float` / `get_total_frames() -> int`: `get_total_frames()` counts the frames of the current playback section (`get_end_frame() - get_start_frame() + 1`). Once `set_animation_section()` narrows the section, it returns the section's length, not the whole animation's.
 * `get_start_frame() -> int` / `get_end_frame() -> int`: The first and last frame that actually plays — the current playback section. They return the same values as `get_animation_section_start()` / `get_animation_section_end()`, which is the whole animation until `set_animation_section()` narrows it.
 * `set_speed_scale(speed_scale: float)` / `get_speed_scale() -> float`
 * `set_frame_rate(fps: int)` / `get_frame_rate() -> int`
@@ -154,7 +155,7 @@ Play several animations of the assigned `.ssab` at once, stacked on tracks: trac
 
 Each setter returns `false` when no animation is set up, the animation name is not in the `.ssab`, or the runtime refuses the call. `set_track_animation()`, `crossfade()`, `add_track_source()`, `set_track_blend()` and `set_track_sync()` also name the call in the Output panel, once for each call and what it was given. A read of a track or source that does not exist returns `0` (check `get_track_count()` first), except the two whose `0` is a real answer: `get_track_fade_progress()` returns `-1`, and the source handles are `-1`.
 
-`set_animation()` to a different animation folds the stack back to track 0 alone, every track setting included. `play()` heads out track 0 only; `pause()`, `resume()` and `stop()` act on every track and fade; and track 0 finishing does not stop the overlays. `is_playing()`, `is_pausing()`, `is_finished()` and the `animation_*` signals describe track 0.
+`set_animation()` to a different animation folds the stack back to track 0 alone: the tracks above it, their sources, and every track's alpha, blend and sync go. Track 0's playback settings (`speed_scale`, `frame_rate`, `frame_skip_enabled`, direction and style, `loop_count`) and its outgoing event threshold stay. `play()` heads out track 0 only; `pause()`, `resume()` and `stop()` act on every track and fade; and track 0 finishing does not stop the overlays. `is_playing()`, `is_pausing()`, `is_finished()` and the `animation_*` signals describe track 0.
 
 ### Values for `TrackBlend`
 
@@ -259,7 +260,7 @@ Resolving a sound from the payload is done on [`SSABResource`](resource.md#ssabr
 
 ## Driving from an AnimationPlayer
 
-The `frame_no` property is animatable, so an `AnimationPlayer` can scrub a SpriteStudio animation in lockstep with its own timeline (and any other tracks on it — audio, calls, other nodes).
+The `frame_no` property is animatable, so an `AnimationPlayer` can scrub a SpriteStudio animation in lockstep with its own timeline (and any other tracks on it — audio, calls, other nodes). To get a ready-made library with every animation of an `.ssab`, see [AnimationPlayer Integration](../workflow/animation_player.md).
 
 1. Assign the `Ssab` resource and pick a `Current Animation` on the `SpriteStudioPlayer2D` as usual.
 2. In the `AnimationPlayer`, add a **Property Track** targeting the node's `frame_no` property.
