@@ -68,7 +68,7 @@ The importer converts a `.sspj` with `libssconverter` and records each output fo
 **Around it:** `misc/spritestudio.gdextension` is the extension's manifest, copied into every
 `addons/spritestudio/`; `test_gdextension/` is the headless suite, not a sample; `examples/` holds
 the samples, with `dev_gdextension` and `dev_module` as scratch projects; `godot/` and
-`godot-cpp/` are cloned beside the repository, not submodules.
+`godot-cpp/` are cloned into the repository root (both gitignored), not submodules.
 
 ## Why It Is Built the Way It Is
 
@@ -114,8 +114,8 @@ property list, so scripts can set them but neither the inspector nor a saved sce
 value a script sets is gone when the scene is reloaded.
 
 **The source of every output folder is recorded in the project.** `res://.ssplayer_sources.cfg`
-maps each output folder to its `.sspj`, which is what lets Reconvert, the FileSystem menu and
-`deploy-examples` rebuild a pack without asking where it came from. The dock's recent files are a
+maps each output folder to its `.sspj`, which is what lets Reconvert and the FileSystem menu rebuild
+a pack without asking where it came from. The dock's recent files are a
 different store: the editor's project metadata under `.godot/`, which is not committed, so they
 belong to one machine.
 

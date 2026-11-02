@@ -16,7 +16,8 @@ GDExtension またはカスタムモジュール組み込み Godot Engine を自
 ```bash
 git clone https://github.com/cri-middleware/SSPlayerForGodot.git
 cd SSPlayerForGodot
-git clone https://github.com/godotengine/godot.git -b 4.7
+git submodule update --init ss_player/flatbuffers
+git clone https://github.com/godotengine/godot.git -b "$(cat scripts/GODOT_VERSION.txt)"
 git clone https://github.com/godotengine/godot-cpp.git -b master
 ```
 
@@ -24,15 +25,18 @@ git clone https://github.com/godotengine/godot-cpp.git -b master
 `godot-cpp` ディレクトリは GDExtension をビルドする場合に必要です。
 
 > [!NOTE]
-> SDK のリリース成果物を使う一般的なビルドでは、サブモジュール `ss_player/SpriteStudio-SDK/` の取得は不要です（`--recursive` を付けずにクローンして構いません）。SpriteStudio-SDK 自体を手元で開発・ビルドする場合のみ、後述の [SpriteStudio-SDK 開発者向け](#spritestudio-sdk-開発者向け) に従って `git submodule update --init --recursive` でサブモジュールを初期化してください。
+> SDK のリリース成果物を使う一般的なビルドでは、サブモジュール `ss_player/SpriteStudio-SDK/` の取得は不要ですが、`ss_player/flatbuffers/` は必要です（どのビルドもそのヘッダーを include するので、上のブロックで初期化しています）。SpriteStudio-SDK 自体を開発する場合と、`deploy-examples` やテストを回す場合（CONTRIBUTING 参照）は、後述の [SpriteStudio-SDK 開発者向け](#spritestudio-sdk-開発者向け) に従って `git submodule update --init --recursive` でサブモジュールを初期化してください。
 
 ## ビルド環境のセットアップ
 
-各プラットフォーム向けのビルドツール (コンパイラ・Python・SCons など) の準備は、Godot 公式のコンパイル手順を参照してください。macOS / Linux のビルドスクリプト（`scripts/*.sh`）は zsh で動くため、zsh も必要です。
+各プラットフォーム向けのビルドツール (コンパイラ・Python・SCons など) の準備は、Godot 公式のコンパイル手順を参照してください。ビルドスクリプト（`build.sh`・`build-extension.sh`・`build-runtime.sh` と `release-*.sh`）は zsh で動くため、zsh も必要です。ほかのスクリプトは bash で動きます。
 
 - [Windows](https://docs.godotengine.org/ja/stable/engine_details/development/compiling/compiling_for_windows.html)
 - [macOS](https://docs.godotengine.org/ja/stable/engine_details/development/compiling/compiling_for_macos.html)
 - [Linux](https://docs.godotengine.org/ja/stable/engine_details/development/compiling/compiling_for_linuxbsd.html)
+- [Android](https://docs.godotengine.org/ja/stable/engine_details/development/compiling/compiling_for_android.html)
+- [iOS](https://docs.godotengine.org/ja/stable/engine_details/development/compiling/compiling_for_ios.html)
+- [Web](https://docs.godotengine.org/ja/stable/engine_details/development/compiling/compiling_for_web.html)
 
 ### 注意点
 
@@ -89,7 +93,7 @@ $env:PYTHONUTF8=1
 .\scripts\build-extension.ps1
 ```
 
-成果物は `bin/<platform>/` に配置され、`misc/spritestudio.gdextension` を含む GDExtension 一式が各サンプルプロジェクト（`examples/*/addons/spritestudio/`）にインストールされます。
+成果物は `bin/<platform>/` に配置され、`misc/spritestudio.gdextension` を含む GDExtension 一式が `examples/dev_gdextension/addons/spritestudio/` にインストールされ、`examples/overall_gdextension/` と `test_gdextension/` にもコピーされます。
 
 ## 2-B. カスタムモジュール組み込み Godot Engine のビルド
 
@@ -113,7 +117,7 @@ $env:PYTHONUTF8=1
 
 ## リリースビルド
 
-各プラットフォーム向けに `editor` / `template_debug` / `template_release` を一括でビルドするスクリプトを `scripts/` 配下に用意しています。内部では前述の `build.sh` / `build-extension.sh` を `target` を変えて連続実行する構成です。これらのスクリプトは `libssruntime` を取得・ビルドはしないため、事前に [1. libssruntime の用意](#1-libssruntime-の用意) を済ませておく必要があります。
+各プラットフォーム向けに `editor` / `template_debug` / `template_release` を一括でビルドするスクリプト（iOS・Android・Web はテンプレート 2 つのみ）を `scripts/` 配下に用意しています。内部では前述の `build.sh` / `build-extension.sh` を `target` を変えて連続実行する構成です。これらのスクリプトは `libssruntime` を取得・ビルドはしないため、事前に [1. libssruntime の用意](#1-libssruntime-の用意) を済ませておく必要があります。
 
 ### GDExtension
 
@@ -140,7 +144,7 @@ $env:PYTHONUTF8=1
 
 ## 変更したプレイヤーを使う
 
-`scripts/build-extension.sh` はホスト向けの GDExtension をビルドし、`misc/spritestudio.gdextension`・アイコン・ライセンスと一緒に `examples/dev_gdextension/addons/spritestudio/` とほかのすべてのサンプルに入れます。そのフォルダを自分のプロジェクトの `addons/spritestudio/` にコピーし、プロジェクトを開き直してください。入っているのはホストのプラットフォームのバイナリだけです。ほかのプラットフォームは[リリースビルド](#リリースビルド)にあるプラットフォームごとのスクリプトで作ります。リリースの zip（`scripts/build-release.sh`）は、CI が作った全プラットフォームの成果物から組み立てるものです。
+`scripts/build-extension.sh` はホスト向けの GDExtension をビルドし、`misc/spritestudio.gdextension`・アイコン・ライセンスと一緒に `examples/dev_gdextension/addons/spritestudio/` に入れ、バイナリとアイコンを `examples/overall_gdextension/` と `test_gdextension/` にもコピーします。そのフォルダを自分のプロジェクトの `addons/spritestudio/` にコピーし、プロジェクトを開き直してください。入っているのはホストのプラットフォームのバイナリだけです。ほかのプラットフォームは[リリースビルド](#リリースビルド)にあるプラットフォームごとのスクリプトで作ります。リリースの zip（`scripts/build-release.sh`）は、CI が作った全プラットフォームの成果物から組み立てるものです。
 
 カスタムモジュールでは、エンジンそのものがプレイヤーです。`scripts/build.sh` がプレイヤーを組み込んだエディタをビルドし、リリース用のスクリプトがエクスポートテンプレートをビルドし、`scripts/install-template.sh` がそれをインストールします。
 
@@ -148,7 +152,7 @@ $env:PYTHONUTF8=1
 
 カスタムモジュールとして組み込んだプラグインのC++コード（`ss_player` 以下）をデバッグしたい場合は、以下の手順で行います。
 
-1. **デバッグ用バイナリの確認**
+1. **デバッグシンボル付きでビルドする**
    `target=editor` や `target=template_debug` でも、Godot のビルドは既定ではデバッグシンボルを含みません。`debug_symbols=yes` を付けてビルドしてください（`./scripts/build.sh debug_symbols=yes`、Windows では `.ps1`）。出力先は次のとおりです。
    * **macOS:** `godot/Godot.app/Contents/MacOS/Godot`
    * **Windows:** `godot/bin/godot.windows.editor.x86_64.exe` 等
@@ -188,14 +192,14 @@ $env:PYTHONUTF8=1
 > - **エクスポートする `target` を実際にビルドしておく。** `editor` ビルドだけでは不十分です。`--export-debug` は `template_debug` ライブラリを、`--export-release` は `template_release` を必要とします。これらを未ビルドのままだとエクスポートは「成功」しても、拡張ライブラリが空／欠落した状態で書き出されます（macOS では同梱 framework に対する `CodeSign: Invalid binary format` エラーとして表面化します）。
 > - **拡張のアーキテクチャは手元の runtime スライスに依存する。** GDExtension は `ss_player/runtime/libs/<platform>/` の `libssruntime` をリンクするため、そこに存在するアーキテクチャしかビルドできません。例えば macOS の runtime が `arm64` のみの場合、`universal` / `x86_64` の拡張は作れません。プリセットの `binary_format/architecture` を合わせてください（例: `arm64`）。エンジンテンプレートは `universal` のままで構いません（単一アーキの拡張が、欠けているアーキでロードされないだけです）。
 > - **`universal` / `arm64` / モバイル向けは ETC2/ASTC を有効化する。** プロジェクトに `rendering/textures/vram_compression/import_etc2_astc=true` を設定してください（`project.godot` の `[rendering]`）。未設定だと *「ETC2/ASTC テクスチャフォーマットが無効なため … エクスポートできません」* でエクスポートが中断します。
-> - **エクスポートテンプレートはエディタのバージョンと一致が必要。** `custom_template/debug` / `custom_template/release` を指定するとこのバージョンチェックを回避できます（同梱の `godot/` ソースからビルドしたテンプレートを流用できるのはこのためです）。debug のみのエクスポートでも debug / release **両方** のパスを設定してください。Godot は両方を検証し、未設定だと release テンプレートが見つからないと報告します。
+> - **エクスポートテンプレートはエディタのバージョンと一致が必要。** `custom_template/debug` / `custom_template/release` を指定するとこのバージョンチェックを回避できます（`godot/` のチェックアウトからビルドしたテンプレートを流用できるのはこのためです）。debug のみのエクスポートでも debug / release **両方** のパスを設定してください。Godot は両方を検証し、未設定だと release テンプレートが見つからないと報告します。
 
 以下の流れで、手元でテンプレートをビルド・インストールし、サンプルプロジェクトをエクスポートします。（以下はmacOSの例です）
 
 1. **ランタイムとテンプレートのビルド** 事前に `libssruntime` を用意し、対象プラットフォームのリリーススクリプトを実行します。
    ```bash
    # (必要に応じて) ランタイムをリリースビルドで用意
-   ./scripts/build-runtime.sh build=release platform=macos
+   ./scripts/build-runtime.sh build=release platform=macos arch=universal
 
    # エクスポート用テンプレートのビルド
    ./scripts/release-macos.sh
@@ -221,7 +225,7 @@ $env:PYTHONUTF8=1
    ```powershell
    .\godot\bin\godot.windows.editor.x86_64.exe --path .\examples\dev_module\ --headless --export-debug "Windows Desktop" output.exe
    ```
-   > **Note:** エクスポートを実行するには、対象プロジェクト内の `export_presets.cfg` に指定したプラットフォーム名（上記の場合は `"macOS"`）のプリセットが存在し、必要な識別子（バンドルIDなど）が正しく設定されている必要があります。
+   > **Note:** エクスポートを実行するには、対象プロジェクト内の `export_presets.cfg` に指定したプラットフォーム名（上記の場合は `"macOS"`）のプリセットが存在し、必要な識別子（バンドル ID など）が正しく設定されている必要があります。どのサンプルにも `export_presets.cfg` は入っていません（gitignore 対象）。先にエディタ（**プロジェクト → エクスポート**）でプリセットを作ってください。以下のコマンドの `com.crimw.devmodule` と `com.crimw.devgdext` は、プリセットに設定したパッケージ名／バンドル ID の想定値です。設定した値に読み替えてください。
 
 ### Webプラットフォームのエクスポートと動作確認
 
@@ -244,7 +248,7 @@ python3 -m http.server 8000
 
 > GDExtension libraries are not supported by this engine version. Enable "Extensions Support" for your export preset and/or build your custom template with "dlink_enabled=yes".
 
-Web で GDExtension を読み込むには、動的リンクを有効にした（`dlink_enabled=yes`）エンジンテンプレートが必要です。同梱の `godot/` ソースから、拡張の `threads` モードに合わせてビルドします（本プラグインは `nothread` 版を提供するため `threads=no`）。
+Web で GDExtension を読み込むには、動的リンクを有効にした（`dlink_enabled=yes`）エンジンテンプレートが必要です。`godot/` のチェックアウトから、拡張の `threads` モードに合わせてビルドします（本プラグインは `nothread` 版を提供するため `threads=no`）。
 
 ```bash
 # dlink 対応の Web テンプレートをソースからビルド（nothreads）
@@ -283,6 +287,8 @@ Android のエクスポートテンプレートは、エンジンの Gradle プ�
   export ANDROID_HOME="$HOME/Library/Android/sdk"
   export ANDROID_NDK_ROOT="$ANDROID_HOME/ndk/<ndk-version>"
   ```
+- `ANDROID_HOME` を設定していると、godot-cpp とエンジンのビルドは NDK を `ANDROID_NDK_ROOT` ではなく `$ANDROID_HOME/ndk/<version>` から取ります。GDExtension には `scripts/release-gdextension-android.sh` の冒頭の `NDK_VERSION` が指す版を、エンジンには Godot が指定する版（`godot/platform/android/detect.py` の `get_ndk_version()`）を入れてください。
+- 一度だけ `godot/` で `python misc/scripts/install_swappy_android.py` を実行します（しないと `scons` は警告を出し、フレームペーシング無しでビルドします）。
 - Godot のエディタ設定で、Android SDK パスとデバッグ用キーストアを設定します（`export/android/android_sdk_path`, `export/android/debug_keystore`, `export/android/debug_keystore_pass`）。
 
 1. **ランタイムとテンプレートのビルド** まず Rust ランタイムを一度ビルドし、次に ABI／ターゲットごとにエンジンの共有ライブラリをビルドして、Gradle でテンプレートAPKにパッケージします。
@@ -322,7 +328,7 @@ Android のエクスポートテンプレートは、エンジンの Gradle プ�
    adb logcat -s godot        # エンジンのログ／エラー確認
    adb exec-out screencap -p > screen.png   # 描画結果のキャプチャ
    ```
-   `dev_module` サンプルは `SpriteStudioPlayer2D` で `Knight_arrow` アニメーションを autoplay 再生するため、正常に動作すればキャラクターが画面に描画されます。
+   `dev_module` は空の作業用プロジェクトです（シーンは素の `Node2D` で、`ssab_generated/` もコミットされていません）。キャラクターを表示するには、先に SS Importer ドックで `.sspj` を変換し、そのパックを割り当てて `autoplay` を有効にした `SpriteStudioPlayer2D` を足してください。
 
 ### iOSプラットフォームのエクスポートと動作確認
 
@@ -409,7 +415,7 @@ GDExtension（例: `dev_gdextension`）の場合、**エンジン本体の再ビ
 
 GDExtension の場合も、カスタムモジュールとほぼ同じ手順でC++コードをデバッグできます。違いは起動するプログラムが「公式のGodotエディタ」になる点のみです。
 
-1. **デバッグシンボル付きで GDExtension をビルドする** ビルドスクリプト（`build-extension.sh` 等）の既定は `target=editor` で、godot-cpp と同じくデバッグシンボルを含みません。`debug_symbols=yes` を付けて（`./scripts/build-extension.sh debug_symbols=yes`、Windows では `.ps1`）ビルドすると、出力されるライブラリ（`.dll` や `.dylib`）にデバッグシンボルが含まれます。
+1. **デバッグシンボル付きで GDExtension をビルドする** ビルドスクリプト（`build-extension.sh` 等）の既定は `target=editor` で、godot-cpp と同じくデバッグシンボルを含みません。`debug_symbols=yes` を付けて（`./scripts/build-extension.sh debug_symbols=yes`、Windows では `.ps1`）ビルドすると、出力されるライブラリ（`.dll`、`.so`、macOS では `.framework`）にデバッグシンボルが含まれます。
 
 2. **デバッガのアタッチと起動引数**
    VSCode や Visual Studio 等のデバッガから、**公式のGodotバイナリ** を起動プログラムとして指定し、引数でプロジェクトのパス（`--path examples/dev_gdextension`）を渡します。Godotが起動時にプラグインを動的ロードした時点でブレークポイントにヒットするようになります。
@@ -442,7 +448,7 @@ GDExtension の場合も、カスタムモジュールとほぼ同じ手順でC+
 
 ## 実際のホストで確かめる
 
-`scripts/run-tests.sh` は GDExtension 版をヘッドレスで回します（規則は CONTRIBUTING にあります）。それで見えないものが 2 つあります。画素（`--headless` はダミーのラスタライザを入れるため）と、ツリーに入ったときに結線するもの（スイートはルートがツリーに入る前に全ケースを回すため）です。`SpriteStudioPartAttachment2D` と音がそれに当たります。CI は全プラットフォームの GDExtension とカスタムモジュールをコンパイルするだけで、テストは回しません。スイートは自分で回してください。エクスポート先ごとの確かめ方は[エクスポート機能のテスト・デバッグ方法](#エクスポート機能のテストデバッグ方法)に、デバッガの付け方はデバッグ方法の節にあります。
+`scripts/run-tests.sh` は GDExtension 版をヘッドレスで回します（規則は CONTRIBUTING にあります）。それで見えないものが 2 つあります。画素（`--headless` はダミーのラスタライザを入れるため）と、ツリーに入ったときに結線するもの（スイートはルートがツリーに入る前に全ケースを回すため）です。`SpriteStudioPartAttachment2D` と音がそれに当たります。CI は、プルリクエストでは Linux と Web の GDExtension をコンパイルし、週次の実行とリリースのプルリクエストでは全プラットフォームの GDExtension とカスタムモジュールをコンパイルします。テストは回しません。スイートは自分で回してください。エクスポート先ごとの確かめ方は[エクスポート機能のテスト・デバッグ方法](#エクスポート機能のテストデバッグ方法)に、デバッガの付け方はデバッグ方法の節にあります。
 
 ### Godot の表記の引き方
 
@@ -490,13 +496,13 @@ cd <scratch>/proj && <godot> --path . --script res://probe.gd
 
 ## SpriteStudio-SDK 開発者向け
 
-> 以降のセクションは **SpriteStudio-SDK 自体を手元で開発・カスタマイズしながら Godot 側もビルドしたい場合のみ** 必要です。SpriteStudio-SDK のリリース成果物を使う一般的な Godot ビルダーは読み飛ばして構いません。
+> 以降のセクションは **SpriteStudio-SDK 自体を手元で開発・カスタマイズしながら Godot 側もビルドしたい場合のみ** 必要です。ただし [サンプルプロジェクトのアセット生成](#サンプルプロジェクトのアセット生成) は、サンプルやテストを動かすすべての人に必要です。SpriteStudio-SDK のリリース成果物を使う一般的な Godot ビルダーは、それ以外を読み飛ばして構いません。
 
 ### 追加で必要なもの
 
 `libssruntime` を自前でビルドするための環境 (Rust ツールチェーン等) のセットアップ手順は [SpriteStudio-SDK の README](https://github.com/cri-middleware/SpriteStudio-SDK/blob/HEAD/README.ja.md#%EF%B8%8F-sdk-開発者向け) を参照してください。
 
-FlatBuffers のヘッダを再生成する場合は別途 `flatc` (FlatBuffers コンパイラ) も必要です。
+FlatBuffers のヘッダを再生成する場合は、`ss_player/flatbuffers` サブモジュールと同じバージョンの `flatc` (FlatBuffers コンパイラ) も必要です。生成されるヘッダーはコンパイル時にそのバージョンを検査します（`ss_player/format/ssab.h` の冒頭の `FLATBUFFERS_VERSION_*`）。
 
 ### libssruntime を自前でビルドする
 

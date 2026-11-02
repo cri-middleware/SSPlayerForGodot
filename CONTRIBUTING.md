@@ -23,7 +23,7 @@ To maintain high performance and native integration with Godot Engine, please ad
 - **Performance in the Hot Path:** Avoid per-frame heap allocations during playback. Use the `DrawBatch` plans emitted by the runtime directly with Godot's `RenderingServer`.
 - **Avoid Node Bloat:** Keep the core playback in `SsInternalPlayer`, drawing directly through `RenderingServer` / `CanvasItem` draw calls. Expose child nodes (like `SpriteStudioPartAttachment2D`) only when the user explicitly needs them.
 - **Godot Naming:** Follow GDScript conventions for the public API — `snake_case` methods, proper property hints, and Godot signals for callbacks.
-- **SDK Separation:** The core playback logic resides in the `SpriteStudio-SDK` submodule (Rust). Changes to core logic should be directed to the SDK repository, while Godot-specific integrations belong in `ss_player/`.
+- **SDK Separation:** The core playback logic resides in the `SpriteStudio-SDK` submodule (Rust). Changes to core logic should be directed to the SDK repository, while Godot-specific integrations belong in `ss_player/`. Never commit inside the submodule: a core change is an SDK pull request, then a submodule bump here.
 
 ### Reporting Bugs
 If you find a bug, please use the provided Issue Templates. Include:
@@ -36,7 +36,7 @@ If you find a bug, please use the provided Issue Templates. Include:
 
 ### Pull Requests
 1. Fork the repository and create your branch from `develop`.
-2. Ensure your code follows the existing style and Godot conventions.
+2. Ensure your code follows the existing style and Godot conventions. A script and its `.ps1` twin change together.
 3. Test your changes locally with `scripts/run-tests.sh` (see Test below) and by running the sample projects in the `examples/` directory. CI only compiles; it runs neither.
 4. Submit a Pull Request targeting the `develop` branch with a clear description of the changes.
 
@@ -49,6 +49,7 @@ If you find a bug, please use the provided Issue Templates. Include:
 - A Rust toolchain, only to build the runtime from the submodule (`build-runtime`) or to convert the samples without the editor (`deploy-examples`)
 - zsh (the build scripts use a `#!/usr/bin/env zsh` shebang)
 - `godot-cpp`, cloned into the repository root: `git clone https://github.com/godotengine/godot-cpp.git -b master` (it is not a submodule)
+- Submodules: `git submodule update --init --recursive` (`ss_player/flatbuffers` is needed by every build; `ss_player/SpriteStudio-SDK` holds the samples' and tests' `.sspj` and the runtime source)
 
 For the complete build guide — and using a changed build in a project, and checking it in Godot — see [docs/en/development/build.md](./docs/en/development/build.md). How the player is put together, and the reasons that span files, is [docs/en/development/architecture.md](./docs/en/development/architecture.md).
 
@@ -75,7 +76,7 @@ To compile the Godot Extension, put the SDK runtime in place first, then compile
 
 `build-runtime` builds the runtime from the submodule into the same `ss_player/runtime/` instead, and needs Rust: use it when changing the runtime itself.
 
-Once built, open the `examples/Ringo` project in the Godot Editor to verify your changes. Its `.ssab` is not committed, so first drop `ss_player/SpriteStudio-SDK/tests/Ringo/Ringo.sspj` onto the **SS Importer** dock. The other projects under `examples/` — `Scripting` (GDScript control and signals), `Override_Ringo` (per-part overrides), and `overall` / `overall_gdextension` (the verification projects, custom module and GDExtension) — are filled the same way from the SDK's `tests/`, or all at once by `deploy-examples` below.
+Once built, open the `examples/overall_gdextension` project in the Godot Editor to verify your changes (it carries the addon). `Ringo`, `Scripting`, `Override_Ringo` and `overall` have no addon: they open only in the custom-module editor from `build.sh`. Their `.ssab` is not committed, so first drop `ss_player/SpriteStudio-SDK/tests/Ringo/Ringo.sspj` onto the **SS Importer** dock (or run `deploy-examples` below). The other projects under `examples/` — `Scripting` (GDScript control and signals), `Override_Ringo` (per-part overrides), and `overall` / `overall_gdextension` (the verification projects, custom module and GDExtension) — are filled the same way from the SDK's `tests/`, or all at once by `deploy-examples` below.
 
 ### Test
 ```bash
@@ -85,7 +86,7 @@ Once built, open the `examples/Ringo` project in the Godot Editor to verify your
 ```
 `deploy-examples` converts the fixtures with `ssconverter-cli` built from the submodule, so it needs Rust. Without it, open `test_gdextension` in the Godot Editor and drop the SDK's `tests/overall/overall.sspj` and `tests/Ringo/Ringo.sspj` onto the SS Importer dock, which writes the same `ssab_generated/`.
 
-`run-tests.sh` needs a Godot binary — `godot=<path>`, else `$GODOT`, `godot-bin/`, then `PATH` — and refuses to start without the addon and the `.ssab` both installed, rather than skipping its way to a green run. **A green run is silent**: the suite ends with an `ENGINE` line counting the warnings and errors Godot itself printed, and anything it lists is a defect or a newly tolerated message. The verdict is the RESULT line, the marker after it, and that `ENGINE` line — not the exit code. Windows uses the `.ps1` variant of each script. The suite sees no pixels and nothing wired on entering the tree; [checking against Godot](./docs/en/development/build.md#checking-against-the-real-host) runs both, and the editor UI, from a script.
+`run-tests.sh` needs a Godot binary — `godot=<path>`, else `$GODOT`, `godot-bin/`, then `PATH` — and refuses to start without the addon and the `.ssab` both installed, rather than skipping its way to a green run. **In a green run Godot itself prints nothing**: the suite ends with an `ENGINE` line counting the warnings and errors Godot itself printed, and anything it lists is a defect or a newly tolerated message. The verdict is the RESULT line, the marker after it, and that `ENGINE` line — not the exit code. Windows uses the `.ps1` variant of each script. The suite sees no pixels and nothing wired on entering the tree; [checking against Godot](./docs/en/development/build.md#checking-against-the-real-host) runs both, and the editor UI, from a script.
 
 ### Documentation
 Pages live as both `docs/en/<path>` and `docs/ja/<path>`; there is no fallback locale, so a page missing from one side is a nav entry pointing at nothing. Each locale also ships its own `docs/<locale>/assets/`, and asset paths are source-relative (`../assets/…`) **including inside raw `<video>` / `<img>` HTML**, which Zensical rewrites the same way it rewrites Markdown links. If you edit a page, build both locales before you finish. CI builds them too, both `--strict`, on a pull request that touches the site's sources, on the release PR and weekly.
@@ -101,9 +102,8 @@ Both locales, English first: it clears `site/`, which contains `site/ja`, so an 
 ## Coding Standards
 
 ### C++ Guidelines
-- Follow the [Godot Engine C++ style guide](https://docs.godotengine.org/en/stable/contributing/development/compiling/cpp_style_guide.html).
-- Use `clang-format` if available (`clang-format -i ss_player/*.{cpp,h}`).
-- Ensure safe handling of the Rust FFI objects: release every handle with its destroy function (`ss_runtime_destroy`, `ss_resource_destroy`, `ss_converter_destroy`) to prevent memory leaks.
+- For C++ usage follow the [Godot Engine C++ usage guidelines](https://contributing.godotengine.org/en/latest/development/engine/cpp_usage_guidelines.html), and match the formatting of the file you edit: 4-space indentation, not Godot's tabs. The repository has no `.clang-format`, so do not run `clang-format` over whole files.
+- Ensure safe handling of the Rust FFI objects: release every handle with its destroy function (`ss_runtime_destroy`, `ss_resource_destroy`, `ss_converter_destroy`, `ss_effect_slot_destroy`, `ss_instance_slot_destroy`) to prevent memory leaks.
 
 ---
 By contributing to this project, you agree that your contributions will be licensed under the project's [LICENSE.md](./LICENSE.md).
@@ -135,10 +135,10 @@ SSPlayerForGodot にご関心をお寄せいただき、ありがとうござい
 Godot Engineとのネイティブな統合と高いパフォーマンスを維持するため、以下の原則に従ってください。
 
 - **Godotのパラダイムを優先:** `Node2D` や `CanvasItem` API、シグナルなど、Godotの標準的な機能を積極的に活用してください。独自の実装を行うよりもGodotの設計に委ねることを優先します。階層的なカラー計算を独自に持たずに `CanvasItem::set_modulate()` とツリーの継承に委ね、可能な範囲で独自のデルタ管理ではなく Godot のプロセスモードと `Engine::get_time_scale()` を使ってください。
-- **再生パスのパフォーマンス:** 再生中の毎フレームごとの動的なメモリ確保（ヒープアロケーション）は避けてください。Rustランタイムから提供される描画バッチ情報を直接 `RenderingServer` に渡すように実装されています。
+- **再生パスのパフォーマンス:** 再生中の毎フレームごとの動的なメモリ確保（ヒープアロケーション）は避けてください。Rust ランタイムが出力する `DrawBatch` の描画計画を、そのまま Godot の `RenderingServer` に渡してください。
 - **ノードを増やしすぎない:** コアの再生は `SsInternalPlayer` に置き、`RenderingServer` / `CanvasItem` の描画呼び出しで直接描画します。子ノード（`SpriteStudioPartAttachment2D` など）は、利用者が明示的に必要とする場合にだけ公開してください。
 - **Godot の命名規則:** 公開 API は GDScript の慣習に従ってください（`snake_case` のメソッド、適切なプロパティヒント、コールバックには Godot のシグナル）。
-- **SDKの分離:** コアのアニメーション計算ロジックは `SpriteStudio-SDK` サブモジュール(Rust)に存在します。アルゴリズムやコアロジックの修正はSDK側のリポジトリへ、Godot特有の実装は `ss_player/` へ行ってください。
+- **SDKの分離:** コアのアニメーション計算ロジックは `SpriteStudio-SDK` サブモジュール(Rust)に存在します。アルゴリズムやコアロジックの修正はSDK側のリポジトリへ、Godot特有の実装は `ss_player/` へ行ってください。サブモジュールの中ではコミットしないでください。コアの変更は SDK 側のプルリクエストにし、そのあとこちらでサブモジュールを更新します。
 
 ### バグの報告
 バグを発見した場合は、Issue テンプレートを使用して以下の情報を含めてください：
@@ -151,7 +151,7 @@ Godot Engineとのネイティブな統合と高いパフォーマンスを維�
 
 ### プルリクエスト
 1. リポジトリをフォークし、`develop` ブランチから作業用ブランチを作成してください。
-2. 既存のGodot C++規約に従ってコードを記述してください。
+2. 既存のGodot C++規約に従ってコードを記述してください。スクリプトとその `.ps1` 版は一緒に変更してください。
 3. `scripts/run-tests.sh`（下の「テスト」を参照）と、`examples/` ディレクトリ内のサンプルプロジェクトの実行で、手元で動作確認を行ってください。CI はコンパイルするだけで、どちらも実行しません。
 4. `develop` ブランチに向けて、変更内容を明確に記載したプルリクエストを送信してください。
 
@@ -164,6 +164,7 @@ Godot Engineとのネイティブな統合と高いパフォーマンスを維�
 - Rust ツールチェイン（submodule からランタイムをビルドする `build-runtime` と、エディタを使わずにサンプルを変換する `deploy-examples` でのみ必要です）
 - zsh (ビルドスクリプトは `#!/usr/bin/env zsh` を使用しています)
 - `godot-cpp`（submodule ではありません。リポジトリのルートに `git clone https://github.com/godotengine/godot-cpp.git -b master` で取得してください）
+- サブモジュール: `git submodule update --init --recursive`（`ss_player/flatbuffers` はどのビルドにも必要です。`ss_player/SpriteStudio-SDK` にはサンプルとテストの `.sspj` とランタイムのソースがあります）
 
 完全なビルド手順（変更した版をプロジェクトで使う方法と、Godot での確かめ方を含む）については、[docs/ja/development/build.md](./docs/ja/development/build.md) を参照してください。プレイヤーの構成と、ファイルをまたぐ設計の理由は [docs/ja/development/architecture.md](./docs/ja/development/architecture.md) にあります。
 
@@ -190,7 +191,7 @@ Godot Engineとのネイティブな統合と高いパフォーマンスを維�
 
 `build-runtime` は、代わりに submodule からランタイムをビルドして同じ `ss_player/runtime/` に置きます。Rust が必要で、ランタイム自体を変更するときに使います。
 
-ビルド完了後、Godot エディタで `examples/Ringo` プロジェクトなどを開き、変更内容をテストしてください。`.ssab` はコミットしていないので、先に `ss_player/SpriteStudio-SDK/tests/Ringo/Ringo.sspj` を **SS Importer** ドックへドロップしてください。`examples/` にはほかに `Scripting`（GDScript による制御とシグナル）、`Override_Ringo`（パーツ単位の上書き）、`overall` / `overall_gdextension`（検証用。カスタムモジュール版と GDExtension 版）があり、同じように SDK の `tests/` から変換するか、下の `deploy-examples` でまとめて用意します。
+ビルド完了後、Godot エディタで `examples/overall_gdextension` プロジェクトを開き、変更内容をテストしてください（アドオンが入っています）。`Ringo`・`Scripting`・`Override_Ringo`・`overall` にはアドオンが無く、`build.sh` で作ったカスタムモジュール版のエディタでだけ開けます。`.ssab` はコミットしていないので、先に `ss_player/SpriteStudio-SDK/tests/Ringo/Ringo.sspj` を **SS Importer** ドックへドロップするか、下の `deploy-examples` を実行してください。`examples/` にはほかに `Scripting`（GDScript による制御とシグナル）、`Override_Ringo`（パーツ単位の上書き）、`overall` / `overall_gdextension`（検証用。カスタムモジュール版と GDExtension 版）があり、同じように SDK の `tests/` から変換するか、下の `deploy-examples` でまとめて用意します。
 
 ### テスト
 ```bash
@@ -200,7 +201,7 @@ Godot Engineとのネイティブな統合と高いパフォーマンスを維�
 ```
 `deploy-examples` は submodule からビルドした `ssconverter-cli` でフィクスチャを変換するため、Rust が必要です。Rust が無い場合は、Godot エディタで `test_gdextension` を開き、SDK の `tests/overall/overall.sspj` と `tests/Ringo/Ringo.sspj` を SS Importer ドックへドロップしてください。同じ `ssab_generated/` が書き出されます。
 
-`run-tests.sh` は Godot バイナリを必要とします（`godot=<path>`、無ければ `$GODOT`、`godot-bin/`、最後に `PATH`）。addon と `.ssab` が揃っていなければ、スキップして緑にするのではなく起動を拒否します。**成功した実行は何も出力しません。** スイートの最後に Godot 自身が出した警告とエラーを数える `ENGINE` 行が出て、そこに並ぶものは不具合か新たに容認したメッセージのどちらかです。判定は終了コードではなく、RESULT 行とその後のマーカー、そしてこの `ENGINE` 行で行います。Windows は各スクリプトの `.ps1` 版を使ってください。スイートには画素と、ツリーに入ったときに結線するものが見えません。その両方とエディタの UI をスクリプトから確かめる方法は、[Godot で確かめる](./docs/ja/development/build.md#実際のホストで確かめる)にあります。
+`run-tests.sh` は Godot バイナリを必要とします（`godot=<path>`、無ければ `$GODOT`、`godot-bin/`、最後に `PATH`）。addon と `.ssab` が揃っていなければ、スキップして緑にするのではなく起動を拒否します。**成功した実行では、Godot 自身は警告もエラーも出しません。** スイートの最後に Godot 自身が出した警告とエラーを数える `ENGINE` 行が出て、そこに並ぶものは不具合か新たに容認したメッセージのどちらかです。判定は終了コードではなく、RESULT 行とその後のマーカー、そしてこの `ENGINE` 行で行います。Windows は各スクリプトの `.ps1` 版を使ってください。スイートには画素と、ツリーに入ったときに結線するものが見えません。その両方とエディタの UI をスクリプトから確かめる方法は、[Godot で確かめる](./docs/ja/development/build.md#実際のホストで確かめる)にあります。
 
 ### ドキュメント
 ページは `docs/en/<path>` と `docs/ja/<path>` の両方に存在します。フォールバックロケールは無いため、片方に欠けたページは行き先の無い nav エントリになります。アセットもロケールごとに `docs/<locale>/assets/` を持ち、パスはソース相対（`../assets/…`）です。**生の `<video>` / `<img>` HTML の中でも同じ**で、Zensical は Markdown リンクと同じ規則で書き換えます。ページを編集したら、仕上げる前に両ロケールをビルドしてください。CI も、サイトのソースに触れるプルリクエスト、リリースのプルリクエスト、週次の実行で、両ロケールを `--strict` でビルドします。
@@ -216,9 +217,8 @@ scripts/build-pages.sh serve=yes # 公開ツリー、両ロケール -> http://l
 ## コーディング規約
 
 ### C++ のガイドライン
-- [Godot EngineのC++スタイルガイド](https://docs.godotengine.org/ja/stable/contributing/development/compiling/cpp_style_guide.html)に従ってください。
-- 可能であれば `clang-format` を使用してフォーマットを統一してください（`clang-format -i ss_player/*.{cpp,h}`）。
-- Rust FFI オブジェクトの安全な取り扱いに注意してください。メモリリークを防ぐため、ハンドルは必ず対応する destroy 関数（`ss_runtime_destroy`、`ss_resource_destroy`、`ss_converter_destroy`）で解放してください。
+- C++ の使い方は [Godot Engine の C++ 使用ガイドライン](https://contributing.godotengine.org/en/latest/development/engine/cpp_usage_guidelines.html)（英語）に従い、書式は編集するファイルに合わせてください。インデントは Godot 標準のタブではなく、スペース 4 つです。リポジトリに `.clang-format` は無いので、ファイル全体に `clang-format` を掛けないでください。
+- Rust FFI オブジェクトの安全な取り扱いに注意してください。メモリリークを防ぐため、ハンドルは必ず対応する destroy 関数（`ss_runtime_destroy`、`ss_resource_destroy`、`ss_converter_destroy`、`ss_effect_slot_destroy`、`ss_instance_slot_destroy`）で解放してください。
 
 ---
 本プロジェクトに貢献することで、あなたの貢献がプロジェクトの [LICENSE.md](./LICENSE.md) の下でライセンスされることに同意したものとみなされます。
