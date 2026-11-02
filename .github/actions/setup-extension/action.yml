@@ -24,7 +24,7 @@ runs:
       if: inputs.platform == 'android'
       uses: nttld/setup-ndk@ed92fe6cadad69be94a966a7ee3271275e62f779 # v1.6.0
       with:
-        ndk-version: r23c
+        ndk-version: r28b
         link-to-sdk: true
 
     - name: Setup Web dependencies

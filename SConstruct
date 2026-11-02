@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import os
+import re
 import sys
-import subprocess
 
 # --- Configuration & Constants ---
 LIB_NAME = "SSGodot"
@@ -177,11 +177,9 @@ library = env.SharedLibrary(library_output, source=sources_list)
 # --- macOS / iOS Framework Bundles ---
 plist_target = None
 if platform in ["macos", "ios"]:
-    try:
-        git_branch = subprocess.check_output(['git', 'rev-parse', '--abbrev-ref', 'HEAD']).decode('utf-8').strip()
-        version = git_branch.split('-')[0] + '.0'
-    except:
-        version = "1.0.0"
+    # CFBundleShortVersionString and CFBundleVersion take up to three
+    # period-separated integers, so a prerelease's suffix is left out.
+    version = re.match(r"\d+(?:\.\d+){0,2}", sources.read_version()).group(0)
 
     plist_subst = {
         "${BUNDLE_LIBRARY}": file_name,
