@@ -16,7 +16,7 @@
 [node name="StartOnReady" type="SpriteStudioPlayer2D" parent="." unique_id=1976356657]
 position = Vector2(230, 229)
 ssab = ExtResource("1_ssab")
-animation = "anime_1"
+current_animation = "anime_1"
 animation_section_end = 20
 cellmaps/common = null
 cellmaps/common_2.png = null
@@ -35,7 +35,7 @@ change = true
 [node name="SpriteStudioPlayer2D" type="SpriteStudioPlayer2D" parent="TextureChangeNode" unique_id=983116712]
 position = Vector2(397, 49)
 ssab = ExtResource("10_texchange")
-animation = "anime_1"
+current_animation = "anime_1"
 autoplay = true
 animation_section_end = 10
 cellmaps/common = null
@@ -46,7 +46,7 @@ cellmaps/box_00_00.png = null
 [node name="SignalTest" type="SpriteStudioPlayer2D" parent="." unique_id=1881612194]
 position = Vector2(758, 526)
 ssab = ExtResource("9_signal")
-animation = "anime_1"
+current_animation = "anime_1"
 autoplay = true
 animation_section_end = 30
 cellmaps/box_00_00 = null
@@ -56,7 +56,7 @@ script = ExtResource("6_sig")
 [node name="UserDataTest" type="SpriteStudioPlayer2D" parent="." unique_id=961771702]
 position = Vector2(1000, 539)
 ssab = ExtResource("8_userdata")
-animation = "anime_1"
+current_animation = "anime_1"
 autoplay = true
 animation_section_end = 10
 cellmaps/common = null

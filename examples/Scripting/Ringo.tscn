@@ -9,7 +9,7 @@ script = ExtResource("2_script")
 [node name="Ringo" type="SpriteStudioPlayer2D" parent="." unique_id=318940931]
 position = Vector2(560, 567)
 ssab = ExtResource("1_w6qk1")
-animation = "attack1"
+current_animation = "attack1"
 sub_frame_enabled = true
 animation_section_end = 19
 cellmaps/Ringo = null

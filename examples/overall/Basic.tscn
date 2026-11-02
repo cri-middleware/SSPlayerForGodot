@@ -6,7 +6,7 @@
 
 [node name="Basic" type="SpriteStudioPlayer2D" parent="." unique_id=662331212]
 ssab = ExtResource("1_svhdt")
-animation = "anime_1"
+current_animation = "anime_1"
 playing = true
 animation_section_start = 0
 animation_section_end = 20
