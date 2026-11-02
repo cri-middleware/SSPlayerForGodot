@@ -8,7 +8,7 @@ Anyone with the Write role on this repository can cut a release: every step is a
 
 A release is a tag on `main`, pushed first and built second. The version is written in one place, `ss_player/VERSION.txt`, and it holds the tag itself — `v7.0.0-beta.1` — which the build stamps, without the `v`, into the binaries. What a Release carries is the GDExtension add-on, `ssplayer-godot-extension-<godot>.zip` for the Godot API that `release.yml` builds against; the custom-module engine is built from source by whoever uses it. The SDK it ships is pinned on its own, in `scripts/SDK_VERSION.txt`. Branches follow git-flow: `develop` integrates, `main` holds released commits only, and `release/X.Y` lives for one release — cut from `develop` when the release ships `develop`'s work, or from the line's latest tag when it ships only fixes on top of it, and deleted once the release is out.
 
-Every block runs as written in a new shell: it works out what it needs from the checkout, git and GitHub. Two values are set by hand, written as placeholders to fill in: `<version>`, the version being released, as in `7.0.1`, in steps 1 and 2; and `<sdk-tag>`, the SpriteStudio-SDK release it ships, as in `v7.0.0`, in step 2. Left as they are, the line stops with a syntax error. A value that would not stop a command by itself when empty is read as `${VAR:?}`: an empty `SDK_TAG` would pin no SDK, and an empty `RUN` would let the signing check in step 3 print nothing and pass.
+Every block runs as written in a new shell: it works out what it needs from the checkout, git and GitHub. One value is set by hand, written as a placeholder to fill in: `<version>`, the version being released, as in `7.0.1`, in steps 1 and 2. Left as it is, the line stops with a syntax error. A value that would not stop a command by itself when empty is read as `${VAR:?}`: an empty `RUN` would let the signing check in step 3 print nothing and pass.
 
 An agent can run every block, but a person sorts the scan's summary in step 3, and two steps are a person's to decide: the merge in step 4, which puts the release on `main`, and step 6, which publishes it for good.
 
@@ -35,21 +35,21 @@ BASE=$(git -c versionsort.suffix=- tag --list "v${BRANCH#release/}.*" --sort=-v:
 git switch -C "$BRANCH" "${BASE:?}"
 ```
 
-### 2. SDK, version and changelog
+Either way, the release ships the SpriteStudio-SDK release that `scripts/SDK_VERSION.txt` names on the branch; `cat scripts/SDK_VERSION.txt` prints it. To ship another, change the file in a commit of its own on the branch: step 3's QA build fetches the runtime by it.
 
-In one commit. Pin the SpriteStudio-SDK release this one ships in `scripts/SDK_VERSION.txt`, the tag `download-sdk` fetches the runtime by; a release that keeps its SDK pins the tag the file already holds. The block then sets `ss_player/VERSION.txt`; `<version>` is the one from step 1.
+### 2. Version and changelog
+
+In one commit. The block sets `ss_player/VERSION.txt`; `<version>` is the one from step 1.
 
 ```bash
 VERSION=<version>
-SDK_TAG=<sdk-tag>
-printf '%s\n' "${SDK_TAG:?}" > scripts/SDK_VERSION.txt &&
-  printf 'v%s\n' "${VERSION:?}" > ss_player/VERSION.txt
+printf 'v%s\n' "${VERSION:?}" > ss_player/VERSION.txt
 ```
 
 Then date the version's heading in `CHANGELOG.md` as `## [X.Y.Z] - YYYY-MM-DD`, adding the heading if the version has none yet, and commit:
 
 ```bash
-git add scripts/SDK_VERSION.txt ss_player/VERSION.txt CHANGELOG.md
+git add ss_player/VERSION.txt CHANGELOG.md
 git commit -m "chore(release): $(cat ss_player/VERSION.txt)"
 ```
 
@@ -232,7 +232,7 @@ Its check is the one nothing else in the pipeline does. `misc/spritestudio.gdext
 
 リリースは `main` 上のタグです。先にタグを push し、ビルドはその後です。バージョンが書かれているのは `ss_player/VERSION.txt` の 1 か所だけで、中身はタグそのもの（`v7.0.0-beta.1`）です。ビルドは `v` を除いた値をバイナリに刻みます。Release に載るのは GDExtension のアドオン、`release.yml` がビルドする Godot API 向けの `ssplayer-godot-extension-<godot>.zip` です。custom module 版のエンジンは、使う人がソースからビルドします。同梱する SDK のバージョンはこれとは別で、`scripts/SDK_VERSION.txt` で固定します。ブランチは git-flow です。`develop` が統合ブランチで、`main` にはリリース済みのコミットだけが入ります。`release/X.Y` は 1 回のリリースの間だけ使います。`develop` の作業を出すリリースなら `develop` から、タグの上に修正だけを載せるリリースならその系統の最新のタグから切り、リリースが済んだら消します。
 
-どのブロックも、新しいシェルで書かれたとおりに実行できます。必要なものはチェックアウト・git・GitHub から求めます。手で設定する値は 2 つで、埋めるプレースホルダとして書いてあります。手順 1 と 2 の `<version>` はリリースするバージョン（`7.0.1` など）、手順 2 の `<sdk-tag>` は同梱する SpriteStudio-SDK のリリース（`v7.0.0` など）です。埋めずに実行すると、その行は構文エラーで止まります。空でもそれだけでは止まらない値は `${VAR:?}` で読みます。`SDK_TAG` が空だと SDK を何も固定せず、`RUN` が空だと手順 3 の署名の確認が何も出力せずに通ってしまうためです。
+どのブロックも、新しいシェルで書かれたとおりに実行できます。必要なものはチェックアウト・git・GitHub から求めます。手で設定する値は 1 つで、埋めるプレースホルダとして書いてあります。手順 1 と 2 の `<version>` で、リリースするバージョン（`7.0.1` など）です。埋めずに実行すると、その行は構文エラーで止まります。空でもそれだけでは止まらない値は `${VAR:?}` で読みます。`RUN` が空だと手順 3 の署名の確認が何も出力せずに通ってしまうためです。
 
 どのブロックもエージェントに実行させられますが、手順 3 の検査の一覧は人が仕分け、2 つの手順は人が判断します。リリースを `main` に入れる手順 4 のマージと、取り消せない公開を行う手順 6 です。
 
@@ -259,21 +259,21 @@ BASE=$(git -c versionsort.suffix=- tag --list "v${BRANCH#release/}.*" --sort=-v:
 git switch -C "$BRANCH" "${BASE:?}"
 ```
 
-### 2. SDK、バージョン、CHANGELOG
+どちらの場合も、リリースが同梱するのは、ブランチの `scripts/SDK_VERSION.txt` が指す SpriteStudio-SDK のリリースです。`cat scripts/SDK_VERSION.txt` で出力できます。別のリリースを同梱するときは、ブランチ上でこのファイルを書き換えて単独のコミットにします。手順 3 の QA ビルドが、そのタグでランタイムを取得します。
 
-1 コミットで行います。同梱する SpriteStudio-SDK のリリースを `scripts/SDK_VERSION.txt` で固定します。`download-sdk` がランタイムを取得するときに使うタグです。SDK を変えないリリースでは、このファイルにいまあるタグを固定します。続けてブロックは `ss_player/VERSION.txt` を設定します。`<version>` は手順 1 と同じものです。
+### 2. バージョン、CHANGELOG
+
+1 コミットで行います。ブロックは `ss_player/VERSION.txt` を設定します。`<version>` は手順 1 と同じものです。
 
 ```bash
 VERSION=<version>
-SDK_TAG=<sdk-tag>
-printf '%s\n' "${SDK_TAG:?}" > scripts/SDK_VERSION.txt &&
-  printf 'v%s\n' "${VERSION:?}" > ss_player/VERSION.txt
+printf 'v%s\n' "${VERSION:?}" > ss_player/VERSION.txt
 ```
 
 続けて `CHANGELOG.md` のそのバージョンの見出しに日付を入れ、`## [X.Y.Z] - YYYY-MM-DD` とします。そのバージョンの見出しがまだ無ければ足します。そのあとコミットします。
 
 ```bash
-git add scripts/SDK_VERSION.txt ss_player/VERSION.txt CHANGELOG.md
+git add ss_player/VERSION.txt CHANGELOG.md
 git commit -m "chore(release): $(cat ss_player/VERSION.txt)"
 ```
 
