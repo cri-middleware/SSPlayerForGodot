@@ -24,7 +24,7 @@ To control `SpriteStudioPlayer2D` with an `AnimationPlayer`, you must first conv
 Here is how to apply the generated library to your scene.
 
 1. **Prepare the Node**
-   Place a `SpriteStudioPlayer2D` node in your scene and assign the target `.ssab` file to its `Ssab` property.
+   Place a `SpriteStudioPlayer2D` node in your scene, assign the target `.ssab` file to its `Ssab` property, and turn **Autoplay** off. The `AnimationPlayer` drives the playhead, and a node that also plays itself fights it every frame (see [Driving from an AnimationPlayer](../api/player.md#driving-from-an-animationplayer)).
 2. **Add an AnimationPlayer**
    Add an `AnimationPlayer` node to the scene.
 3. **Specify the Target (Important!)**

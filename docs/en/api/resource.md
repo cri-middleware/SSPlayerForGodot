@@ -23,7 +23,7 @@ See [Audio Playback](../workflow/audio.md) for how the two sound lookups are use
 
 ## SSQBResource
 
-Resource class corresponding to `.ssqb` (sequence binary).
+Resource class corresponding to `.ssqb` (sequence binary). It loads and saves, but no node plays it: to play animations back to back, chain them in GDScript on `animation_finished` ([Choosing Between SSAB and SSQB](../workflow/tips.md#choosing-between-ssab-and-ssqb)).
 
 Main methods:
 

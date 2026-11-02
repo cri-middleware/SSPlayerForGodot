@@ -11,7 +11,7 @@
 ## ✨ SpriteStudio を Godot で使うメリット
 
 - **キャラクターが“生きる”。** 呼吸・まばたき、なびく髪や衣装、斬撃・魔法のエフェクトまで——動きは専用エディタ（SpriteStudio）でボーン・メッシュ変形・パーティクルを使ってビジュアルに作り込み、Godot はそれを再生するだけ。再生中のアニメーションはトラックに重ねたりクロスフェードしたりでき、歩きから走りへも飛ばずになめらかにつながります。`AnimationPlayer` で組み直す必要はありません。
-- **キャラクターだけでなく、エフェクトや UI、シーン全体も。** キャラクター・背景・エフェクト・UI を組み合わせたカットシーンや画面全体の演出をエディタで作り、Godot では 1 つのアニメーションとして再生できます。`SpriteStudioButton` を使えば、ホバー・押下・フォーカスごとに別の区間を再生する Godot のボタンにもなります。
+- **キャラクターだけでなく、エフェクトや UI、シーン全体も。** キャラクター・背景・エフェクト・UI を組み合わせたカットシーンや画面全体の演出をエディタで作り、Godot では 1 つのアニメーションとして再生できます。`SpriteStudioButton` を使えば、ホバー・押下・無効・フォーカスごとに別の区間を再生する Godot のボタンにもなります。
 - **いつものノードとして使える。** `SpriteStudioPlayer2D` は他のノードと同じようにシーンに置き、GDScript から操作できます（タイムラインのキーからのシグナル通知や、実行時のパーツ単位の上書きにも対応）。アニメーションはシーンの外の専用ファイルに入るので、チーム開発でシーンの Git コンフリクトが起きにくくなります。
 - **SpriteStudio と Godot をシームレスに往復。** `.sspj` を SS Importer ドックにドロップすれば、エディタ内で変換されます。直したくなったらインスペクターの **Open SSPJ** で SpriteStudio を開いて保存し、**Reconvert** を押すだけ。書き出しの手作業は要りません。
 - **パース不要の読み込みと SIMD で、軽く滑らかに。** `.ssab` は FlatBuffers のバイナリをそのまま読むので、読み込み時のパースがありません。ポーズ計算は SIMD で最適化した Rust コアが担い、モバイルや大量のキャラクターを出すゲームでも滑らかに動きます。**サブフレーム補間**をオンにすれば、高リフレッシュレートのディスプレイにも追従します。
@@ -38,9 +38,9 @@
 **ゲームで使う場合**はこのまま下へ。アドオンを入れる → `.sspj` をエディタに D&D → ノードを置く。その先（スクリプト制御、シグナル、パーツ単位の上書き）も同じ道の続きで、[ドキュメント](./docs/ja/index.md)にあります。
 **Player 自体や、その下の Rust ランタイムを変更する場合**は [CONTRIBUTING.md](./CONTRIBUTING.md) と[ビルドガイド](./docs/ja/development/build.md)へ。変更した版の使い方と Godot での確かめ方もビルドガイドに、層とファイルをまたぐ設計の理由は[プレイヤーの構成](./docs/ja/development/architecture.md)にあります。
 
-[公式サイト](https://godotengine.org/download/) から 4.7 系の Godot エディタを用意してください。対応するのは **SpriteStudio 7.6 以上**で作成されたプロジェクトです。
+[公式サイト](https://godotengine.org/download/) から 4.7 以降の Godot エディタを用意してください。対応するのは **SpriteStudio 7.6 以上**で作成されたプロジェクトです。
 
-1. **配置**: [最新の Release](https://github.com/cri-middleware/SSPlayerForGodot/releases/latest) を開き、**Assets** から `ssplayer-godot-extension-<Godot のバージョン>.zip` をダウンロードします（タグが `v1` で始まる Release は 1.x 系のプラグインで、`SSABResource` も `SpriteStudioPlayer2D` もありません）。展開して `addons` フォルダをご自身の Godot プロジェクトのルートにコピーし、エディタを再起動します。
+1. **配置**: [最新の Release](https://github.com/cri-middleware/SSPlayerForGodot/releases/latest) を開き、**Assets** から `ssplayer-godot-extension-4.7.zip` をダウンロードします（タグが `v1` で始まる Release は 1.x 系のプラグインで、`SSABResource` も `SpriteStudioPlayer2D` もありません）。展開して `addons` フォルダをご自身の Godot プロジェクトのルートにコピーし、エディタを再起動します。
 2. **インポート**: `.sspj` をファイルマネージャーから **SS Importer** ドックへドラッグ＆ドロップします。ドックの既定の出力先 `res://ssab_generated/` の下に、`.sspj` と同じ名前のフォルダで変換されます（[アセットのインポートとエディタ連携](./docs/ja/workflow/usage_asset_pipeline.md) を参照）。
 
    ```
@@ -58,7 +58,7 @@
    └── project.godot
    ```
 
-3. **再生**: FileSystem ドックから `res://ssab_generated/Ringo/Ringo.ssab` を 2D ビューポートへドラッグ＆ドロップします。`Ssab` プロパティにそのパックが入り、先頭のアニメーションが選ばれた `SpriteStudioPlayer2D` ノードが置かれるので、シーンを実行すると再生されます。
+3. **再生**: ファイルシステムドックから `res://ssab_generated/Ringo/Ringo.ssab` を 2D ビューポートへドラッグ＆ドロップします。`Ssab` プロパティにそのパックが入り、先頭のアニメーションが選ばれた `SpriteStudioPlayer2D` ノードが置かれるので、シーンを実行すると再生されます。
 
 SpriteStudio のデータが手元に無くても始められます。[公式のサンプルデータ](https://www.webtech.co.jp/help/ja/spritestudio7/download/sample/)がそのまま使えます。キャラクターなら [Ringo](https://www.webtech.co.jp/help/ja/spritestudio7/download/sample/#ringo)、エフェクトを含むものなら [パーティクル](https://www.webtech.co.jp/help/ja/spritestudio7/download/sample/#Perticle_sample) が手頃です。
 

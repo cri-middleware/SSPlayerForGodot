@@ -1,6 +1,6 @@
 # SpriteStudio Player for Godot
 
-Plays SpriteStudio animations in Godot 4.7: the `SpriteStudioPlayer2D` node, the `SSABResource` and `SSQBResource` resources, and an editor dock that converts `.sspj` projects to `.ssab`.
+Plays SpriteStudio animations in Godot 4.7 or later: the `SpriteStudioPlayer2D` node (with `SpriteStudioPartAttachment2D` and `SpriteStudioButton`), the `SSABResource` and `SSQBResource` resources, and an editor dock that converts `.sspj` projects to `.ssab`.
 
 This folder is the whole add-on: `spritestudio.gdextension`, the native libraries in `bin/`, the editor icons, the licences, and the documentation in `docs/`.
 
@@ -16,6 +16,6 @@ This folder is the whole add-on: `spritestudio.gdextension`, the native librarie
 | Why nothing draws, or why the node is missing | [docs/troubleshooting.md](docs/troubleshooting.md) |
 | What is not supported | [docs/limitations.md](docs/limitations.md) |
 
-The other pages in `docs/` cover installation, importing `.sspj` projects, audio, exporting and performance. Links between the pages work offline. The screenshots and videos those pages refer to are not included; they are in the online documentation, <https://cri-middleware.github.io/SSPlayerForGodot/> (Japanese: <https://cri-middleware.github.io/SSPlayerForGodot/ja/>).
+The other pages in `docs/` cover installation, importing `.sspj` projects, motion blending, UI buttons, audio, AnimationPlayer integration, exporting and performance. Links between the pages work offline. The screenshots and videos those pages refer to are not included; they are in the online documentation, <https://cri-middleware.github.io/SSPlayerForGodot/> (Japanese: <https://cri-middleware.github.io/SSPlayerForGodot/ja/>).
 
 The licence is `LICENSE.md`; third-party notices for the bundled libraries are in `licenses/`.

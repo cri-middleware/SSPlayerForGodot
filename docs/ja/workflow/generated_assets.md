@@ -94,7 +94,7 @@ graph LR
 
 > [!NOTE]
 > **Godot エディタはこの依存関係を追跡します。**
-> `.ssab` は 4 種類すべてを自分の依存として申告するため、エディタの依存グラフを読む機能はこれらを認識します —— 次に述べる依存ベースのエクスポートモードと、FileSystem ドック（ファイルのオーナー一覧に `.ssab` が載り、`.ssab` がまだ必要とするファイルを削除しようとすると警告が出ます）です。
+> `.ssab` は 4 種類すべてを自分の依存として申告するため、エディタの依存グラフを読む機能はこれらを認識します —— 次に述べる依存ベースのエクスポートモードと、ファイルシステムドック（ファイルのオーナー一覧に `.ssab` が載り、`.ssab` がまだ必要とするファイルを削除しようとすると警告が出ます）です。
 >
 > ただし移動には追従しません。名前は変換時に `.ssab` へ書き込まれているため、画像・音声・Instance の参照先を `.ssab` から離れた場所へ移すと解決に失敗します。そうした移動の後には、ドックが `.ssab` について依存関係を更新できない旨のエラーを出し、出力パネルにはどのファイルが移動したかと、`.ssab` がそれをどこで探しているかが出ます。`.ssab` 自体を離れた場所へ移した場合は報告されません。出力フォルダはまとめて移動してください。
 
@@ -129,7 +129,7 @@ graph LR
 
 ## `.pck` による追加配信
 
-Godot の追加配信は `.pck` です。**プロジェクト → エクスポート… → PCK/Zip をエクスポート** で作り、実行時に [`ProjectSettings.load_resource_pack()`](https://docs.godotengine.org/ja/latest/classes/class_projectsettings.html#class-projectsettings-method-load-resource-pack) でマウントします。
+Godot の追加配信は `.pck` です。**プロジェクト → エクスポート… → PCK/Zipのエクスポート…** で作り、実行時に [`ProjectSettings.load_resource_pack()`](https://docs.godotengine.org/ja/latest/classes/class_projectsettings.html#class-projectsettings-method-load-resource-pack) でマウントします。
 
 パックの中身は `res://` の同じパスに乗るため、**パス解決はパック越しでもそのまま通ります**。エクスポート時に画像が `.ctex` へ変換されていても、パックが対応する `.remap` を一緒に運ぶので変わりません。
 

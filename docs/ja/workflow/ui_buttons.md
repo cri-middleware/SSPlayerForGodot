@@ -66,7 +66,7 @@ func _ready() -> void:
 | プロパティ | 既定値 | 意味 |
 | --- | --- | --- |
 | `stretch_mode` | `STRETCH_FIT` | `STRETCH_FIT` はキャンバス全体をボタンの中に収め、`STRETCH_COVER` はボタン全体をキャンバスで覆います。`STRETCH_KEEP` は作者が作った大きさのまま、プレイヤーの原点をボタンの中心に置きます |
-| `alignment_horizontal` / `alignment_vertical` | `ALIGNMENT_CENTER` | キャンバスとボタンの形が違うときの寄せ方。`ALIGNMENT_BEGIN`（左・上）、`ALIGNMENT_CENTER`、`ALIGNMENT_END`（右・下） |
+| `alignment_horizontal` / `alignment_vertical` | `ALIGNMENT_CENTER` | キャンバスとボタンの形が違うときの寄せ方。`ALIGNMENT_BEGIN`（左・上）、`ALIGNMENT_CENTER`、`ALIGNMENT_END`（右・下）。`STRETCH_KEEP` のときは無視されます |
 
 収めるのは、選んでいるアニメーションのキャンバスです（[オーサリング時のキャンバス](../api/player.md#オーサリング時のキャンバス) を参照）。そのため、`state_clips` でキャンバスの違うアニメーションを再生しても、収め方は変わりません。キャンバスの中で絵をずらすには、プレイヤーの `offset` を使います。はみ出した部分を切り取るには、ボタンの `clip_contents` をオンにします。
 
@@ -83,7 +83,7 @@ func _ready() -> void:
 
 ## 動きを減らす
 
-動きを減らしたいプレイヤーのために、`reduced_motion` をオンにできます。オンのとき、各状態は区間を再生せず、先頭のフレームで止めます。停止なので、ユーザーデータやサウンドは発生しません。アニメーションに `reduced_motion` という名前のラベルがあれば、`normal` だけは代わりにその区間を再生するので、落ち着いたループに差し替えられます。`pressed`・`disabled` と `selected_` の区間は止めたままにして、その見た目を残します。
+動きを減らしたいプレイヤーのために、`reduced_motion` をオンにできます。オンのとき、各状態は区間を再生せず、先頭のフレームで止めます。停止なので、ユーザーデータやサウンドは発生しません。アニメーションに `reduced_motion` という名前のラベルがあれば、`normal` と、自分のラベルが無いため `normal` を代わりに使う状態は、その区間を再生するので、落ち着いたループに差し替えられます。自分のラベルがある状態と `selected_` の区間は止めたままにして、その見た目を残します。
 
 ボタン自身はシステムの設定を読みません。一部のプラットフォームでは Godot が設定を教えてくれます。
 

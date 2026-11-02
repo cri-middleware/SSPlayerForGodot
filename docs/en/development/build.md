@@ -16,7 +16,8 @@ Clone this repository, and clone Godot Engine / godot-cpp depending on your buil
 ```bash
 git clone https://github.com/cri-middleware/SSPlayerForGodot.git
 cd SSPlayerForGodot
-git clone https://github.com/godotengine/godot.git -b 4.7
+git submodule update --init ss_player/flatbuffers
+git clone https://github.com/godotengine/godot.git -b "$(cat scripts/GODOT_VERSION.txt)"
 git clone https://github.com/godotengine/godot-cpp.git -b master
 ```
 
@@ -24,15 +25,18 @@ The `godot` directory is required when building a custom-module Godot Engine.
 The `godot-cpp` directory is required when building the GDExtension.
 
 > [!NOTE]
-> For typical builds that consume SDK release artifacts, the `ss_player/SpriteStudio-SDK/` submodule does **not** need to be initialized (a non-recursive clone is fine). Only when developing/building SpriteStudio-SDK itself, follow [For SpriteStudio-SDK Developers](#for-spritestudio-sdk-developers) below and initialize the submodule with `git submodule update --init --recursive`.
+> For typical builds that consume SDK release artifacts, the `ss_player/SpriteStudio-SDK/` submodule does **not** need to be initialized, but `ss_player/flatbuffers/` does: every build includes its headers, which is why the block above initializes it. To develop SpriteStudio-SDK itself, or to run `deploy-examples` and the tests (see CONTRIBUTING), follow [For SpriteStudio-SDK Developers](#for-spritestudio-sdk-developers) below and initialize the submodule with `git submodule update --init --recursive`.
 
 ## Build Environment Setup
 
-For build tools (compiler, Python, SCons, etc.) on each platform, follow the official Godot compilation guides. The macOS / Linux build scripts (`scripts/*.sh`) run under zsh, so zsh is needed as well:
+For build tools (compiler, Python, SCons, etc.) on each platform, follow the official Godot compilation guides. The build scripts (`build.sh`, `build-extension.sh`, `build-runtime.sh` and the `release-*.sh` ones) run under zsh, so zsh is needed as well; the other scripts use bash:
 
 - [Windows](https://docs.godotengine.org/en/stable/engine_details/development/compiling/compiling_for_windows.html)
 - [macOS](https://docs.godotengine.org/en/stable/engine_details/development/compiling/compiling_for_macos.html)
 - [Linux](https://docs.godotengine.org/en/stable/engine_details/development/compiling/compiling_for_linuxbsd.html)
+- [Android](https://docs.godotengine.org/en/stable/engine_details/development/compiling/compiling_for_android.html)
+- [iOS](https://docs.godotengine.org/en/stable/engine_details/development/compiling/compiling_for_ios.html)
+- [Web](https://docs.godotengine.org/en/stable/engine_details/development/compiling/compiling_for_web.html)
 
 ### Notes
 
@@ -89,7 +93,7 @@ $env:PYTHONUTF8=1
 .\scripts\build-extension.ps1
 ```
 
-Output is placed under `bin/<platform>/`, and the GDExtension package (including `misc/spritestudio.gdextension`) is installed into the sample projects (`examples/*/addons/spritestudio/`).
+Output is placed under `bin/<platform>/`, and the GDExtension package (including `misc/spritestudio.gdextension`) is installed into `examples/dev_gdextension/addons/spritestudio/`, and copied to `examples/overall_gdextension/` and `test_gdextension/`.
 
 ## 2-B. Build the Custom-Module Godot Engine
 
@@ -113,7 +117,7 @@ Output is placed under `godot/bin/`. On macOS, `godot/Godot.app` is also created
 
 ## Release Builds
 
-Per-platform scripts under `scripts/` build `editor` / `template_debug` / `template_release` in one shot.
+Per-platform scripts under `scripts/` build `editor` / `template_debug` / `template_release` in one shot (iOS, Android and Web: the two templates only).
 Internally they invoke `build.sh` / `build-extension.sh` repeatedly with different `target` values.
 These scripts do **not** fetch or build `libssruntime`, so [1. Prepare libssruntime](#1-prepare-libssruntime) must be completed first.
 
@@ -143,9 +147,10 @@ These scripts do **not** fetch or build `libssruntime`, so [1. Prepare libssrunt
 ## Using a Changed Player
 
 `scripts/build-extension.sh` builds the GDExtension for the host and installs it, with
-`misc/spritestudio.gdextension`, the icons and the licenses, into `examples/dev_gdextension/addons/spritestudio/`
-and every other sample. Copy that folder to your project's `addons/spritestudio/` and reopen the
-project. It holds the host platform's binaries only: other platforms come from the per-platform
+`misc/spritestudio.gdextension`, the icons and the licenses, into `examples/dev_gdextension/addons/spritestudio/`,
+and copies the binaries and icons to `examples/overall_gdextension/` and `test_gdextension/`. Copy that folder to your project's
+`addons/spritestudio/` and reopen the project. It holds the host platform's `editor` build only (`build-extension.sh` defaults to
+`target=editor`; add `target=template_debug` / `template_release` for exports): other platforms come from the per-platform
 scripts in [Release Builds](#release-builds), and the
 release zip, `scripts/build-release.sh`, is assembled from CI's artifacts of every platform.
 
@@ -156,7 +161,7 @@ the release scripts build the export templates that `scripts/install-template.sh
 
 If you want to debug the C++ code (`ss_player/`) of the plugin embedded as a custom module, follow these steps:
 
-1. **Verify the Debug Binary**
+1. **Build with Debug Symbols**
    Godot builds carry no debug symbols by default, `target=editor` and `target=template_debug` included. Build with `debug_symbols=yes` (`./scripts/build.sh debug_symbols=yes`, or the `.ps1` on Windows). The binaries are:
    * **macOS:** `godot/Godot.app/Contents/MacOS/Godot`
    * **Windows:** `godot/bin/godot.windows.editor.x86_64.exe` etc.
@@ -197,7 +202,7 @@ To verify and debug whether the custom module or GDExtension works correctly in 
 > - **Build the exact `target` you export with.** An `editor` build alone is not enough — `--export-debug` needs the `template_debug` library and `--export-release` needs `template_release`. If those were never built, the export still "succeeds" but ships an empty/missing extension library (on macOS this surfaces as a `CodeSign: Invalid binary format` error on the embedded framework).
 > - **The extension architecture is bounded by the runtime slices you have.** The GDExtension links `libssruntime` from `ss_player/runtime/libs/<platform>/`; you can only build the architectures present there. For example, with an `arm64`-only macOS runtime you cannot produce a `universal` / `x86_64` extension — set the preset's `binary_format/architecture` to match (e.g. `arm64`). The engine template can still be `universal`; a single-arch extension just won't load on the missing arch.
 > - **Enable ETC2/ASTC for `universal` / `arm64` / mobile exports.** Set `rendering/textures/vram_compression/import_etc2_astc=true` in the project (`project.godot` → `[rendering]`), otherwise the export aborts with *"Cannot export … with the ETC2/ASTC texture format disabled."*
-> - **Export templates must match the editor version.** Setting `custom_template/debug` / `custom_template/release` bypasses the version check (this is how a template built from the bundled `godot/` source can be reused). Set **both** debug and release paths even for a debug-only export — Godot validates both and otherwise reports the release template as missing.
+> - **Export templates must match the editor version.** Setting `custom_template/debug` / `custom_template/release` bypasses the version check (this is how a template built from the `godot/` checkout can be reused). Set **both** debug and release paths even for a debug-only export — Godot validates both and otherwise reports the release template as missing.
 
 The following is the flow for building/installing templates and exporting a sample project. (The example below uses macOS)
 
@@ -205,7 +210,7 @@ The following is the flow for building/installing templates and exporting a samp
    Prepare `libssruntime` beforehand, then run the release script for the target platform.
    ```bash
    # Prepare the runtime in release build (if necessary)
-   ./scripts/build-runtime.sh build=release platform=macos
+   ./scripts/build-runtime.sh build=release platform=macos arch=universal
 
    # Build the export templates
    ./scripts/release-macos.sh
@@ -233,7 +238,7 @@ The following is the flow for building/installing templates and exporting a samp
    ```powershell
    .\godot\bin\godot.windows.editor.x86_64.exe --path .\examples\dev_module\ --headless --export-debug "Windows Desktop" output.exe
    ```
-   > **Note:** To run the export, the target project's `export_presets.cfg` must contain the preset for the specified platform name (e.g., `"macOS"`), and required identifiers (such as Bundle ID) must be properly configured.
+   > **Note:** To run the export, the target project's `export_presets.cfg` must contain the preset for the specified platform name (e.g., `"macOS"`), and required identifiers (such as Bundle ID) must be properly configured. No sample ships `export_presets.cfg` (it is gitignored): create the preset in the editor first (**Project → Export**). The package name / bundle ID below (`com.crimw.devmodule`, `com.crimw.devgdext`) are what the commands assume; use the one you set.
 
 ### Web Platform Export and Testing
 
@@ -257,7 +262,7 @@ The official Godot Web export templates do **not** support GDExtension libraries
 
 > GDExtension libraries are not supported by this engine version. Enable "Extensions Support" for your export preset and/or build your custom template with "dlink_enabled=yes".
 
-To load a GDExtension on the Web, you need an engine template built with dynamic linking enabled (`dlink_enabled=yes`). Build one from the bundled `godot/` source, matching the `threads` mode of your extension (this plugin ships `nothread`, so use `threads=no`):
+To load a GDExtension on the Web, you need an engine template built with dynamic linking enabled (`dlink_enabled=yes`). Build one from the `godot/` checkout, matching the `threads` mode of your extension (this plugin ships `nothread`, so use `threads=no`):
 
 ```bash
 # Build dlink-enabled Web templates from source (nothreads)
@@ -296,6 +301,8 @@ Android export templates are template APKs packaged by the engine's Gradle proje
   export ANDROID_HOME="$HOME/Library/Android/sdk"
   export ANDROID_NDK_ROOT="$ANDROID_HOME/ndk/<ndk-version>"
   ```
+- With `ANDROID_HOME` set, godot-cpp and the engine build take the NDK from `$ANDROID_HOME/ndk/<version>` and not from `ANDROID_NDK_ROOT`: install the version `NDK_VERSION` names at the top of `scripts/release-gdextension-android.sh` for the GDExtension, and the one Godot names (`get_ndk_version()` in `godot/platform/android/detect.py`) for the engine.
+- Once, in `godot/`: `python misc/scripts/install_swappy_android.py` (without it `scons` warns and builds without frame pacing).
 - In the Godot editor settings, configure the Android SDK path and a debug keystore (`export/android/android_sdk_path`, `export/android/debug_keystore`, `export/android/debug_keystore_pass`).
 
 1. **Build the runtime and templates**
@@ -336,7 +343,7 @@ Android export templates are template APKs packaged by the engine's Gradle proje
    adb logcat -s godot        # check the engine log / errors
    adb exec-out screencap -p > screen.png   # capture the rendered frame
    ```
-   The `dev_module` sample plays the `Knight_arrow` animation on `SpriteStudioPlayer2D` with autoplay, so a successful run renders the character on screen.
+   `dev_module` is an empty scratch project (its scene is a bare `Node2D`, and `ssab_generated/` is not committed): to see a character, first convert a `.sspj` with the SS Importer dock and add a `SpriteStudioPlayer2D` with that pack and `autoplay` on.
 
 ### iOS Platform Export and Testing
 
@@ -426,7 +433,7 @@ For GDExtensions (e.g., `dev_gdextension`), **rebuilding the engine itself or in
 You can debug the C++ code for GDExtensions using almost the same steps as a custom module. The only difference is that the launch program is the "official Godot editor".
 
 1. **Build the GDExtension with debug symbols**
-   The build scripts (like `build-extension.sh`) default to `target=editor` and, as godot-cpp does, leave debug symbols out. Pass `debug_symbols=yes` (`./scripts/build-extension.sh debug_symbols=yes`, or the `.ps1` on Windows) so the output libraries (`.dll`, `.dylib`) are built with them.
+   The build scripts (like `build-extension.sh`) default to `target=editor` and, as godot-cpp does, leave debug symbols out. Pass `debug_symbols=yes` (`./scripts/build-extension.sh debug_symbols=yes`, or the `.ps1` on Windows) so the output libraries (`.dll`, `.so`, or the `.framework` on macOS) are built with them.
 
 2. **Attach Debugger and Launch Arguments**
    Specify the **official Godot binary** as the launch program in your debugger (e.g., VSCode, Visual Studio), and pass the project path as an argument (`--path examples/dev_gdextension`). The breakpoint will be hit once Godot dynamically loads the plugin at startup.
@@ -462,8 +469,9 @@ You can debug the C++ code for GDExtensions using almost the same steps as a cus
 `scripts/run-tests.sh` runs the GDExtension build headless (CONTRIBUTING has its rules). Two
 things it cannot see: pixels, because `--headless` installs a dummy rasteriser, and anything wired
 on entering the tree, because the suite runs every case before its root enters one —
-`SpriteStudioPartAttachment2D` and sound are two. CI compiles every platform's GDExtension and the
-custom module and runs no tests, so run the suite yourself.
+`SpriteStudioPartAttachment2D` and sound are two. CI compiles the GDExtension for Linux and the Web on every
+pull request, and every platform's GDExtension plus the custom module on the weekly run and the release PR; it runs no tests,
+so run the suite yourself.
 [Export Testing and Debugging](#export-testing-and-debugging) covers each export platform, and the
 debugging sections cover attaching a debugger.
 
@@ -554,13 +562,13 @@ old `libssruntime.a`. Put the submodule back when you are done.
 
 ## For SpriteStudio-SDK Developers
 
-> The sections below are required **only when developing/customizing SpriteStudio-SDK itself in parallel with the Godot side**. General Godot builders using the SpriteStudio-SDK release artifacts can skip them.
+> The sections below are required **only when developing/customizing SpriteStudio-SDK itself in parallel with the Godot side**, except [Deploying the sample project assets](#deploying-the-sample-project-assets), which everyone who runs the samples or the tests needs. General Godot builders using the SpriteStudio-SDK release artifacts can skip the rest.
 
 ### Additional Requirements
 
 For setting up the environment to build `libssruntime` yourself (Rust toolchain, etc.), refer to the [SpriteStudio-SDK README](https://github.com/cri-middleware/SpriteStudio-SDK/blob/HEAD/README.md#%EF%B8%8F-for-sdk-developers).
 
-If you also need to regenerate FlatBuffers headers, install `flatc` (the FlatBuffers compiler).
+If you also need to regenerate FlatBuffers headers, install the `flatc` release that matches the `ss_player/flatbuffers` submodule: the generated headers assert that version at compile time (`FLATBUFFERS_VERSION_*` at the top of `ss_player/format/ssab.h`).
 
 ### Building libssruntime from source
 

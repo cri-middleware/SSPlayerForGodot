@@ -88,6 +88,7 @@ graph LR
 ## Supported Versions
 
 - **Godot Engine**: 4.7 or later.
+- **SpriteStudio**: projects authored in SpriteStudio 7.6 or later.
 
 ## Related Repositories
 

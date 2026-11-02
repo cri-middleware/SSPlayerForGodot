@@ -32,7 +32,7 @@
 			If [code]true[/code], the part's rotation is copied to the target.
 		</member>
 		<member name="update_scale" type="bool" setter="set_update_scale" getter="get_update_scale" default="false">
-			If [code]true[/code], the part's scale is copied to the target. Off by default: with position and rotation enabled the resulting transform already carries the part's scale in most setups, and copying it as well tends to double-apply it to child nodes.
+			If [code]true[/code], the part's scale is copied to the target. Off by default. With it off only position and rotation are written and the target keeps its own scale; turn all three on to follow the part exactly, mirror included.
 		</member>
 		<member name="on_part_hidden" type="int" setter="set_on_part_hidden" getter="get_on_part_hidden" enum="SpriteStudioPartAttachment2D.HiddenBehavior" default="0">
 			What to do on frames where the tracked part is hidden. See [enum HiddenBehavior].

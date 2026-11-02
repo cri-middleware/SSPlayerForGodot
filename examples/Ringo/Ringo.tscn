@@ -7,7 +7,7 @@
 [node name="Ringo" type="SpriteStudioPlayer2D" parent="." unique_id=129351898]
 position = Vector2(500, 500)
 ssab = ExtResource("1_w6qk1")
-animation = "run"
+current_animation = "run"
 autoplay = true
 sub_frame_enabled = true
 animation_section_end = 39

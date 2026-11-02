@@ -47,7 +47,7 @@ func _input(event: InputEvent) -> void:
 
 func play_current() -> void:
 	var anim_name = anims[current_anim_index]
-	player.animation = anim_name
+	player.current_animation = anim_name
 	player.play()
 
 func update_label() -> void:
@@ -57,7 +57,7 @@ func update_label() -> void:
 		label.text += "Up/Down Arrows: Change Speed\n"
 		label.text += "Right Arrow: Flip Horizontal\n"
 		label.text += "Left Arrow: Pause / Resume\n\n"
-		label.text += "Current Animation: " + player.animation + "\n"
+		label.text += "Current Animation: " + player.current_animation + "\n"
 		label.text += "Speed Scale: " + str(player.speed_scale) + "\n"
 		label.text += "State: " + ("Paused" if player.is_pausing() else "Playing") + "\n"
 

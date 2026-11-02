@@ -11,7 +11,7 @@ A high-performance extension plugin (GDExtension / Custom Module) for playing an
 ## ✨ Why use SpriteStudio with Godot?
 
 - **Bring your characters to life.** Breathing and blinking, swaying hair and clothes, flashy slash and magic effects — the motion is built visually in a dedicated editor (SpriteStudio) with bone rigs, mesh deformation and particles, and Godot just plays it. Animations crossfade and layer on tracks at runtime, so a walk eases into a run instead of snapping. Nothing to rebuild by hand in `AnimationPlayer`.
-- **Not just characters — effects, UI and whole scenes.** Combine characters, backgrounds, effects and UI into a cutscene or a full-screen sequence in the editor, and play it in Godot as a single animation. `SpriteStudioButton` makes one a Godot button that plays its own section for hover, press and focus.
+- **Not just characters — effects, UI and whole scenes.** Combine characters, backgrounds, effects and UI into a cutscene or a full-screen sequence in the editor, and play it in Godot as a single animation. `SpriteStudioButton` makes one a Godot button that plays its own section for hover, press, disabled and focus.
 - **Just another node.** `SpriteStudioPlayer2D` sits in your scene like any other node and is controlled from GDScript — with signals from timeline keys and per-part overrides at runtime. The animation lives in its own file rather than inside the scene, so teammates don't collide over scene merges in Git.
 - **A seamless SpriteStudio ⇄ Godot round trip.** Drop a `.sspj` onto the SS Importer dock and it is converted inside the editor. To tweak it, click **Open SSPJ** in the Inspector, save in SpriteStudio, then click **Reconvert** — no manual export step.
 - **Zero-parse loading, SIMD playback.** `.ssab` is a FlatBuffers binary read in place, so loading involves no parsing, and poses are computed by a SIMD-optimised Rust core — light enough for mobile and for scenes with many characters. Turn on **sub-frame interpolation** and motion follows high-refresh-rate displays.
@@ -40,9 +40,9 @@ Everything after that (scripting, signals, per-part overrides) is the same path 
 [documentation](./docs/en/index.md).
 **Working on the Player, or the Rust runtime under it?** [CONTRIBUTING.md](./CONTRIBUTING.md), the [Build Guide](./docs/en/development/build.md) — which also covers using a changed build and checking it in Godot — and [How the Player Is Put Together](./docs/en/development/architecture.md) for the layers and the reasons that span files.
 
-You need a 4.7-series Godot editor from the [official site](https://godotengine.org/download/). Projects have to be authored in **SpriteStudio 7.6 or later**.
+You need Godot 4.7 or later from the [official site](https://godotengine.org/download/). Projects have to be authored in **SpriteStudio 7.6 or later**.
 
-1. **Install**: Open the [latest Release](https://github.com/cri-middleware/SSPlayerForGodot/releases/latest) and download `ssplayer-godot-extension-<Godot version>.zip` from its **Assets** — the Releases whose tag starts with `v1` are the 1.x plugin, which has neither `SSABResource` nor `SpriteStudioPlayer2D`. Extract it, copy its `addons` folder into your Godot project root, and restart the editor.
+1. **Install**: Open the [latest Release](https://github.com/cri-middleware/SSPlayerForGodot/releases/latest) and download `ssplayer-godot-extension-4.7.zip` from its **Assets** — the Releases whose tag starts with `v1` are the 1.x plugin, which has neither `SSABResource` nor `SpriteStudioPlayer2D`. Extract it, copy its `addons` folder into your Godot project root, and restart the editor.
 2. **Import**: Drag your `.sspj` from your file manager onto the **SS Importer** dock. It is converted into a folder named after it under `res://ssab_generated/`, the dock's default output folder (see [Asset Import and Editor Integration](./docs/en/workflow/usage_asset_pipeline.md)).
 
    ```

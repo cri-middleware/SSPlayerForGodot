@@ -24,10 +24,6 @@ Export needs the **same target** you export with: `--export-debug` uses the `tem
 
 ## The node is there but nothing draws
 
-### No animation is selected
-
-Assigning the `.ssab` is not enough. Pick a name in the **Current Animation** dropdown (or call `set_animation()`), then `play()` — or turn **Autoplay** on.
-
 ### The animation name does not exist
 
 A name that is not in the pack leaves the node drawing nothing. The Output panel names the pack and the name you asked it for:
@@ -46,9 +42,9 @@ Do not use `get_current_animation()` to find out: after `set_animation("wakl")` 
 
 ### The textures are gone
 
-Textures and sounds are resolved **relative to the directory the `.ssab` was loaded from**. Moving the `.ssab` out of the converter's output directory — without the `.png` files that were copied next to it — leaves the animation with nothing to sample. Godot logs the path it failed to load.
+Textures and sounds are resolved **relative to the directory the `.ssab` was loaded from**. Moving the `.ssab` out of its `<sspj name>/` folder — without the `.png` files that were copied next to it — leaves the animation with nothing to sample. Godot logs the path it failed to load.
 
-Keep the output directory (`res://ssab_generated` by default) intact, or move the whole directory.
+Keep that folder (for example `res://ssab_generated/Ringo/`) intact, or move the whole folder.
 
 ### The animation is off-screen or scaled to nothing
 
@@ -65,6 +61,10 @@ Keep the output directory (`res://ssab_generated` by default) intact, or move th
 ---
 
 ## Playback does not behave
+
+### The animation does not play
+
+Assigning the `.ssab` selects its first animation and draws its first frame, and **Autoplay** (on by default) starts playback when the scene starts in a running game, never in the editor. If you assign the `.ssab` from a script after the node is ready, or turned **Autoplay** off, call `play()`.
 
 ### An override does not appear on screen
 
@@ -93,7 +93,7 @@ Seeking fires only the destination frame's events. This is a [shared runtime con
 
 Work down the list — each item silences audio on its own:
 
-1. **The playback direction is backward.** Reverse playback fires no audio at all, including the return leg of ping-pong.
+1. **The playback direction is backward.** Reverse playback plays no sound at all, including the return leg of ping-pong (the `audio` signal still fires).
 2. **`play_audio` is off**, or an **`audio_backend` is assigned** and its `play_audio()` does not reach your audio stack. Assigning a backend always suppresses the built-in player.
 3. **The sound file did not load.** Godot logs the path. `.wav` / `.ogg` import as `AudioStream`; a format Godot does not import resolves to `null` and is silently skipped.
 4. **`audio_volume` is 0**, or the bus named in `audio_bus` is muted.
@@ -106,7 +106,7 @@ Details in [Audio Playback](workflow/audio.md).
 
 ### "Open SSPJ" does nothing
 
-[SpriteStudio](https://www.webtech.co.jp/spritestudio/) must be installed on the machine you are working on, and `.sspj` must be associated with it — the button hands the file to the OS shell.
+The button is not shown in the Godot editor on Linux. Elsewhere, [SpriteStudio](https://www.webtech.co.jp/spritestudio/) must be installed on the machine you are working on, and `.sspj` must be associated with it — the button hands the file to the OS shell.
 
 ### "Reconvert" cannot find the source
 

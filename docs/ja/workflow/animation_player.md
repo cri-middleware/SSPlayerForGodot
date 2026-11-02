@@ -2,7 +2,7 @@
 
 Godot 標準の `AnimationPlayer` と組み合わせることで、`SpriteStudioPlayer2D` のアニメーション再生を Godot の強力なタイムライン機能やステートマシン機能と連携させることができます。
 
-これにより、**攻撃判定（Hitbox）の同期、効果音（SE）の再生タイミング、カメラの揺らし、カットシーンの作成**などが、ノーコードで視覚的に行えるようになります。
+これにより、**攻撃判定（Hitbox）の同期、効果音（SE）の再生タイミング、カメラの揺らし、カットシーンの作成**などを、複雑なコードを書かずに視覚的に行えるようになります。
 
 ---
 
@@ -23,7 +23,7 @@ Godot 標準の `AnimationPlayer` と組み合わせることで、`SpriteStudio
 
 生成されたライブラリを実際にシーンへ適用する手順です。
 
-1. **ノードの準備** シーン上に `SpriteStudioPlayer2D` ノードを配置し、対象の `.ssab` を `Ssab` にセットしておきます。
+1. **ノードの準備** シーン上に `SpriteStudioPlayer2D` ノードを配置し、対象の `.ssab` を `Ssab` にセットして、**Autoplay** をオフにします。再生ヘッドは `AnimationPlayer` が駆動するため、ノード自身も再生していると毎フレーム競合します（[AnimationPlayer から駆動する](../api/player.md#animationplayer-から駆動する) を参照）。
 2. **AnimationPlayer の追加** シーン内に `AnimationPlayer` ノードを追加します。
 3. **ターゲットの指定（重要！）** 追加した `AnimationPlayer` ノードを選択し、インスペクター内の **`Root Node`** を、手順1の **`SpriteStudioPlayer2D` ノード** に設定します。*※自動生成されたアニメーションは「対象ノード自身の `current_animation` と `frame_no` を制御する」ようになっているため、Root Node を対象ノードに向ける必要があります。*
 4. **ライブラリの読み込み** エディタ下部の「アニメーション (Animation)」パネルを開き、「アニメーション」メニュー ＞ **「アニメーションを管理... (Manage Animations)」** をクリックします。出てきたウィンドウのフォルダアイコン（ライブラリをロード）を押し、生成された `_anims.res` を読み込みます。

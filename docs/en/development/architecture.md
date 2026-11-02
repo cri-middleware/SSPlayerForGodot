@@ -68,7 +68,7 @@ The importer converts a `.sspj` with `libssconverter` and records each output fo
 **Around it:** `misc/spritestudio.gdextension` is the extension's manifest, copied into every
 `addons/spritestudio/`; `test_gdextension/` is the headless suite, not a sample; `examples/` holds
 the samples, with `dev_gdextension` and `dev_module` as scratch projects; `godot/` and
-`godot-cpp/` are cloned beside the repository, not submodules.
+`godot-cpp/` are cloned into the repository root (both gitignored), not submodules.
 
 ## Why It Is Built the Way It Is
 
@@ -114,8 +114,8 @@ property list, so scripts can set them but neither the inspector nor a saved sce
 value a script sets is gone when the scene is reloaded.
 
 **The source of every output folder is recorded in the project.** `res://.ssplayer_sources.cfg`
-maps each output folder to its `.sspj`, which is what lets Reconvert, the FileSystem menu and
-`deploy-examples` rebuild a pack without asking where it came from. The dock's recent files are a
+maps each output folder to its `.sspj`, which is what lets Reconvert and the FileSystem menu rebuild
+a pack without asking where it came from. The dock's recent files are a
 different store: the editor's project metadata under `.godot/`, which is not committed, so they
 belong to one machine.
 
@@ -123,3 +123,9 @@ belong to one machine.
 module build is compiled into an engine that would have to be built to test it. That is why the
 two builds share one copy of the playback logic and the `#ifdef` blocks hold nothing but includes
 and conversions (`run-tests.sh`'s header says the same).
+
+**Text and 9-slice parts are not drawn.** The runtime reserves a text part's slot in the draw plan but supplies no glyphs (layout and rasterization are the Player's job), and the plugin has no Godot text pass. For a 9-slice part the runtime builds the whole grid into its `Nines` buffers, which the plugin does not read, so the part draws nothing rather than a stretched cell.
+
+**Only the blend modes a `CanvasItemMaterial` has.** The plugin draws straight to a `RenderingServer` canvas item with no intermediate render target, so a part's blend mode is limited to what `CanvasItemMaterial` maps onto. [Limitations](../limitations.md) lists how each mode draws.
+
+**The 2D editor does not select the artwork.** The 2D editor picks a node by the rectangle the node reports, and Godot gives GDExtension nodes no way to report one; the custom-module build behaves the same.

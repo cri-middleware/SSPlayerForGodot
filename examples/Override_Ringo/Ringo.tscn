@@ -8,7 +8,7 @@
 [node name="Ringo" type="SpriteStudioPlayer2D" parent="." unique_id=129351898]
 position = Vector2(599, 581)
 ssab = ExtResource("1_w6qk1")
-animation = "kaiten"
+current_animation = "kaiten"
 sub_frame_enabled = true
 animation_section_end = 79
 cellmaps/Ringo = null

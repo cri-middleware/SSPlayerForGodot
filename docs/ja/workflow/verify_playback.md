@@ -37,8 +37,8 @@ godot --headless --path . --import
 ```gdscript
 extends SceneTree
 
-const SSAB_PATH := "res://ssab_generated/Sample/Sample.ssab"
-const ANIMATION := "anime_1"
+const SSAB_PATH := "res://ssab_generated/Ringo/Ringo.ssab"
+const ANIMATION := "walk"
 
 var failures := 0
 
@@ -119,8 +119,8 @@ echo "$out" | grep -q '^SMOKE PASS$' && ! echo "$out" | grep -qE '^(SCRIPT ERROR
 ```gdscript
 extends SceneTree
 
-const SSAB_PATH := "res://ssab_generated/Sample/Sample.ssab"
-const ANIMATION := "anime_1"
+const SSAB_PATH := "res://ssab_generated/Ringo/Ringo.ssab"
+const ANIMATION := "walk"
 const FRAME := 8.0
 const OUT := "res://snapshot.png"
 

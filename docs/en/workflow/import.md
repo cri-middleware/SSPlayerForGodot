@@ -11,7 +11,7 @@ The conversion from a SpriteStudio project (`.sspj`) to the SpriteStudio runtime
 
 ### 1. Obtaining the Tool
 
-Download the `ssconverter-cli` binary for your platform (Windows / macOS / Linux) from the [SpriteStudio-SDK Releases](https://github.com/cri-middleware/SpriteStudio-SDK/releases).
+Download the `ssconverter-cli` binary for your platform (Windows / macOS / Linux) from the [SpriteStudio-SDK Releases](https://github.com/cri-middleware/SpriteStudio-SDK/releases), from the release that matches the **converter:** line at the bottom of the SS Importer dock. A `.ssab` written by a different schema version does not load.
 
 ### 2. Running from the Command Line
 

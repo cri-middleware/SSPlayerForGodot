@@ -73,7 +73,7 @@ With just the following steps, your changes will instantly reflect in the game (
 
 > [!WARNING]
 > **SpriteStudio installation is required**
-> Clicking the "Open SSPJ" button will launch SpriteStudio. Therefore, [SpriteStudio](https://www.webtech.co.jp/spritestudio/) must be installed on the PC you are using.
+> Clicking the "Open SSPJ" button will launch SpriteStudio. Therefore, [SpriteStudio](https://www.webtech.co.jp/spritestudio/) must be installed on the PC you are using. In the Godot editor on Linux the "Open SSPJ" button (and the menu entries of the same name) is not shown; open the `.sspj` in SpriteStudio yourself, then use **Reconvert**.
 
 > [!TIP]
 > **File Path Sharing and Smart Re-link for Team Development**

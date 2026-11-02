@@ -66,7 +66,7 @@ The states are read from the animation the player has selected. Selecting anothe
 | Property | Default | Meaning |
 | --- | --- | --- |
 | `stretch_mode` | `STRETCH_FIT` | `STRETCH_FIT` fits the whole canvas inside the button; `STRETCH_COVER` fills the button with it; `STRETCH_KEEP` keeps the authored size with the player's origin at the button's center |
-| `alignment_horizontal` / `alignment_vertical` | `ALIGNMENT_CENTER` | Where the canvas sits when its shape differs from the button's: `ALIGNMENT_BEGIN` (left / top), `ALIGNMENT_CENTER`, `ALIGNMENT_END` (right / bottom) |
+| `alignment_horizontal` / `alignment_vertical` | `ALIGNMENT_CENTER` | Where the canvas sits when its shape differs from the button's: `ALIGNMENT_BEGIN` (left / top), `ALIGNMENT_CENTER`, `ALIGNMENT_END` (right / bottom). Ignored with `STRETCH_KEEP` |
 
 The canvas is the one the selected animation was authored in (see [The authored canvas](../api/player.md#the-authored-canvas)), so the fit does not change when a `state_clips` entry plays an animation with another canvas. Shift the artwork within it with the player's `offset`. Turn on the button's `clip_contents` to cut off what overhangs.
 
@@ -83,7 +83,7 @@ A point counts when it is on the outline `get_part_quad()` reports for one of th
 
 ## Reduced motion
 
-Turn on `reduced_motion` for players who ask for less movement. Each state then holds the first frame of its section instead of playing it — stopped, so it fires no user data or sounds. If the animation has a label named `reduced_motion`, `normal` plays that section instead, so a calm loop can stand in for the usual one; `pressed`, `disabled` and `selected_` sections stay held, keeping their look.
+Turn on `reduced_motion` for players who ask for less movement. Each state then holds the first frame of its section instead of playing it — stopped, so it fires no user data or sounds. If the animation has a label named `reduced_motion`, `normal` — and any state that falls back to `normal` because it has no label of its own — plays that section instead, so a calm loop can stand in for the usual one. A state with a label of its own, and every `selected_` section, stays held, keeping its look.
 
 The button does not read the system setting itself. Godot reports it on some platforms:
 
