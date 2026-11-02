@@ -8,6 +8,7 @@ compile_commands.json
 /ss_player/gen
 /ss_player/runtime/include
 /ss_player/runtime/libs
+/ss_player/runtime/bindings
 /ss_player/runtime/*.md
 /ss_player/runtime/VERSION
 /scripts/.sdk-cache/
