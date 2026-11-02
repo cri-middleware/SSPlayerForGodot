@@ -37,29 +37,19 @@ git switch -C "$BRANCH" "${BASE:?}"
 
 ### 2. SDK, version and changelog
 
-In one commit. Pin the SpriteStudio-SDK release this one ships, in both places it is read from: `scripts/SDK_VERSION.txt`, the tag `download-sdk` fetches the runtime by, and the `ss_player/SpriteStudio-SDK` submodule. A new checkout has not initialized the submodule, and until it does, `git -C` on that directory reaches this repository instead, so the block initializes it first and goes no further if that fails. A release that keeps its SDK pins the tag `scripts/SDK_VERSION.txt` already holds. The block then sets `ss_player/VERSION.txt`; `<version>` is the one from step 1.
+In one commit. Pin the SpriteStudio-SDK release this one ships in `scripts/SDK_VERSION.txt`, the tag `download-sdk` fetches the runtime by; a release that keeps its SDK pins the tag the file already holds. The block then sets `ss_player/VERSION.txt`; `<version>` is the one from step 1.
 
 ```bash
 VERSION=<version>
 SDK_TAG=<sdk-tag>
-git submodule update --init ss_player/SpriteStudio-SDK &&
-  git -C ss_player/SpriteStudio-SDK fetch --tags origin &&
-  git -C ss_player/SpriteStudio-SDK checkout "${SDK_TAG:?}" &&
-  printf '%s\n' "$SDK_TAG" > scripts/SDK_VERSION.txt &&
+printf '%s\n' "${SDK_TAG:?}" > scripts/SDK_VERSION.txt &&
   printf 'v%s\n' "${VERSION:?}" > ss_player/VERSION.txt
-```
-
-When the SDK's `.fbs` schemas changed from the previous pin, regenerate the FlatBuffers headers (`flatc` required). This block does that only when they did:
-
-```bash
-git -C ss_player/SpriteStudio-SDK diff --quiet "$(git rev-parse HEAD:ss_player/SpriteStudio-SDK)" HEAD -- libs/ssruntime/fbs libs/ssab/fbs ||
-  scripts/generate-fbs-code.sh
 ```
 
 Then date the version's heading in `CHANGELOG.md` as `## [X.Y.Z] - YYYY-MM-DD`, adding the heading if the version has none yet, and commit:
 
 ```bash
-git add scripts/SDK_VERSION.txt ss_player/SpriteStudio-SDK ss_player/format ss_player/VERSION.txt CHANGELOG.md
+git add scripts/SDK_VERSION.txt ss_player/VERSION.txt CHANGELOG.md
 git commit -m "chore(release): $(cat ss_player/VERSION.txt)"
 ```
 
@@ -271,29 +261,19 @@ git switch -C "$BRANCH" "${BASE:?}"
 
 ### 2. SDK、バージョン、CHANGELOG
 
-1 コミットで行います。同梱する SpriteStudio-SDK のリリースを、読まれる 2 か所の両方で固定します。`download-sdk` がランタイムを取得するときに使うタグ `scripts/SDK_VERSION.txt` と、`ss_player/SpriteStudio-SDK` submodule です。新しいチェックアウトでは submodule が初期化されておらず、初期化するまではそのディレクトリへの `git -C` がこのリポジトリに届いてしまいます。そのためブロックは先に初期化し、失敗したらそこで止まります。SDK を変えないリリースでは、`scripts/SDK_VERSION.txt` にいまあるタグを固定します。続けてブロックは `ss_player/VERSION.txt` を設定します。`<version>` は手順 1 と同じものです。
+1 コミットで行います。同梱する SpriteStudio-SDK のリリースを `scripts/SDK_VERSION.txt` で固定します。`download-sdk` がランタイムを取得するときに使うタグです。SDK を変えないリリースでは、このファイルにいまあるタグを固定します。続けてブロックは `ss_player/VERSION.txt` を設定します。`<version>` は手順 1 と同じものです。
 
 ```bash
 VERSION=<version>
 SDK_TAG=<sdk-tag>
-git submodule update --init ss_player/SpriteStudio-SDK &&
-  git -C ss_player/SpriteStudio-SDK fetch --tags origin &&
-  git -C ss_player/SpriteStudio-SDK checkout "${SDK_TAG:?}" &&
-  printf '%s\n' "$SDK_TAG" > scripts/SDK_VERSION.txt &&
+printf '%s\n' "${SDK_TAG:?}" > scripts/SDK_VERSION.txt &&
   printf 'v%s\n' "${VERSION:?}" > ss_player/VERSION.txt
-```
-
-SDK の `.fbs` スキーマが前の固定から変わったときは、FlatBuffers のヘッダーを生成し直します（`flatc` が必要です）。次のブロックは、変わったときだけそれを行います。
-
-```bash
-git -C ss_player/SpriteStudio-SDK diff --quiet "$(git rev-parse HEAD:ss_player/SpriteStudio-SDK)" HEAD -- libs/ssruntime/fbs libs/ssab/fbs ||
-  scripts/generate-fbs-code.sh
 ```
 
 続けて `CHANGELOG.md` のそのバージョンの見出しに日付を入れ、`## [X.Y.Z] - YYYY-MM-DD` とします。そのバージョンの見出しがまだ無ければ足します。そのあとコミットします。
 
 ```bash
-git add scripts/SDK_VERSION.txt ss_player/SpriteStudio-SDK ss_player/format ss_player/VERSION.txt CHANGELOG.md
+git add scripts/SDK_VERSION.txt ss_player/VERSION.txt CHANGELOG.md
 git commit -m "chore(release): $(cat ss_player/VERSION.txt)"
 ```
 
