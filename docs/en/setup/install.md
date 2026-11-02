@@ -6,8 +6,8 @@ Steps for getting started with SpriteStudio Player for Godot.
 
 The shortest path to using the plugin without any build work.
 
-1. Download a 4.7-series Godot Engine from the [official site](https://godotengine.org/download/).
-2. Open the [latest SSPlayerForGodot Release](https://github.com/cri-middleware/SSPlayerForGodot/releases/latest) and download `ssplayer-godot-extension-<Godot version>.zip` from its **Assets**. The one ZIP carries the binaries for every platform.
+1. Download Godot Engine 4.7 or later from the [official site](https://godotengine.org/download/).
+2. Open the [latest SSPlayerForGodot Release](https://github.com/cri-middleware/SSPlayerForGodot/releases/latest) and download `ssplayer-godot-extension-4.7.zip` from its **Assets**. The one ZIP carries the binaries for Windows, macOS, Linux, Android, iOS and Web ([details](../limitations.md#platforms--export)).
 3. Extract the ZIP and copy the `addons` folder it contains into your Godot project root directory.
 
     ```

@@ -123,3 +123,9 @@ belong to one machine.
 module build is compiled into an engine that would have to be built to test it. That is why the
 two builds share one copy of the playback logic and the `#ifdef` blocks hold nothing but includes
 and conversions (`run-tests.sh`'s header says the same).
+
+**Text and 9-slice parts are not drawn.** The runtime reserves a text part's slot in the draw plan but supplies no glyphs (layout and rasterization are the Player's job), and the plugin has no Godot text pass. For a 9-slice part the runtime builds the whole grid into its `Nines` buffers, which the plugin does not read, so the part draws nothing rather than a stretched cell.
+
+**Only the blend modes a `CanvasItemMaterial` has.** The plugin draws straight to a `RenderingServer` canvas item with no intermediate render target, so a part's blend mode is limited to what `CanvasItemMaterial` maps onto. [Limitations](../limitations.md) lists how each mode draws.
+
+**The 2D editor does not select the artwork.** The 2D editor picks a node by the rectangle the node reports, and Godot gives GDExtension nodes no way to report one; the custom-module build behaves the same.

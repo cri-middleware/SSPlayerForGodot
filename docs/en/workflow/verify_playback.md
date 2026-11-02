@@ -37,8 +37,8 @@ Save this as `smoke_check.gd` anywhere in the project and edit the two constants
 ```gdscript
 extends SceneTree
 
-const SSAB_PATH := "res://ssab_generated/Sample/Sample.ssab"
-const ANIMATION := "anime_1"
+const SSAB_PATH := "res://ssab_generated/Ringo/Ringo.ssab"
+const ANIMATION := "walk"
 
 var failures := 0
 
@@ -120,8 +120,8 @@ This one needs a real renderer, so it runs **without** `--headless` and a window
 ```gdscript
 extends SceneTree
 
-const SSAB_PATH := "res://ssab_generated/Sample/Sample.ssab"
-const ANIMATION := "anime_1"
+const SSAB_PATH := "res://ssab_generated/Ringo/Ringo.ssab"
+const ANIMATION := "walk"
 const FRAME := 8.0
 const OUT := "res://snapshot.png"
 

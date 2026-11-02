@@ -85,6 +85,7 @@ graph LR
 ## 対応バージョン
 
 - **Godot Engine**: 4.7 以降。
+- **SpriteStudio**: SpriteStudio 7.6 以上で作成されたプロジェクト。
 
 ## 関連リポジトリ
 

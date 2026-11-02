@@ -5,8 +5,8 @@ Constraints and platform-specific caveats to be aware of when shipping with the 
 ## Not Yet Implemented
 
 > [!WARNING]
-> - **Text parts** — not drawn. The runtime reserves the part's slot in the draw plan but supplies no glyphs (glyph layout and rasterization are the player's job), and the plugin has no Godot text pass yet.
-> - **9-slice parts** — not drawn. The runtime builds the whole grid into its dedicated `Nines` buffers, but the plugin does not read them yet, so the part renders as nothing rather than as a stretched cell.
+> - **Text parts** — not drawn.
+> - **9-slice parts** — not drawn; the part renders as nothing rather than as a stretched cell.
 
 Text and 9-slice parts still occupy their place in the draw order, so an animation that uses them plays with those parts missing rather than failing. If you ship one, replace it with an ordinary part at authoring time.
 
@@ -15,12 +15,12 @@ Text and 9-slice parts still occupy their place in the draw order, so an animati
 > [!WARNING]
 > Of SpriteStudio's twelve part blend (mixing) modes, four are honored — **Mix**, **Multiply**, **Add**, and **Subtract** — and **Mulalpha** and **Mul2** draw as **Multiply**. The other six — **Screen**, **Exclusion**, **Invert**, **Div2**, **Screen2**, **Overlay2** — fall back to **Mix**.
 
-The plugin draws straight to Godot's `RenderingServer` canvas item with no intermediate render target, so a part is limited to the blend modes that map onto a `CanvasItemMaterial`. A part set to an unsupported mode still draws — it just composites as ordinary alpha blending instead of the authored mode. If your artwork relies on one of the other modes, check it in Godot before shipping.
+A part set to an unsupported blend mode still draws — it just composites as ordinary alpha blending instead of the authored mode. If your artwork relies on one of the other modes, check it in Godot before shipping.
 
 ## Masks
 
 > [!WARNING]
-> - **At most 96 masks at once in one animation**, counting both mask parts and parts that write a clipping mask (`writeMask`), and counting the animations it plays through instance parts. An instance's masks count again every time the instance is placed; a hidden mask, or one whose mask value is 0, does not count. Past 96, the rest are ignored and a warning is printed once.
+> - **At most 96 masks at once in one animation**, counting both mask parts and parts that write a clipping mask (`writeMask`), and counting the animations it plays through instance parts. An instance's masks count again every time the instance is placed; a hidden mask, or one whose mask value is 0, does not count. Past 96, the rest are ignored and a warning is printed once. Restructure the data to use fewer masks instead of trying to raise the limit.
 > - **Effect parts are not clipped by masks.**
 
 Godot's 2D canvas has no stencil buffer, so the plugin draws every mask of an animation — its instances included — into one offscreen bitmap, one bit per mask. Up to 24 fit at full resolution; past that the bitmap is split into two or four tiles of the same size, so an animation with many masks gets coarser mask edges rather than taking more memory.
@@ -30,17 +30,19 @@ Godot's 2D canvas has no stencil buffer, so the plugin draws every mask of an an
 The animation draws on canvas items of its own beneath the node, not on the node itself. Two things that work on a `Sprite2D` therefore work differently here.
 
 > [!NOTE]
-> - **Selecting in the 2D editor.** Clicking the artwork does not select the player. The 2D editor picks a node by the rectangle the node reports, and a node that reports none by its origin alone. Click near the origin, or select the node in the Scene dock; a box selection catches it when the box contains the origin. There are no resize handles either. Godot gives GDExtension nodes no way to report that rectangle, and the custom-module build behaves the same.
+> - **Selecting in the 2D editor.** Clicking the artwork does not select the player. The 2D editor picks a node by the rectangle the node reports, and a node that reports none by its origin alone. Click near the origin, or select the node in the Scene dock; a box selection catches it when the box contains the origin. There are no resize handles either.
 > - **The node's Material.** A material assigned to the player has no effect — every part draws with the plugin's own shader — and the node shows a configuration warning while one is set. To run a shader over the whole animation, give the material to a `CanvasGroup` parent instead; see [A Shader Over the Whole Animation](workflow/tips.md#a-shader-over-the-whole-animation).
 
 ## Platforms & Export
 
-The plugin ships in two build variants — **GDExtension** and **custom module** — and both can be exported to every Godot target. See [Exporting Your Project](workflow/export.md) for the export flow of each.
+The plugin ships in two build variants — **GDExtension** and **custom module**. The GDExtension release carries libraries for the platforms below; any other target needs a build from source ([Build Guide](development/build.md)). See [Exporting Your Project](workflow/export.md) for the export flow of each.
 
 Per-platform caveats to keep in mind:
 
+- **Windows** — x86_64.
+- **Linux** — x86_64. The library is built on Ubuntu 24.04, so it needs a distribution whose glibc is at least as new as that release's.
 - **macOS (GDExtension)** — one universal build covers Apple silicon and Intel.
-- **iOS** — exporting requires macOS + Xcode.
+- **iOS** — device and simulator; exporting requires macOS + Xcode.
 - **Android** — the runtime ships for `arm64-v8a`, `armeabi-v7a` and `x86_64`.
 - **Web** — see the dedicated section below.
 
@@ -60,7 +62,7 @@ Per-platform caveats to keep in mind:
 
 These come from the shared `libssruntime` and therefore apply regardless of build variant. They
 apply to every official player too, so the full explanations — and the rest of the shared
-constraints (embedded mode, unvalidated `.ssab` input, and so on) — live in the portal:
+constraints (embedded mode, a `.ssab` built by a different schema version, and so on) — live in the portal:
 **[Shared Limitations](https://cri-middleware.github.io/SpriteStudio-Docs/sdk/limitations/)**.
 
 > [!WARNING]

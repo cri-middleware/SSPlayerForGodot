@@ -10,7 +10,7 @@ SpriteStudio プロジェクト (`.sspj`) から SpriteStudio のランタイム
 
 ### 1. ツールの取得
 
-[SpriteStudio-SDK の Releases](https://github.com/cri-middleware/SpriteStudio-SDK/releases) から該当プラットフォーム (Windows / macOS / Linux) 向けの `ssconverter-cli` バイナリをダウンロードします。
+[SpriteStudio-SDK の Releases](https://github.com/cri-middleware/SpriteStudio-SDK/releases) から、SS Importer ドックの下部の **converter:** 行と同じバージョンのリリースを選び、該当プラットフォーム (Windows / macOS / Linux) 向けの `ssconverter-cli` バイナリをダウンロードします。異なるスキーマ版で作られた `.ssab` は読み込めません。
 
 ### 2. コマンドラインからの実行
 
