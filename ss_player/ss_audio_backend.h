@@ -21,7 +21,8 @@ using namespace godot;
 // Subclass it (in GDScript or C++) and implement `play_audio`. The default
 // implementation is a no-op — assigning a backend always suppresses built-in
 // playback, so the backend fully owns play-count / lifecycle management. It is
-// invoked only for forward playback (reverse audio is a documented limitation).
+// invoked only for forward playback (reverse audio is a documented limitation),
+// and not for the frame a seek lands on.
 //
 // GDScript example:
 //   extends SpriteStudioAudioBackend
