@@ -17,6 +17,13 @@ Godot 標準の `AnimationPlayer` と組み合わせることで、`SpriteStudio
 > [!NOTE]
 > 生成された `_anims.res` の中には、元の SpriteStudio アニメーションと同じ名前の「Value Track（値トラック）」が自動生成されています。このトラックは対象ノードの `current_animation`（アニメーション名）と `frame_no`（再生ヘッド）を制御します。
 
+### アニメーションを変えたとき
+
+Reconvert は `_anims.res` を作り直しません。SpriteStudio でアニメーションを足す・名前を変える・消す、フレーム数や FPS を変える、のどれかをしたときは、Reconvert のあとで **Gen AnimLib** を押し直してください。押し直すまでは、足したアニメーションが AnimationPlayer の一覧に出ず、名前を変えたものや消したものは一覧に残り、尺と速度も前のままです。開いているシーンの AnimationPlayer には、押し直した時点で反映されます。ポーズや動きだけを直したときは、Reconvert だけで反映されます（`_anims.res` が持つのは、アニメーション名・尺・フレーム番号だけです）。
+
+> [!WARNING]
+> Gen AnimLib は `_anims.res` を丸ごと作り直します。このライブラリのアニメーションにトラックを足している場合（[3. 応用例](#3-応用例)）、押し直すとそのトラックは消えます。押し直す前に「アニメーション」パネルの **「編集」＞「トラックをコピー…」** で控え、押し直したあとに **「トラックを貼り付け」** で戻してください。
+
 ---
 
 ## 2. AnimationPlayer のセットアップ
@@ -26,7 +33,7 @@ Godot 標準の `AnimationPlayer` と組み合わせることで、`SpriteStudio
 1. **ノードの準備** シーン上に `SpriteStudioPlayer2D` ノードを配置し、対象の `.ssab` を `Ssab` にセットして、**Autoplay** をオフにします。再生ヘッドは `AnimationPlayer` が駆動するため、ノード自身も再生していると毎フレーム競合します（[AnimationPlayer から駆動する](../api/player.md#animationplayer-から駆動する) を参照）。
 2. **AnimationPlayer の追加** シーン内に `AnimationPlayer` ノードを追加します。
 3. **ターゲットの指定（重要！）** 追加した `AnimationPlayer` ノードを選択し、インスペクター内の **`Root Node`** を、手順1の **`SpriteStudioPlayer2D` ノード** に設定します。*※自動生成されたアニメーションは「対象ノード自身の `current_animation` と `frame_no` を制御する」ようになっているため、Root Node を対象ノードに向ける必要があります。*
-4. **ライブラリの読み込み** エディタ下部の「アニメーション (Animation)」パネルを開き、「アニメーション」メニュー ＞ **「アニメーションを管理... (Manage Animations)」** をクリックします。出てきたウィンドウのフォルダアイコン（ライブラリをロード）を押し、生成された `_anims.res` を読み込みます。
+4. **ライブラリの読み込み** エディタ下部の「アニメーション (Animation)」パネルを開き、「アニメーション」メニュー ＞ **「アニメーションの管理... (Manage Animations)」** をクリックします。出てきたウィンドウのフォルダアイコン（ライブラリをロード）を押し、生成された `_anims.res` を読み込みます。
 
 これで AnimationPlayer のドロップダウンに、SpriteStudio で作成したアニメーション一覧が表示されるようになります！
 
