@@ -357,7 +357,7 @@ void SpriteStudioButton::_show() {
         }
     }
     bool hold = _reduced_motion;
-    if (_reduced_motion && source == STATE_NAMES[STATE_NORMAL]) {
+    if (_reduced_motion && (source.is_empty() || source == STATE_NAMES[STATE_NORMAL])) {
         int calm_start = 0;
         int calm_end = 0;
         if (ss_label_section(base, labels, REDUCED_MOTION_LABEL, calm_start, calm_end)) {
