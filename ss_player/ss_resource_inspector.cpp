@@ -20,6 +20,7 @@
 #include <godot_cpp/core/print_string.hpp>
 #include <godot_cpp/classes/animation.hpp>
 #include <godot_cpp/classes/animation_library.hpp>
+#include <godot_cpp/classes/resource_loader.hpp>
 #include <godot_cpp/classes/resource_saver.hpp>
 #include <godot_cpp/classes/editor_file_system.hpp>
 using namespace godot;
@@ -198,6 +199,11 @@ void SSResourceInspectorPlugin::_on_generate_animation_library_pressed(const Str
     Error err = SsResourceSaver::get_singleton()->save(library, out_path, SsResourceSaver::FLAG_NONE);
 
     if (err == OK) {
+        // The editor records its own saves, so no scan reloads the library a scene already holds:
+        // without this, an open AnimationPlayer keeps the old animations until the scene is reloaded.
+        if (SsResourceLoader::get_singleton()->has_cached(out_path)) {
+            SsResourceLoader::get_singleton()->load(out_path, "AnimationLibrary", SsResourceLoader::CACHE_MODE_REPLACE);
+        }
         auto *efs = EditorInterface::get_singleton()->get_resource_filesystem();
         if (efs) efs->scan();
         print_line("Generated AnimationLibrary: " + out_path);
