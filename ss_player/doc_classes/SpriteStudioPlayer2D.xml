@@ -74,7 +74,7 @@
 			<return type="bool" />
 			<description>
 				Returns which way the playhead is actually travelling this frame, which is [b]not[/b] the heading [method set_playback_direction] configured - [method get_playback_direction] reports that. Under ping-pong the return leg runs backward while the configured heading still reads [code]PLAYBACK_DIRECTION_FORWARD[/code], and a speed of zero or below is a stop rather than a reversal.
-				This is the gate to put in front of audio. SpriteStudio has no reverse audio, so a sound key crossed on a backward leg is not meant to sound - the player applies exactly this test itself when [member play_audio] is on, and a project driving its own audio from [signal audio] wants the same one. Returns [code]true[/code] before anything has played: forward is the resting state.
+				This is the gate to put in front of audio. SpriteStudio has no reverse audio, so a sound key crossed on a backward leg is not meant to sound - the player applies exactly this test itself when [member play_audio] is on, and a project driving its own audio from [signal audio] wants the same one. The player also leaves unsounded the keys on the frame a seek lands on, which the next update reports; a project driving its own audio skips those itself. Returns [code]true[/code] before anything has played: forward is the resting state.
 			</description>
 		</method>
 		<method name="just_looped" qualifiers="const">
@@ -732,7 +732,7 @@
 			If [code]true[/code], interpolates between integer frames for smoother sub-frame playback.
 		</member>
 		<member name="play_audio" type="bool" setter="set_play_audio" getter="is_play_audio" default="true">
-			If [code]true[/code], the built-in audio player plays the sounds emitted by the animation's audio parts. Set to [code]false[/code] to handle audio yourself via the [signal audio] signal. Audio is fired-and-forgotten: it plays only when its frame is passed during forward playback (reverse playback does not play sound), it is not resynced on seek, and it keeps playing while the animation is paused.
+			If [code]true[/code], the built-in audio player plays the sounds emitted by the animation's audio parts. Set to [code]false[/code] to handle audio yourself via the [signal audio] signal. Audio is fired-and-forgotten: it plays only when its frame is passed during forward playback (reverse playback and the frame a seek lands on play no sound), it is not resynced on seek, and it keeps playing while the animation is paused.
 		</member>
 		<member name="audio_volume" type="float" setter="set_audio_volume" getter="get_audio_volume" default="1.0">
 			Volume of the built-in audio playback, as a linear value in [code][0, 1][/code]. Ignored when [member audio_backend] is set.

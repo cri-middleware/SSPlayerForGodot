@@ -244,7 +244,7 @@ SpriteStudio 上でユーザーデータに設定した値が `Dictionary` と�
 
 オーバーライド可能なメソッドを 1 つだけ持つ `Resource` のサブクラスです。`audio_backend` に割り当てると **内蔵再生は抑制されます**（`audio_volume` と `audio_bus` も含む）。ボイスのライフサイクルと再生回数の管理はバックエンド側の責務になります。
 
-* `play_audio(payload: Dictionary, ssab: SSABResource, player: Node) -> void`: 内蔵再生が鳴らすはずだったオーディオイベントごとに 1 回呼ばれます。内蔵再生と同じく、`play_audio` がオフのときと、順方向に再生していないとき（`is_playing_forward()` が `false`）は呼ばれません。どちらの場合も `audio` シグナルは送られます。`payload` は `audio` シグナルと同じ内容です。既定の実装は何もしません。
+* `play_audio(payload: Dictionary, ssab: SSABResource, player: Node) -> void`: 内蔵再生が鳴らすはずだったオーディオイベントごとに 1 回呼ばれます。内蔵再生と同じく、`play_audio` がオフのとき、順方向に再生していないとき（`is_playing_forward()` が `false`）、シークの到達フレームでは呼ばれません。いずれの場合も `audio` シグナルは送られます。`payload` は `audio` シグナルと同じ内容です。既定の実装は何もしません。
 
 ```gdscript
 extends SpriteStudioAudioBackend
