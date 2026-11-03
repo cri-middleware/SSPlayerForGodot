@@ -38,6 +38,8 @@ When working in Godot and feeling the need to tweak an animation, you don't have
 
 This action automatically launches SpriteStudio and opens the underlying `.sspj` file, allowing you to start editing immediately.
 
+An `.ssab` that is not in a scene opens the same way: double-click it in the FileSystem dock and the Inspector shows the same buttons. The menu you get by right-clicking an `.ssab` has "Open SSPJ" too.
+
 > [!NOTE]
 > ![Opening SSPJ from the Inspector](../assets/5-open_sspj_from_inspector.png)
 
@@ -48,8 +50,8 @@ This action automatically launches SpriteStudio and opens the underlying `.sspj`
 After modifying and saving the animation in SpriteStudio, return to the Godot editor.
 With just the following steps, your changes will instantly reflect in the game (and in the editor preview).
 
-1. As before, select the node to show the Inspector.
-2. Click the **"Reconvert" button** next to the "Open SSPJ" button.
+1. As before, select the node to show the Inspector (or double-click the `.ssab` in the FileSystem dock).
+2. Click the **"Reconvert" button** next to the "Open SSPJ" button. Right-clicking the `.ssab` in the FileSystem dock and choosing "Reconvert" reconverts it too.
 
 > [!IMPORTANT]
 > **The shortest workflow: "Open" -> "Save" -> "Reconvert"**
