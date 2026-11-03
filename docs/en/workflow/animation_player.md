@@ -17,6 +17,13 @@ To control `SpriteStudioPlayer2D` with an `AnimationPlayer`, you must first conv
 > [!NOTE]
 > The generated `_anims.res` automatically contains "Value Tracks" with the exact same names as the original SpriteStudio animations. These tracks control the `current_animation` (animation name) and `frame_no` (playhead) properties of the target node.
 
+### When the Animations Change
+
+Reconvert does not rebuild `_anims.res`. After you add, rename or delete animations in SpriteStudio, or change their frame count or FPS, press **Gen AnimLib** again after Reconvert. Until you do, new animations are missing from the AnimationPlayer, renamed and deleted ones stay in its list, and lengths and speeds stay as they were. An AnimationPlayer in an open scene picks up the new library as soon as you press it. Edits to poses and motion alone need only Reconvert: `_anims.res` holds just the animation names, lengths and frame numbers.
+
+> [!WARNING]
+> Gen AnimLib rebuilds `_anims.res` from scratch. Tracks you added to its animations ([Advanced Use Cases](#3-advanced-use-cases)) are lost when you press it again. Copy them first with **Edit > Copy Tracks...** in the Animation panel, and put them back with **Paste Tracks** afterwards.
+
 ---
 
 ## 2. Setting Up the AnimationPlayer
