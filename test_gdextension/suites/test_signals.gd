@@ -209,3 +209,79 @@ func test_audio_fires_whether_or_not_the_node_plays_it() -> void:
 		eq(int(mp3.get("frame_no", -1)), 10, "and its key's frame")
 		eq(int(mp3.get("loop_num", -1)), 3, "and the authored play count")
 		ne(int(mp3.get("sound_name_hash", 0)), 0, "and a sound-name hash")
+
+
+## Records the frames whose sounds the node hands it, in place of playing them.
+class RecordingBackend extends SpriteStudioAudioBackend:
+	var frames: Array = []
+
+	@warning_ignore("native_method_override")
+	func play_audio(payload, _ssab, _player) -> void:
+		frames.append(int(payload.get("frame_no", -1)))
+
+
+## A Sound.ssab player on its first frame with a recording backend, and the
+## frames of the `audio` signal.
+func _sound_player(heard: Array) -> Array:
+	var p = make_player(SOUND)
+	var backend := RecordingBackend.new()
+	p.audio_backend = backend
+	p.audio.connect(func(d): heard.append(int(d.get("frame_no", -1))))
+	p.set_animation("anime_1")
+	return [p, backend]
+
+
+## A seek lands on a frame without crossing its keys: the `audio` signal still
+## reports them, but they are not sounded — playing, paused or stopped alike.
+func test_a_seek_does_not_sound_the_frame_it_lands_on() -> void:
+	for state in ["playing", "paused"]:
+		var heard: Array = []
+		var pb := _sound_player(heard)
+		var p = pb[0]
+		var backend = pb[1]
+		var step := 1.0 / maxf(1.0, float(p.get_frame_rate()))
+		p.play()
+		p.advance(step)
+		if state == "paused":
+			p.pause()
+		heard.clear()
+		backend.frames.clear()
+		p.frame_no = 10.0
+		p.advance(step)
+		has(heard, 10, "%s: the landing frame's key is still reported" % state)
+		eq(backend.frames.has(10), false, "%s: but it is not sounded" % state)
+
+
+func test_moving_track_0_is_a_seek_too() -> void:
+	var heard: Array = []
+	var pb := _sound_player(heard)
+	var p = pb[0]
+	var backend = pb[1]
+	var step := 1.0 / maxf(1.0, float(p.get_frame_rate()))
+	p.play()
+	p.advance(step)
+	heard.clear()
+	backend.frames.clear()
+	ok(p.set_track_frame(0, 10.0), "track 0 takes the frame")
+	p.advance(step)
+	has(heard, 10, "the landing frame's key is reported")
+	eq(backend.frames.has(10), false, "but not sounded")
+
+
+## Only the landing frame is held back: play() starts from its own frame, which
+## sounds, and a key crossed after the landing frame sounds as usual.
+func test_what_a_seek_does_not_silence() -> void:
+	var heard: Array = []
+	var pb := _sound_player(heard)
+	var p = pb[0]
+	var backend = pb[1]
+	var step := 1.0 / maxf(1.0, float(p.get_frame_rate()))
+	p.frame_no = 10.0
+	p.play(10.0)
+	p.advance(step)
+	has(backend.frames, 10, "play(10) after a seek sounds its start frame")
+
+	backend.frames.clear()
+	p.frame_no = 9.0
+	p.advance(step)
+	has(backend.frames, 10, "a key crossed after the landing frame sounds")

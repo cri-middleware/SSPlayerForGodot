@@ -175,6 +175,10 @@ public:
     // reversed). Audio playback is gated on this: the runtime fires audio events
     // on reverse playback too, but reverse audio is a documented limitation.
     bool isPlayingForward() const;
+    // Whether an audio key on p_frame_no is where a seek landed rather than a key
+    // the playhead crossed. A seek, playing or not, makes the next update report
+    // the frame it landed on; that update's keys there are not sounded.
+    bool isSeekLanding(int p_frame_no) const { return _seek_pending && p_frame_no == _seek_landing_frame; }
     // The loop pulse. The runtime clears it at the top of every update, so it only
     // reads true inside the tick that crossed — hence not `isLooped`, here or in
     // the Brain, whose C ABI spells it `ss_runtime_just_looped`.
@@ -410,6 +414,11 @@ public:
     float getSourceEventThreshold(int64_t p_source) const;
 
 private:
+    // The frame the last seek landed on, until the update that reports it (see isSeekLanding).
+    bool _seek_pending = false;
+    int _seek_landing_frame = -1;
+    void _mark_seek_landing();
+
     using SsVec2Array = PackedVector2Array;
     using SsColorArray = PackedColorArray;
     using SsIntArray = PackedInt32Array;

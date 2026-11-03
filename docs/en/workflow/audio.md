@@ -28,7 +28,7 @@ func _ready() -> void:
 ```
 
 > [!TIP]
-> The built-in playback runs in the **editor preview** as well, so scrubbing or previewing a cut with the SpriteStudio bottom panel is audible without launching the game.
+> The built-in playback runs in the **editor preview** as well, so previewing a cut with the SpriteStudio bottom panel is audible without launching the game. Dragging its frame scrubber is a seek, which sounds nothing (see below).
 
 ---
 
@@ -37,7 +37,7 @@ func _ready() -> void:
 Audio is **fire-and-forget**: a sound starts at the moment its frame is passed, and from then on it is an ordinary `AudioStreamPlayer` voice that runs to completion. That has consequences worth knowing before you build timing-critical audio on it.
 
 - **Forward playback only.** Nothing sounds while the effective direction is backward — a reversed direction, or the return leg of ping-pong. This is a [shared limitation](../limitations.md#playback-feature-constraints), not a Godot one. A negative `speed_scale` is not one of those cases: it stops the playhead rather than reversing it, and a stopped playhead crosses no audio keys either.
-- **Seeking does not replay what it skipped.** Jumping the playhead fires only the destination frame's events, and a sound already playing is not re-synced to the new position.
+- **Seeking sounds nothing.** Jumping the playhead (`frame_no`, or `set_track_frame()` on track 0) reports only the destination frame's events, and their sounds do not play, since the playhead crossed none of their keys; the `audio` signal still reports them. A sound already playing is not re-synced to the new position, and `play()` sounds its start frame as usual.
 - **A sound outlives the playback that started it.** `pause()`, `stop()` and a `set_animation()` switch end the *animation*, not the sound; voices already sounding play out, and every sound ends on its own, since `loop_num` has no infinite value. Turning `play_audio` off stops them, as does the node leaving the tree.
 - **Re-firing overlaps rather than cuts.** A sound triggered again while a previous instance is still audible — across a loop boundary, typically — starts a second voice. Nothing cuts the first one off.
 - **`loop_num` is a play count, not a flag.** SpriteStudio has no infinite audio loop: `1` plays once, `n` plays `n` times in a row.
@@ -107,7 +107,7 @@ Assign it in the inspector (drag the script onto `Audio Backend`, or save it as 
 > [!IMPORTANT]
 > **Assigning a backend always suppresses the built-in playback**, `audio_volume` and `audio_bus` included. The backend owns voice lifecycle and play counts completely; there is no partial hand-off. A backend that returns without doing anything for an event silences that event.
 
-`play_audio` still gates the call, and the forward-only rule still applies — a backend is not invoked while playing backwards.
+`play_audio` still gates the call, and so do the forward-only and seek rules — a backend is not invoked while playing backwards, or for the frame a seek lands on.
 
 ---
 

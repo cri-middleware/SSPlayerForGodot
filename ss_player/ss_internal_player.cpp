@@ -636,7 +636,10 @@ int SsInternalPlayer::getTrackSync(int p_track) const {
 
 bool SsInternalPlayer::setTrackFrame(int p_track, float p_frame) {
     SS_TRACK_OR_FAIL(p_track, false);
-    return _mixing_applied(ss_runtime_set_track_frame(runtime_ctx, (uint32_t)p_track, p_frame));
+    if (!_mixing_applied(ss_runtime_set_track_frame(runtime_ctx, (uint32_t)p_track, p_frame))) return false;
+    // Track 0's playhead is the character's, so moving it is a seek.
+    if (p_track == 0) _mark_seek_landing();
+    return true;
 }
 
 float SsInternalPlayer::getTrackFrame(int p_track) const {
@@ -871,6 +874,8 @@ void SsInternalPlayer::play(float p_start_frame) {
     // key" memory, otherwise a re-played animation would debounce an already-
     // fired independent effect/instance as the same key and never re-fire it.
     _reset_slots_playback_state();
+    // play() starts from its own frame, whose keys do sound, so a seek made before it is dropped.
+    _seek_pending = false;
     if (p_start_frame >= 0.0f) {
         ss_runtime_play_with_start_frame(runtime_ctx, p_start_frame);
     } else {
@@ -910,9 +915,15 @@ float SsInternalPlayer::getSpeed() const {
     return ss_runtime_get_speed_scale(runtime_ctx);
 }
 
+void SsInternalPlayer::_mark_seek_landing() {
+    _seek_pending = true;
+    _seek_landing_frame = (int)floorf(ss_runtime_get_frame_no(runtime_ctx));
+}
+
 void SsInternalPlayer::setFrameNo(float p_frame) {
     if (runtime_ctx) {
         ss_runtime_set_frame_no(runtime_ctx, p_frame);
+        _mark_seek_landing();
         _seek_and_redraw(ss_runtime_get_frame_no(runtime_ctx), 0.0f, false);
     }
 }
@@ -1318,6 +1329,8 @@ void SsInternalPlayer::update(float delta_seconds) {
             }
         }
     }
+    // The update that reports a seek's landing frame is over.
+    _seek_pending = false;
 
     float draw_frame = _sub_frame_enabled ? frame_no : floorf(frame_no);
     // An override changes what the frame draws without changing which frame it

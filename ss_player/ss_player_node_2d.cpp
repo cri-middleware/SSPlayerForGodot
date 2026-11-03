@@ -495,6 +495,8 @@ void SpriteStudioPlayer2D::_handle_audio(const Dictionary& payload) {
     // Plays during real forward playback, including the editor preview (the
     // runtime also fires audio events on reverse playback, which is a limitation).
     if (!_internal->isPlayingForward()) return;
+    // A seek lands on a frame without crossing its keys, so they are not sounded.
+    if (_internal->isSeekLanding((int)payload.get("frame_no", -1))) return;
 
     if (_audio_controller == nullptr) {
         _audio_controller = memnew(SsAudioController(this));
