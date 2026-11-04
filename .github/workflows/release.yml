@@ -185,6 +185,9 @@ jobs:
           # Put the keychain on the search list so codesign resolves the identity
           # (keep login.keychain-db so other tooling still works).
           security list-keychain -d user -s "$KEYCHAIN_PATH" login.keychain-db
+          # What codesign can sign with. GitHub masks secret values, so the part
+          # of a name that matches APPLE_DEV_ID_APP_NAME prints as ***.
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
 
           rm -f "$CERTIFICATE_PATH"
 
