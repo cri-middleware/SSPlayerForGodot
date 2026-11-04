@@ -1,7 +1,9 @@
 name: CI
 
 # Two tiers, as in SpriteStudio-SDK. Every pull request builds the GDExtension for
-# Linux and Web. The weekly run, a dispatch and the release PR (release/X.Y into
+# Linux and Web, on a runtime built from the SDK submodule, or restored from the
+# weekly run's build when that run last built the same submodule commit (see the
+# extension job). The weekly run, a dispatch and the release PR (release/X.Y into
 # main) also build it for Windows, macOS, iOS and Android, build the custom-module
 # engine on all six (Godot itself with ss_player compiled in, one target each),
 # and build the documentation site.
@@ -86,12 +88,37 @@ jobs:
           platform: ${{ matrix.platform }}
           os: ubuntu-latest
 
+      # The runtime build depends on nothing but the submodule commit, the script
+      # that drives it, this workflow and the runner image, so its key is made
+      # of those, and only an exact match counts. The weekly run always builds,
+      # which keeps proving the submodule builds with the current toolchain and
+      # keeps the Rust cache seeded, and saves ss_player/runtime/ when no build
+      # is saved under that key yet. A pull request whose key matches restores
+      # it and skips Rust altogether; one that bumps the submodule, or changes
+      # any of the rest, misses and builds as before.
+      - name: Name the runtime build
+        id: runtime
+        run: echo "key=runtime-${ImageOS}-${{ matrix.platform }}-debug-$(git rev-parse HEAD:ss_player/SpriteStudio-SDK)-${{ hashFiles('scripts/build-runtime.sh', '.github/workflows/ci.yml') }}" >> "$GITHUB_OUTPUT"
+
+      # ss_player/runtime/ is gitignored, and SCons reads the runtime from it
+      # alone.
+      - name: Restore the runtime build
+        id: runtime-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ss_player/runtime
+          key: ${{ steps.runtime.outputs.key }}
+          # The weekly run builds regardless; it only asks whether a build is saved.
+          lookup-only: ${{ github.event_name != 'pull_request' }}
+
       - name: Setup Rust (Stable)
+        if: github.event_name != 'pull_request' || steps.runtime-cache.outputs.cache-hit != 'true'
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
           toolchain: stable
 
       - name: Setup Rust Cache
+        if: github.event_name != 'pull_request' || steps.runtime-cache.outputs.cache-hit != 'true'
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: "ss_player/SpriteStudio-SDK"
@@ -105,7 +132,7 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/develop' }}
 
       - name: Install Nightly Rust (Web only)
-        if: matrix.platform == 'web'
+        if: matrix.platform == 'web' && (github.event_name != 'pull_request' || steps.runtime-cache.outputs.cache-hit != 'true')
         run: |
           rustup target add wasm32-unknown-unknown
           rustup toolchain install nightly
@@ -113,7 +140,17 @@ jobs:
           rustup component add rust-src --toolchain nightly
 
       - name: Build Runtime (SDK)
+        if: github.event_name != 'pull_request' || steps.runtime-cache.outputs.cache-hit != 'true'
         run: ./scripts/build-runtime.sh platform=${{ matrix.platform }} build=debug
+
+      # Straight after the build, so a later step that fails, the SCons build or
+      # the custom module, does not keep a runtime that built from being saved.
+      - name: Save the runtime build
+        if: github.ref == 'refs/heads/develop' && steps.runtime-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ss_player/runtime
+          key: ${{ steps.runtime.outputs.key }}
 
       # Keyed on what the objects are compiled from, godot-cpp's commit and this
       # repository's sources, so a week in which neither moved restores the exact
