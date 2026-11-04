@@ -157,6 +157,9 @@ jobs:
           APPLE_DEV_ID_APP_CERT: ${{ secrets.APPLE_DEV_ID_APP_CERT }}
           APPLE_DEV_ID_APP_CERT_PASS: ${{ secrets.APPLE_DEV_ID_APP_CERT_PASS }}
         run: |
+          # The job's shell is zsh without -e: stop at the first failing
+          # command, so its error is the last thing in this step's log.
+          set -e
           if [ -z "$APPLE_DEV_ID_APP_CERT" ]; then
             echo "APPLE_DEV_ID_APP_CERT not set — skipping keychain setup (artifacts will be unsigned)."
             exit 0
@@ -182,6 +185,9 @@ jobs:
           # Put the keychain on the search list so codesign resolves the identity
           # (keep login.keychain-db so other tooling still works).
           security list-keychain -d user -s "$KEYCHAIN_PATH" login.keychain-db
+          # What codesign can sign with. GitHub masks secret values, so the part
+          # of a name that matches APPLE_DEV_ID_APP_NAME prints as ***.
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
 
           rm -f "$CERTIFICATE_PATH"
 
@@ -193,6 +199,7 @@ jobs:
         env:
           ASC_API_KEY_PASS: ${{ secrets.ASC_API_KEY_PASS }}
         run: |
+          set -e
           if [ -z "$ASC_API_KEY_PASS" ]; then
             echo "ASC_API_KEY_PASS not set — skipping API key setup (frameworks will not be notarized)."
             exit 0
