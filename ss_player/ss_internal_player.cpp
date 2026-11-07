@@ -539,7 +539,9 @@ bool SsInternalPlayer::clear_part_cell_override(int p_part_index) {
 
 bool SsInternalPlayer::clear_all_part_overrides() {
     if (runtime_ctx == nullptr) return false;
-    return _override_applied(ss_runtime_clear_all_part_overrides(runtime_ctx));
+    const bool ok = ss_runtime_clear_all_part_overrides(runtime_ctx);
+    if (ok) _overrides_dirty = true;
+    return ok;
 }
 
 // ---- Animation mixing ----------------------------------------------------
@@ -550,8 +552,12 @@ bool SsInternalPlayer::_mixing_applied(bool p_ok) {
         // way it shows an override: without stepping the animation.
         _overrides_dirty = true;
     }
-    _note_runtime_refusal(p_ok);
     return p_ok;
+}
+
+bool SsInternalPlayer::_mixing_reported(bool p_ok) {
+    _note_runtime_refusal(p_ok);
+    return _mixing_applied(p_ok);
 }
 
 uint32_t SsInternalPlayer::_find_animation_hash(const String& p_name) const {
@@ -586,7 +592,7 @@ bool SsInternalPlayer::setTrackAnimation(int p_track, const String& p_name) {
     SS_TRACK_OR_FAIL(p_track, false);
     const ss::format::AnimationData* animation = _ssabRes->find_animation(p_name);
     if (animation == nullptr) return false;
-    if (!_mixing_applied(ss_runtime_set_track_animation_by_hash(runtime_ctx, (uint32_t)p_track, animation->name_hash()))) return false;
+    if (!_mixing_reported(ss_runtime_set_track_animation_by_hash(runtime_ctx, (uint32_t)p_track, animation->name_hash()))) return false;
     if (p_track == 0) _track_zero_switched(animation);
     return true;
 }
@@ -614,7 +620,7 @@ float SsInternalPlayer::getTrackAlpha(int p_track) const {
 
 bool SsInternalPlayer::setTrackBlend(int p_track, int p_blend) {
     SS_TRACK_OR_FAIL(p_track, false);
-    return _mixing_applied(ss_runtime_set_track_blend(runtime_ctx, (uint32_t)p_track, (uint32_t)p_blend));
+    return _mixing_reported(ss_runtime_set_track_blend(runtime_ctx, (uint32_t)p_track, (uint32_t)p_blend));
 }
 
 int SsInternalPlayer::getTrackBlend(int p_track) const {
@@ -743,7 +749,7 @@ bool SsInternalPlayer::crossfade(int p_track, const String& p_name, float p_dura
     const ss::format::AnimationData* animation = _ssabRes->find_animation(p_name);
     if (animation == nullptr) return false;
     // The runtime's fades run in the milliseconds `update` hands it.
-    if (!_mixing_applied(ss_runtime_crossfade_by_hash(runtime_ctx, (uint32_t)p_track, animation->name_hash(), p_duration_seconds * 1000.0f))) return false;
+    if (!_mixing_reported(ss_runtime_crossfade_by_hash(runtime_ctx, (uint32_t)p_track, animation->name_hash(), p_duration_seconds * 1000.0f))) return false;
     // The incoming animation takes over track 0 when the fade begins, not when
     // it completes.
     if (p_track == 0) _track_zero_switched(animation);
@@ -779,7 +785,7 @@ int64_t SsInternalPlayer::addTrackSource(int p_track, const String& p_name, floa
     const uint32_t hash = _find_animation_hash(p_name);
     if (hash == 0) return -1;
     const uint32_t handle = ss_runtime_add_track_source_by_hash(runtime_ctx, (uint32_t)p_track, hash, p_weight);
-    if (!_mixing_applied(handle != SS_RUNTIME_INVALID_HANDLE)) return -1;
+    if (!_mixing_reported(handle != SS_RUNTIME_INVALID_HANDLE)) return -1;
     return (int64_t)handle;
 }
 

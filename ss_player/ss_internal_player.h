@@ -580,6 +580,9 @@ private:
     // `_drawAnimation`, which both the owner's and the child's path go through.
     bool _overrides_dirty = false;
     bool _mixing_applied(bool p_ok);
+    // For the calls the node reports: a reason nothing takes would stay behind and
+    // name the next failure.
+    bool _mixing_reported(bool p_ok);
     // The resolved animation's name hash, or 0 for a name the SSAB lacks.
     uint32_t _find_animation_hash(const String& p_name) const;
     // A crossfade or a track animation on track 0 hands the character to
