@@ -35,17 +35,11 @@
 
 {#-
   Open Graph / Twitter Card metadata. The theme emits none of this on its own, so a link
-  shared into Slack, X, or Discord previews as a bare URL.
+  shared into Slack, X, or Discord previews as a bare URL. With no image, `summary` is the
+  card type that renders: `summary_large_image` without one renders as nothing.
 
-  No og:image yet - the only SpriteStudio artwork here is the SVG favicon, and link previews
-  do not show SVG. Adding one means dropping a PNG or JPEG into docs/en/assets/ and
-  docs/ja/assets/ and un-commenting the tag below. Until
-  then `summary` is the correct card type; `summary_large_image` without an image renders
-  as nothing.
-
-  The <style> styles the two GitHub callouts that are not built-in admonition types, the
-  way `mkdocs-callouts` did before Zensical parsed them natively: IMPORTANT as `tip`,
-  CAUTION as `warning`.
+  The <style> styles the two GitHub callouts that are not built-in admonition types:
+  IMPORTANT as `tip`, CAUTION as `warning`.
 -#}
 {% block extrahead %}
   {%- set og_description = page.meta.description if page.meta and page.meta.description else config.site_description -%}
@@ -55,7 +49,6 @@
   <meta property="og:description" content="{{ og_description }}">
   <meta property="og:url" content="{{ page.canonical_url }}">
   <meta property="og:locale" content="{{ 'ja_JP' if config.theme.language == 'ja' else 'en_US' }}">
-  {#- <meta property="og:image" content="{{ 'assets/og-image.png' | url }}"> -#}
   <meta name="twitter:card" content="summary">
   {#- Attributes the card to the account linked from the footer; keep in sync with extra.social. -#}
   <meta name="twitter:site" content="@spritestudio">
@@ -99,9 +92,9 @@
   a subpath rather than a URL (see partials/alternate.html), the Japanese entry on Japanese
   pages would resolve to /ja/ja/.
 
-  Jinja cannot replace one line of a block, so this is the theme's `site_meta` block copied
-  from Zensical 0.0.74 base.html with only the alternate links changed. Re-copy it when
-  bumping Zensical if the stock block has moved.
+  Jinja cannot replace one line of a block, so this is a copy of the `site_meta` block from
+  the theme's base.html with only the alternate links changed. Re-copy it when bumping
+  Zensical if the stock block has moved.
 
   Each link names this same page in that locale, as an absolute URL - search engines want
   hreflang targets fully qualified. The root shared by both locales is `site_url` minus

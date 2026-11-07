@@ -2,10 +2,8 @@
   The header's language selector, overridden so that switching language keeps you on the
   page you are reading instead of dumping you on the other locale's home page.
 
-  `mkdocs-static-i18n` used to rewrite these links per page. Nothing does that once each
-  locale is built from its own config, and the stock partial just emits `alt.link` as
-  written - so from `/workflow/usage_basic/` the Japanese link pointed at `/ja/`, losing
-  the reader's place. This rebuilds the href from the current `page.url` instead.
+  Each locale is built from its own config, and the stock partial just emits `alt.link` as
+  written, so this rebuilds the href from the current `page.url`.
 
   Two config values feed it, both documented where they are set:
 
