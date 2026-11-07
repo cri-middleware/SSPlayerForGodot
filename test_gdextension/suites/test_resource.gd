@@ -3,7 +3,7 @@
 ## `SSABResource` is a Resource, so `load()` is the whole loading story — the
 ## pack's textures and its instance sub-packs are resolved beside it. These are
 ## the reads a host does to build a UI (an animation picker, a cell list), and
-## every one of them is a name that the API conventions settled, so they are
+## every one of them is a name scripts depend on, so they are
 ## also where a rename shows up first.
 extends "res://test_base.gd"
 

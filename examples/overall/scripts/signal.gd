@@ -1,7 +1,7 @@
 extends SpriteStudioPlayer2D
 
 # Example script demonstrating how to connect and handle signals 
-# from a SpriteStudio animation in v2.x.
+# from a SpriteStudio animation.
 
 func _ready():
 	# Connect to the "signal_emitted" signal of SpriteStudioPlayer2D

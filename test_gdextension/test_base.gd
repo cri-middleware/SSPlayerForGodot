@@ -104,7 +104,7 @@ func ne(actual, unexpected, what: String) -> bool:
 
 ## Float comparison with a tolerance, which is every float comparison here.
 ##
-## The frame arithmetic is the Brain's and is the same source on every platform,
+## The frame arithmetic is the runtime's and is the same source on every platform,
 ## but it arrives through a `double` -> `float` boundary and there is no reason
 ## to demand the last bit of it agree across three compilers.
 func near(actual: float, expected: float, what: String, eps := 0.0001) -> bool:

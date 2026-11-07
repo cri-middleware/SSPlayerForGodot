@@ -24,12 +24,11 @@
 #
 # What this does NOT do is build anything. Six platforms need Linux, Windows and
 # macOS between them, so there is no local equivalent of the matrix. What it
-# replaces is the part that never needed one: the `cp` and `mv` that decide what
-# the addon folder contains.
+# does is the `cp` and `mv` that decide what the addon folder contains.
 #
 # The check at the end is the one that matters here, and it is not a formality.
-# spritestudio.gdextension names a file per platform and build target -- twenty
-# odd paths -- and Godot resolves them at load time. A name that does not match
+# spritestudio.gdextension names a file per platform and build target, and
+# Godot resolves them at load time. A name that does not match
 # what actually shipped does not error at build time or at zip time; the
 # extension simply fails to load, on that one platform, for whoever downloaded
 # it. So every path the descriptor names is looked up inside the finished
@@ -305,8 +304,8 @@ mkdir -p "$ADDON/docs"
 done
 echo "   README.md + docs/ ($(find "$ADDON/docs" -name '*.md' | wc -l | tr -d ' ') pages)"
 
-# Copied, not moved: unlike the workflow this replaces, the input tree survives,
-# so one download serves any number of attempts.
+# Copied, not moved: the input tree survives, so one download serves any number
+# of attempts.
 for p in $PLATFORMS; do
   cp -R "$IN/extension-${API_VERSION}-${p}/${p}" "$ADDON/bin/"
 done

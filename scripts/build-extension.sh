@@ -29,7 +29,7 @@ declare -A scons_default_opts=(
     [api_version]="$("${BASEDIR}/godot-api-version.sh")"
 )
 
-# macbuild default options
+# This script's own options
 declare -A build_default_opts=(
     [cpus]=${CPUS}
     [strip]="no"
@@ -77,10 +77,10 @@ for key value in ${(kv)opts}; do
 done
 echo ""
 
-# validate scons command options from macbuild.sh options
+# validate scons command options from this script's options
 for key value in ${(kv)opts}; do
     if [[ -v build_default_opts[$key] ]]; then
-        # skip macbuild default options
+        # skip this script's own options
         continue
     fi
     if [[ $key == "arch" ]]; then

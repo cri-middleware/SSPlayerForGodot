@@ -152,7 +152,7 @@ if platform == "ios":
 # --- DocData Generation ---
 if env["target"] in ["editor", "template_debug"]:
     try:
-        # Output to ss_player/gen instead of src/gen.
+        # Output to ss_player/gen.
         # XML lives in ss_player/doc_classes so the same files feed the custom
         # module build (Godot auto-collects <module>/doc_classes via config.py).
         doc_data = env.GodotCPPDocData("ss_player/gen/doc_data.gen.cpp", source=Glob("ss_player/doc_classes/*.xml"))
@@ -209,13 +209,13 @@ addons_dir = "addons/spritestudio"
 install_targets = [library]
 
 # Copy library to project (following addons/spritestudio structure)
-library_install_path = "{}/{}/{}".format(project_dir, addons_dir, library_output.replace("bin/", "bin/"))
+library_install_path = "{}/{}/{}".format(project_dir, addons_dir, library_output)
 copy_lib = env.InstallAs(library_install_path, library)
 install_targets.append(copy_lib)
 
 # Copy Plist if applicable
 if plist_target:
-    plist_install_path = "{}/{}/{}".format(project_dir, addons_dir, plist_file.replace("bin/", "bin/"))
+    plist_install_path = "{}/{}/{}".format(project_dir, addons_dir, plist_file)
     copy_plist = env.InstallAs(plist_install_path, plist_target)
     install_targets.append(copy_plist)
 

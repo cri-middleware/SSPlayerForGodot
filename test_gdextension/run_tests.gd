@@ -10,9 +10,9 @@
 ## GDScript — the same door a user's game goes through. It therefore covers the
 ## bound API and the signals, and it does **not** cover drawing: `--headless`
 ## installs a dummy rasteriser, so pixels are not a thing that exists here. That
-## is not a gap this runner should try to close; `NOTIFICATION_DRAW` is a no-op
-## in `SpriteStudioPlayer2D` anyway, because the InternalPlayer issues its own
-## RenderingServer calls.
+## is not a gap this runner should try to close; `NOTIFICATION_DRAW` draws nothing
+## in `SpriteStudioPlayer2D` (it only refreshes texture settings), because the
+## InternalPlayer issues its own RenderingServer calls.
 ##
 ## The custom-module build is not tested here and cannot be: a module is
 ## compiled into the engine, so testing it would mean building Godot rather than

@@ -133,7 +133,7 @@ func _play_once(p: Node) -> void:
 
 
 ## UserData.ssab keys the `UDAT` part at frames 0 and 10; the frame-10 key holds
-## 987654321, (56, 78), the rect 5 6 7 8 and 「10フレーム到達のお知らせ」.
+## 987654321, (56, 78), the rect 5 6 7 8 and a Japanese string (asserted below).
 func test_user_data_carries_the_key_and_where_it_sits() -> void:
 	var p = make_player(USER_DATA)
 	var got: Array = []

@@ -20,12 +20,11 @@
 #
 # What this does NOT do is build anything. Six platforms need Linux, Windows and
 # macOS between them, so there is no local equivalent of the matrix. What it
-# replaces is the part that never needed one: the copies that decide what the
-# addon folder contains.
+# does is the copies that decide what the addon folder contains.
 #
 # The check at the end is the one that matters here, and it is not a formality.
-# spritestudio.gdextension names a file per platform and build target -- nineteen
-# paths -- and Godot resolves them at load time. A name that does not match what
+# spritestudio.gdextension names a file per platform and build target, and
+# Godot resolves them at load time. A name that does not match what
 # actually shipped does not error at build time or at zip time; the extension
 # simply fails to load, on that one platform, for whoever downloaded it. So every
 # path the descriptor names is looked up inside the finished archive, along with
@@ -278,8 +277,8 @@ foreach ($page in (Get-ChildItem -Path $docsSource -Recurse -File -Filter "*.md"
 }
 Write-Host "   README.md + docs/ ($((Get-ChildItem "$addon/docs" -Recurse -File -Filter "*.md").Count) pages)"
 
-# Copied, not moved: unlike the workflow this replaces, the input tree survives,
-# so one download serves any number of attempts.
+# Copied, not moved: the input tree survives, so one download serves any number
+# of attempts.
 foreach ($platform in $platforms) {
     Copy-Item -Recurse -Force "$in/extension-$apiVersion-$platform/$platform" "$addon/bin/"
 }

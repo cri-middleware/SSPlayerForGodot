@@ -115,21 +115,9 @@ declare -A internal_opts=(
     [app_template]=""
     [app_bin]=""
 )
-if [[ ${VERSION} =~ ^3\..* ]]; then
-    # 3.x
-    if [[ "${PLATFORM}" == "macos" ]]; then
-        internal_opts[platform]="osx"
-    else
-        internal_opts[platform]=${PLATFORM}
-    fi
-    internal_opts[app_target]="tools"
-    internal_opts[app_template]="osx_tools.app"
-else
-    # 4.x
-    internal_opts[platform]=${PLATFORM}
-    internal_opts[app_target]="editor"
-    internal_opts[app_template]="macos_tools.app"
-fi
+internal_opts[platform]=${PLATFORM}
+internal_opts[app_target]="editor"
+internal_opts[app_template]="macos_tools.app"
 if [[ -n ${opts[target]} ]]; then
     internal_opts[app_target]=${opts[target]}
 fi

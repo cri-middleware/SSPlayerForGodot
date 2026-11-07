@@ -67,9 +67,5 @@ if platform == "ios":
 else:
     env.Append(LIBS=["ssruntime"])
 
-# --- Compilation Flags ---
-if not env_ss.msvc:
-    env_ss.Append(CXXFLAGS=["-Wno-inconsistent-missing-override"])
-
 if platform == 'macos':
     env_ss.Append(LINKFLAGS=['-framework', 'Metal'])

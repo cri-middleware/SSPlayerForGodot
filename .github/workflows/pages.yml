@@ -101,8 +101,7 @@ jobs:
       # build from drifting apart, and it is the same command in every repository in the
       # family, whatever else that repository's site carries.
       #
-      # One build per locale - there is no plugin producing both from a single run any
-      # more - English first, because the English build wipes site/ and the Japanese site
+      # One build per locale, English first, because the English build wipes site/ and the Japanese site
       # lives inside it at site/ja. build-docs.sh owns that order; the reason it exists is
       # that the opposite order silently publishes a site with no Japanese pages at all.
       #
