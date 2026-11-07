@@ -8,7 +8,5 @@
 ssab = ExtResource("1_svhdt")
 current_animation = "anime_1"
 playing = true
-animation_section_start = 0
-animation_section_end = 20
 cellmaps/common = null
 cellmaps/common_2.png = null

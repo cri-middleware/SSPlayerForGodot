@@ -24,6 +24,27 @@ func test_a_player_starts_stopped() -> void:
 	near(player.get_frame_no(), 0.0, "the head starts at the first frame")
 
 
+func _saved_properties() -> Array:
+	var scene := PackedScene.new()
+	eq(scene.pack(player), OK, "the player packs")
+	var state := scene.get_state()
+	var names := []
+	for i in state.get_node_property_count(0):
+		names.append(state.get_node_property_name(0, i))
+	return names
+
+
+## An end saved untouched would cut off the frames a later reconvert adds.
+func test_only_a_narrowed_section_is_saved() -> void:
+	var names := _saved_properties()
+	not_ok(names.has("animation_section_start"), "an untouched start is not saved")
+	not_ok(names.has("animation_section_end"), "an untouched end is not saved")
+	ok(player.set_animation_section(2, 5), "the section narrows")
+	names = _saved_properties()
+	ok(names.has("animation_section_start"), "a moved start is saved")
+	ok(names.has("animation_section_end"), "a moved end is saved")
+
+
 func test_play_starts_it_and_advance_moves_the_head() -> void:
 	player.play()
 	ok(player.is_playing(), "playing after play()")

@@ -1119,6 +1119,14 @@ void SpriteStudioPlayer2D::_validate_property(PropertyInfo& p_property) const {
                p_property.name == StringName("animation_section_end")) {
         const ss::format::AnimationData* animation = _internal->getCurrentAnimationData();
         p_property.hint_string = animation ? vformat("%d,%d,1", animation->start_frame(), animation->end_frame()) : String("0,0,1");
+        // Stored only when narrowed: an end saved untouched would cut off the
+        // frames a later reconvert adds, with no error.
+        if (animation) {
+            const bool whole = p_property.name == StringName("animation_section_start")
+                    ? getAnimationSectionStart() == animation->start_frame()
+                    : getAnimationSectionEnd() == animation->end_frame();
+            if (whole) p_property.usage &= ~PROPERTY_USAGE_STORAGE;
+        }
     }
 }
 

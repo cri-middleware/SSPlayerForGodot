@@ -10,5 +10,4 @@ ssab = ExtResource("1_w6qk1")
 current_animation = "run"
 autoplay = true
 sub_frame_enabled = true
-animation_section_end = 39
 cellmaps/Ringo = null
