@@ -2301,8 +2301,10 @@ SsInternalPlayer::_child_mask_context(const ss::format::PartData* pd) const {
     // (SpriteStudio 7.5 on InstancePropagationTired3).
     c.influence = pd->mask_influence();
     c.visible_inside = pd->visible_inside_mask();
-    // Whether a mask from here or above can reach the sub-animation's parts.
-    c.masked = _mask_active();
+    // Whether a mask from here or above can reach the sub-animation's parts. A
+    // clipping anywhere below counts: an earlier instance can leave it open, and a
+    // child with no writer of its own has no other way to learn that.
+    c.masked = _mask_active() || _tree_has_clipping();
     return c;
 }
 
@@ -2793,6 +2795,7 @@ Ref<SSABResource> SsInternalPlayer::_resolve_ssab_by_hash(uint32_t pack_hash, ui
 }
 
 void SsInternalPlayer::_clear_instance_children() {
+    _static_tree_clipping = -1;
     for (uint32_t i = 0; i < _instance_children.size(); i++) {
         InstanceChildState& st = _instance_children[i];
         if (st.player) {
@@ -2977,6 +2980,25 @@ bool SsInternalPlayer::_has_mask_capable_parts() const {
         }
     }
     _static_mask_capable = found ? 1 : 0;
+    return found;
+}
+
+bool SsInternalPlayer::_tree_has_clipping() const {
+    if (_static_tree_clipping >= 0) return _static_tree_clipping != 0;
+    bool found = false;
+    const auto* binary = _ssabRes.is_null() ? nullptr : _ssabRes->get_ss_anime_binary();
+    const auto* parts_meta = binary ? binary->parts() : nullptr;
+    if (parts_meta) {
+        for (uint32_t i = 0; i < parts_meta->size() && !found; i++) {
+            const auto* pd = parts_meta->Get(i);
+            found = pd && pd->mask_write();
+        }
+    }
+    for (uint32_t i = 0; i < _instance_children.size() && !found; i++) {
+        const SsInternalPlayer* child = _instance_children[i].player;
+        found = child && child->_tree_has_clipping();
+    }
+    _static_tree_clipping = found ? 1 : 0;
     return found;
 }
 

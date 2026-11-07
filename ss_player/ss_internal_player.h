@@ -1075,6 +1075,8 @@ private:
     // part tree is pack-level, so selecting another animation cannot change it),
     // so it is computed once and reset in `setSSABResource`.
     bool _has_mask_capable_parts() const;
+    bool _tree_has_clipping() const;
+    mutable int8_t _static_tree_clipping = -1; // -1 unknown, 0 no, 1 yes
     mutable int8_t _static_mask_capable = -1; // -1 unknown, 0 no, 1 yes
 
     // The resolved per-part outcome for one frame.
