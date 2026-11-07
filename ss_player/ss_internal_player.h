@@ -269,7 +269,8 @@ public:
     // target already borrowed is re-parented on the spot.
     void setHostViewport(RID p_viewport);
 
-    void setCellMapOverrideTexture(uint32_t cellmap_name_hash, const Ref<Texture2D>& texture);
+    void setCellMapOverrideTexture(const String& p_cellmap_name, const Ref<Texture2D>& p_texture);
+    Ref<Texture2D> getCellMapOverrideTexture(const String& p_cellmap_name) const;
     Ref<Texture2D> getCellMapTexture(uint32_t cellmap_name_hash) const;
 
     // Re-apply the current resource after its binary changes on disk.
@@ -431,8 +432,10 @@ private:
 
     Ref<SSABResource> _ssabRes;
     HashMap<uint32_t, Ref<Texture2D>> _textures;
-    // Apart from _textures, which a reload rebuilds from the pack.
-    HashMap<uint32_t, Ref<Texture2D>> _texture_overrides;
+    // By cell map name, so they outlast a reload or a pack that lacks the name.
+    // _textures is rebuilt from the pack and these.
+    HashMap<String, Ref<Texture2D>> _texture_overrides;
+    Ref<Texture2D> _cellmap_texture(const String& p_name, const String& p_image_path) const;
     // Materials for Effect batches: a CanvasItemMaterial blend mode, no PartColor.
     HashMap<int, Ref<CanvasItemMaterial>> _blend_materials;
     // Shared ShaderMaterial cache for the Default variant (is_per_part=false). Key
@@ -1112,9 +1115,6 @@ private:
     // is a change the next draw has to pick up. Passes the result through so
     // the mutators stay one line.
     bool _override_applied(bool p_ok);
-    // Why the runtime refused the last override or mixing command, from its
-    // last error; empty when the command stopped before reaching the runtime.
-    // The user-facing node reports it, once.
     struct PassedEvent {
         uint32_t source = 0;
         int32_t animation = -1;
@@ -1125,6 +1125,9 @@ private:
     const ss::format::SsAnimeBinary* _take_passed_events();
     void _dispatch_passed_events(const ss::format::SsAnimeBinary* p_binary);
 
+    // Why the runtime refused the last override or mixing command, from its
+    // last error; empty when the command stopped before reaching the runtime.
+    // The user-facing node reports it, once.
     String _runtime_refusal;
     void _note_runtime_refusal(bool p_ok);
     // Instance slot emit: re-parent the child's _root_ci under this slot's

@@ -318,6 +318,23 @@ func test_a_stopped_seek_reports_its_landing_frame_once() -> void:
 	eq(heard, [10, 10], "coming back to it does")
 
 
+func test_a_handler_can_seek_again_from_a_stopped_report() -> void:
+	var p = make_player(USER_DATA)
+	p.set_animation("anime_1")
+	var heard: Array = []
+	var moved := [false]
+	p.user_data.connect(func(d):
+		heard.append(int(d.get("frame_no", -1)))
+		if not moved[0]:
+			moved[0] = true
+			p.frame_no = 0.0)
+	var step := 1.0 / maxf(1.0, float(p.get_frame_rate()))
+	p.frame_no = 10.0
+	p.advance(step)
+	p.advance(step)
+	eq(heard, [10, 0], "the handler's own seek reports on the next tick")
+
+
 func test_moving_track_0_is_a_seek_too() -> void:
 	var heard: Array = []
 	var pb := _sound_player(heard)

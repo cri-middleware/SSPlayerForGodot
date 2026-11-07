@@ -100,11 +100,6 @@ void SpriteStudioPlayer2D::setSSABResource(const Ref<SSABResource>& ssabRes) {
         if (!now->is_connected("changed", changed_cb)) {
             now->connect("changed", changed_cb);
         }
-        // Apply existing overrides to the new resource
-        for (const KeyValue<String, Ref<Texture2D>> &E : _cellmap_overrides) {
-            uint32_t hash = now->get_cellmap_hash(E.key);
-            _internal->setCellMapOverrideTexture(hash, E.value);
-        }
     }
     _drawn_rect_changed();
 }
@@ -121,29 +116,17 @@ Ref<SSABResource> SpriteStudioPlayer2D::getSSABResource() const {
 }
 
 void SpriteStudioPlayer2D::set_cellmap_texture(const String &cellmap_name, const Ref<Texture2D> &texture) {
-    if (texture.is_valid()) {
-        _cellmap_overrides[cellmap_name] = texture;
-    } else {
-        _cellmap_overrides.erase(cellmap_name);
-    }
-
+    // Clearing a name the pack has lost is what a scene saved before a reconvert
+    // does on load, and leaves nothing to report.
     Ref<SSABResource> res = getSSABResource();
-    if (res.is_valid()) {
-        uint32_t hash = res->get_cellmap_hash(cellmap_name);
-        // Clearing a name the pack has lost is what a scene saved before a
-        // reconvert does on load, and leaves nothing to report.
-        if (hash == 0 && texture.is_valid()) {
-            _refused(false, vformat("set_cellmap_texture(\"%s\")", cellmap_name), "the SSAB has no such cell map");
-        }
-        _internal->setCellMapOverrideTexture(hash, texture);
+    if (res.is_valid() && texture.is_valid() && res->get_cellmap_hash(cellmap_name) == 0) {
+        _refused(false, vformat("set_cellmap_texture(\"%s\")", cellmap_name), "the SSAB has no such cell map");
     }
+    _internal->setCellMapOverrideTexture(cellmap_name, texture);
 }
 
 Ref<Texture2D> SpriteStudioPlayer2D::get_cellmap_texture(const String &cellmap_name) const {
-    if (_cellmap_overrides.has(cellmap_name)) {
-        return _cellmap_overrides[cellmap_name];
-    }
-    return Ref<Texture2D>();
+    return _internal->getCellMapOverrideTexture(cellmap_name);
 }
 
 // Structural names live in the .ssab, not the runtime, so these forward to the

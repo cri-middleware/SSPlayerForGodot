@@ -11,6 +11,7 @@ const BASIC := "res://ssab_generated/overall/Basic.ssab"
 const RINGO := "res://ssab_generated/Ringo/Ringo.ssab"
 const INSTANCE := "res://ssab_generated/overall/Instance.ssab"
 const SOUND := "res://ssab_generated/overall/Sound.ssab"
+const USER_DATA := "res://ssab_generated/overall/UserData.ssab"
 ## A pack written by a case, for what only a file on disk can show.
 const SCRATCH := "user://test_resource_scratch.ssab"
 ## Beside the fixtures, where a player finds the textures of the packs written to it.
@@ -260,6 +261,36 @@ func test_a_reload_keeps_a_narrowed_section_and_a_held_frame() -> void:
 	eq(p.get_animation_section_end(), 15, "the section's end stays")
 	near(p.get_frame_no(), 8.0, "the held frame stays")
 	not_ok(p.is_playing(), "and it is still stopped")
+
+
+func test_a_reload_does_not_fire_the_frame_it_stands_on_again() -> void:
+	var res: Resource = load(USER_DATA)
+	var p := make_player(USER_DATA)
+	p.set_animation("anime_1")
+	var heard: Array = []
+	p.user_data.connect(func(d): heard.append(int(d.get("frame_no", -1))))
+	p.play(10.0)
+	p.advance(0.001)
+	eq(heard, [10], "the key fired once")
+	res.emit_changed()
+	p.advance(0.001)
+	eq(heard, [10], "and not again for the reload")
+	ok(p.is_playing(), "which carried on playing")
+
+
+## A cell map override belongs to the name, whatever the pack is doing around it.
+func test_a_cell_map_override_outlasts_a_reload() -> void:
+	var res: Resource = load(BASIC)
+	var p := make_player(BASIC)
+	p.set_animation("anime_1")
+	var texture := PlaceholderTexture2D.new()
+	p.set_cellmap_texture("common", texture)
+	res.emit_changed()
+	p.advance(0.001)
+	eq(p.get_cellmap_texture("common"), texture, "the override stays")
+	p.set_cellmap_texture("common", null)
+	p.advance(0.001)
+	eq(p.get_cellmap_texture("common"), null, "until it is cleared")
 
 
 ## A reconvert that lengthened the animation: a section nobody narrowed follows it.

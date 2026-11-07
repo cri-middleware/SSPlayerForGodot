@@ -349,7 +349,6 @@ void warn_mask_writers_dropped() {
 } // namespace
 
 void SsInternalPlayer::setSSABResource(const Ref<SSABResource>& ssabRes) {
-    if (ssabRes != _ssabRes) _texture_overrides.clear();
     _ssabRes = ssabRes;
     _strAnimationSelected = "";
     _animationSelectedHash = 0;
@@ -861,9 +860,10 @@ void SsInternalPlayer::onSSABReloaded() {
     if (playing) {
         ss_runtime_play_with_start_frame(runtime_ctx, kept);
         if (pausing) ss_runtime_pause(runtime_ctx);
-        // Carrying on is not starting over: the frame it stands on does not sound.
-        _mark_seek_landing();
     }
+    // Carrying on is not starting over. The keys of the frame it stands on have
+    // fired, so this takes the report that would fire them again.
+    ss_runtime_update(runtime_ctx, 0.0f);
     _seek_and_redraw(kept, 0.0f, false);
 }
 
@@ -1092,41 +1092,21 @@ void SsInternalPlayer::setCanvasItemDefaults(int p_texture_filter, int p_texture
     }
 }
 
-void SsInternalPlayer::setCellMapOverrideTexture(uint32_t cellmap_name_hash, const Ref<Texture2D>& texture) {
-    if (cellmap_name_hash == 0) return;
+void SsInternalPlayer::setCellMapOverrideTexture(const String& p_cellmap_name, const Ref<Texture2D>& p_texture) {
+    if (p_texture.is_valid()) {
+        _texture_overrides[p_cellmap_name] = p_texture;
+    } else {
+        _texture_overrides.erase(p_cellmap_name);
+    }
+    if (_ssabRes.is_null()) return;
+    _loadTextures(_ssabRes);
     // A stopped player has to show this the way it shows a part override.
     _overrides_dirty = true;
-    if (texture.is_valid()) {
-        _texture_overrides[cellmap_name_hash] = texture;
-        _textures[cellmap_name_hash] = texture;
-    } else {
-        _texture_overrides.erase(cellmap_name_hash);
-        if (_ssabRes.is_valid()) {
-            auto a = _ssabRes->get_ss_anime_binary();
-            if (a->cellmaps() != nullptr) {
-                for (int i = 0; i < a->cellmaps()->size(); i++) {
-                    auto cellmap = a->cellmaps()->Get(i);
-                    if (cellmap->name_hash() == cellmap_name_hash) {
-                        String strImage = _ssabRes->get_parent_dir().path_join(String::utf8(cellmap->image_path()->c_str()));
-                        Ref<Texture2D> original_tex = SsResourceLoader::get_singleton()->load(strImage);
-                        _textures[cellmap_name_hash] = original_tex;
-                        return;
-                    }
-                }
-            }
-            if (a->external_textures() != nullptr) {
-                for (int i = 0; i < a->external_textures()->size(); i++) {
-                    auto etexture = a->external_textures()->Get(i);
-                    if (etexture->name_hash() == cellmap_name_hash) {
-                        String strImage = _ssabRes->get_parent_dir().path_join(String::utf8(etexture->name()->c_str()));
-                        Ref<Texture2D> original_tex = SsResourceLoader::get_singleton()->load(strImage);
-                        _textures[cellmap_name_hash] = original_tex;
-                        return;
-                    }
-                }
-            }
-        }
-    }
+}
+
+Ref<Texture2D> SsInternalPlayer::getCellMapOverrideTexture(const String& p_cellmap_name) const {
+    const Ref<Texture2D>* texture = _texture_overrides.getptr(p_cellmap_name);
+    return texture ? *texture : Ref<Texture2D>();
 }
 
 Ref<Texture2D> SsInternalPlayer::getCellMapTexture(uint32_t cellmap_name_hash) const {
@@ -1143,21 +1123,23 @@ void SsInternalPlayer::_loadTextures(const Ref<SSABResource>& ssabRes) {
         for (int i = 0; i < a->cellmaps()->size(); i++) {
             auto cellmap = a->cellmaps()->Get(i);
             String strImage = _ssabRes->get_parent_dir().path_join(String::utf8(cellmap->image_path()->c_str()));
-            Ref<Texture2D> texture = SsResourceLoader::get_singleton()->load(strImage);
-            _textures[cellmap->name_hash()] = texture;
+            _textures[cellmap->name_hash()] = _cellmap_texture(String::utf8(cellmap->name()->c_str()), strImage);
         }
     }
     if (a->external_textures() != nullptr) {
         for (int i = 0; i < a->external_textures()->size(); i++) {
             auto etexture = a->external_textures()->Get(i);
             String strImage = _ssabRes->get_parent_dir().path_join(String::utf8(etexture->name()->c_str()));
-            Ref<Texture2D> texture = SsResourceLoader::get_singleton()->load(strImage);
-            _textures[etexture->name_hash()] = texture;
+            _textures[etexture->name_hash()] = _cellmap_texture(String::utf8(etexture->name()->c_str()), strImage);
         }
     }
-    for (const KeyValue<uint32_t, Ref<Texture2D>> &E : _texture_overrides) {
-        _textures[E.key] = E.value;
-    }
+}
+
+Ref<Texture2D> SsInternalPlayer::_cellmap_texture(const String& p_name, const String& p_image_path) const {
+    const Ref<Texture2D> override_texture = getCellMapOverrideTexture(p_name);
+    if (override_texture.is_valid()) return override_texture;
+    Ref<Texture2D> texture = SsResourceLoader::get_singleton()->load(p_image_path);
+    return texture;
 }
 
 namespace {
@@ -1237,6 +1219,7 @@ void SsInternalPlayer::update(float delta_seconds) {
     // frees the table.
     const Ref<SsParsedSsab> held_parse = _parsed;
     const ss::format::SsAnimeBinary* binary = _take_passed_events();
+    const uint32_t animation_before_handlers = _animationSelectedHash;
 
     if (was_looped) {
         if (_event_sink) _event_sink->onAnimationLooped(_strAnimationSelected);
@@ -1266,7 +1249,7 @@ void SsInternalPlayer::update(float delta_seconds) {
         && !_mask_resize_pending
         && !(stack_in_motion && !ss_runtime_is_clock_pausing(runtime_ctx))) return;
 
-    _seek_and_redraw(frame_no, delta_seconds, was_looped);
+    _seek_and_redraw(frame_no, delta_seconds, was_looped && _animationSelectedHash == animation_before_handlers);
 }
 
 void SsInternalPlayer::_report_stopped_seek() {
@@ -1274,13 +1257,15 @@ void SsInternalPlayer::_report_stopped_seek() {
     // Only an update reports the frame a seek lands on, and a stopped player runs
     // none of its own. Only when the frame changes: an AnimationPlayer sets
     // frame_no every tick, and would fire a key once a tick while it holds a frame.
-    if (_seek_landing_frame != _stopped_seek_reported_frame) {
-        _stopped_seek_reported_frame = _seek_landing_frame;
+    const int landing = _seek_landing_frame;
+    if (landing != _stopped_seek_reported_frame) {
+        _stopped_seek_reported_frame = landing;
         ss_runtime_update(runtime_ctx, 0.0f);
         const Ref<SsParsedSsab> held_parse = _parsed;
         _dispatch_passed_events(_take_passed_events());
     }
-    _seek_pending = false;
+    // A handler that sought elsewhere has its own landing frame for the next tick.
+    if (_seek_landing_frame == landing) _seek_pending = false;
 }
 
 const ss::format::SsAnimeBinary* SsInternalPlayer::_take_passed_events() {

@@ -358,7 +358,6 @@ private:
     // forward-playback and seek-landing guards. The "audio" signal fires regardless.
     void _handle_audio(const Dictionary& payload);
 
-    HashMap<String, Ref<Texture2D>> _cellmap_overrides;
     // The commands already reported as having done nothing, by the call and
     // what it was given, since the SSAB was set. See _refused.
     HashSet<String> _reported_refusals;
