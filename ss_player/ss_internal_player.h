@@ -1114,6 +1114,15 @@ private:
     // Why the runtime refused the last override or mixing command, from its
     // last error; empty when the command stopped before reaching the runtime.
     // The user-facing node reports it, once.
+    struct PassedEvent {
+        uint32_t source = 0;
+        int32_t animation = -1;
+        int32_t event = -1;
+    };
+    LocalVector<PassedEvent> _passed_events;
+    const ss::format::SsAnimeBinary* _take_passed_events();
+    void _dispatch_passed_events(const ss::format::SsAnimeBinary* p_binary);
+
     String _runtime_refusal;
     void _note_runtime_refusal(bool p_ok);
     // Instance slot emit: re-parent the child's _root_ci under this slot's

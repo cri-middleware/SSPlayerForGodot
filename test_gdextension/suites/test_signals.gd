@@ -251,6 +251,49 @@ func test_a_seek_does_not_sound_the_frame_it_lands_on() -> void:
 		eq(backend.frames.has(10), false, "%s: but it is not sounded" % state)
 
 
+func _pose(p: Node) -> String:
+	var pose := ""
+	for part in p.get_part_names():
+		pose += str(p.get_part_transform(part))
+	return pose
+
+
+## The documented attack-then-idle pattern. The frame the tick ended on, drawn on
+## the animation the handler chose, is a pose that animation does not stand on.
+func test_a_handler_that_switches_animation_draws_its_first_frame() -> void:
+	var p = make_player(RINGO)
+	p.set_animation("wait1")
+	var first := _pose(p)
+	p.set_animation("attack1")
+	p.loop_count = 1
+	p.animation_finished.connect(func(_name):
+		p.set_animation("wait1")
+		p.play())
+	p.play()
+	var step := 1.0 / maxf(1.0, float(p.get_frame_rate()))
+	for i in 40:
+		p.advance(step)
+		if p.get_current_animation() == "wait1":
+			break
+	eq(p.get_current_animation(), "wait1", "the handler switched")
+	eq(_pose(p), first, "and the tick drew the new animation's first frame")
+
+
+## One long tick reports several keys, and the first handler frees the table the
+## rest of them index.
+func test_a_handler_can_swap_the_pack_mid_tick() -> void:
+	var p = make_player(USER_DATA)
+	p.set_animation("anime_1")
+	var heard: Array = []
+	p.user_data.connect(func(d):
+		heard.append(d)
+		p.ssab = load(BASIC))
+	p.play()
+	p.advance(1.0)
+	gt(heard.size(), 0, "a key fired")
+	eq(p.ssab, load(BASIC), "and the swap took")
+
+
 func test_moving_track_0_is_a_seek_too() -> void:
 	var heard: Array = []
 	var pb := _sound_player(heard)

@@ -1178,160 +1178,38 @@ void SsInternalPlayer::update(float delta_seconds) {
     // would otherwise repeat every tick.
     const bool was_finished = ss_runtime_is_finished(runtime_ctx);
     auto d = delta_seconds * 1000.0f;
-    float frame_no = ss_runtime_update(runtime_ctx, d);
+    ss_runtime_update(runtime_ctx, d);
 
     // `just_looped` is a pulse the runtime clears on entry to every update, so
     // reading it right after the tick is what catches it.
     const bool was_looped = ss_runtime_just_looped(runtime_ctx);
+    const bool just_finished = !was_finished && ss_runtime_is_finished(runtime_ctx);
+
+    // Read before any handler runs, with the parse held until the last one has
+    // returned: a handler that sets up another animation leaves the reported
+    // indices pointing into the wrong event table, and one that swaps the SSAB
+    // frees the table.
+    const Ref<SsParsedSsab> held_parse = _parsed;
+    const ss::format::SsAnimeBinary* binary = _take_passed_events();
+
     if (was_looped) {
         if (_event_sink) _event_sink->onAnimationLooped(_strAnimationSelected);
     }
-    if (!was_finished && ss_runtime_is_finished(runtime_ctx)) {
+    if (just_finished) {
         if (_event_sink) _event_sink->onAnimationFinished(_strAnimationSelected);
     }
 
-    // Process passed events (user data / signal / audio) BEFORE the draw-dedup
-    // early-return below. `ss_runtime_update` reports every frame it stepped
-    // through this tick — including the start frame on the first update after
-    // play() (the runtime's `needs_evaluation`). Gating event handling on a
-    // change of integer draw frame would drop a start-frame event (e.g. an audio
-    // key on frame 0) whenever that first tick doesn't advance the integer frame
-    // — a timing-dependent loss seen in the editor preview but not a running
-    // project. Events must fire whenever the runtime reports them, regardless of
-    // whether we also redraw.
-    // Each index addresses the event table of the animation of the source that
-    // fired it, so the table is looked up per event. Reading them all against
-    // the animation set up here reports other events, or none, once a crossfade
-    // on track 0 has handed the track to another animation.
-    const int event_count = ss_runtime_get_passed_event_count(runtime_ctx);
-    const auto* animations = (event_count > 0 && _currentAnimationData && _ssabRes.is_valid())
-                             ? _ssabRes->get_ss_anime_binary()->animations() : nullptr;
-    if (animations != nullptr) {
-        for (int i = 0; i < event_count; i++) {
-            const uint32_t source = ss_runtime_get_passed_event_source_handle(runtime_ctx, i);
-            const int32_t anim_idx = ss_runtime_get_source_animation_index(runtime_ctx, source);
-            if (anim_idx < 0 || (uint32_t)anim_idx >= animations->size()) continue;
-            const auto* events = animations->Get((uint32_t)anim_idx)->events();
-            if (events == nullptr) continue;
-            int event_idx = ss_runtime_get_passed_event_index(runtime_ctx, i);
-            // A not-found (-1), or an index past that table, would read past the
-            // FlatBuffer.
-            if (event_idx < 0 || (uint32_t)event_idx >= events->size()) continue;
-            auto events_per_frame = events->Get((uint32_t)event_idx);
-            if (!events_per_frame) continue;
-
-            // The frame the keys were authored on, which is not necessarily the
-            // frame they were noticed on: one tick can step across several.
-            const int frame_no = (int)events_per_frame->frame_index();
-
-            if (auto users = events_per_frame->users()) {
-                for (uint32_t j = 0; j < users->size(); j++) {
-                    auto user = users->Get(j);
-                    if (!user || !user->value()) continue;
-                    auto val = user->value();
-
-                    const int part_index = (int)user->part_index();
-
-                    Dictionary payload;
-                    payload["part_index"] = part_index;
-                    payload["part_name"] = get_part_name(part_index);
-                    payload["frame_no"] = frame_no;
-                    payload["source"] = (int64_t)source;
-                    if (auto i = val->integer()) payload["integer"] = i->value();
-                    if (auto r = val->rect())    payload["rect"]    = Rect2(r->left(), r->top(), r->right() - r->left(), r->bottom() - r->top());
-                    if (auto p = val->point())   payload["point"]   = Vector2(p->v1(), p->v2());
-                    if (auto s = val->str())     payload["string"]  = String::utf8(s->c_str());
-
-                    if (_event_sink) _event_sink->onUserData(payload);
-                }
-            }
-
-            if (auto signals_vec = events_per_frame->signals()) {
-                for (uint32_t j = 0; j < signals_vec->size(); j++) {
-                    auto sig_event = signals_vec->Get(j);
-                    if (!sig_event || !sig_event->value()) continue;
-                    auto val = sig_event->value();
-                    if (!val->active() || !val->command_id()) continue;
-
-                    String command = String::utf8(val->command_id()->c_str());
-                    const int part_index = (int)sig_event->part_index();
-
-                    // Kept apart from `value_dict`, whose keys are the parameter
-                    // ids the animator authored — a fixed key placed in there
-                    // could shadow one of them.
-                    Dictionary info;
-                    info["part_index"] = part_index;
-                    info["part_name"] = get_part_name(part_index);
-                    info["frame_no"] = frame_no;
-                    info["source"] = (int64_t)source;
-
-                    Dictionary value_dict;
-
-                    if (auto params = val->params()) {
-                        for (uint32_t k = 0; k < params->size(); k++) {
-                            auto param = params->Get(k);
-                            if (!param || !param->param_id()) continue;
-                            String p_id = String::utf8(param->param_id()->c_str());
-
-                            switch (param->value_type()) {
-                                case ss::format::SignalCommandParamValue_Bool: {
-                                    if (auto b = param->value_as_Bool()) value_dict[p_id] = b->value();
-                                    break;
-                                }
-                                case ss::format::SignalCommandParamValue_Index: {
-                                    if (auto i = param->value_as_Index()) value_dict[p_id] = i->value();
-                                    break;
-                                }
-                                case ss::format::SignalCommandParamValue_Integer: {
-                                    if (auto i = param->value_as_Integer()) value_dict[p_id] = i->value();
-                                    break;
-                                }
-                                case ss::format::SignalCommandParamValue_Floating: {
-                                    if (auto f = param->value_as_Floating()) value_dict[p_id] = f->value();
-                                    break;
-                                }
-                                case ss::format::SignalCommandParamValue_Text: {
-                                    if (auto t = param->value_as_Text()) {
-                                        if (t->value()) value_dict[p_id] = String::utf8(t->value()->c_str());
-                                    }
-                                    break;
-                                }
-                                default:
-                                    break;
-                            }
-                        }
-                    }
-
-                    if (_event_sink) _event_sink->onSignal(command, value_dict, info);
-                }
-            }
-
-            if (auto audios = events_per_frame->audios()) {
-                for (uint32_t j = 0; j < audios->size(); j++) {
-                    auto audio_event = audios->Get(j);
-                    if (!audio_event || !audio_event->value()) continue;
-                    auto val = audio_event->value();
-
-                    const int part_index = (int)audio_event->part_index();
-
-                    Dictionary payload;
-                    payload["part_index"] = part_index;
-                    payload["part_name"] = get_part_name(part_index);
-                    payload["frame_no"] = frame_no;
-                    payload["source"] = (int64_t)source;
-                    payload["sound_list_name_hash"] = (int64_t)val->sound_list_name_hash();
-                    payload["sound_name_hash"] = (int64_t)val->sound_name_hash();
-                    if (val->sound_name()) payload["sound_name"] = String::utf8(val->sound_name()->c_str());
-                    payload["loop_num"] = val->loop_num();
-
-                    if (_event_sink) _event_sink->onAudio(payload);
-                }
-            }
-        }
-    }
+    // Events fire before the draw dedup: ss_runtime_update reports every frame it
+    // stepped through, including the start frame after play(), and gating on a
+    // change of the integer draw frame would drop a start-frame event (an audio
+    // key on frame 0, say).
+    _dispatch_passed_events(binary);
     // The update that reports a seek's landing frame is over.
     _seek_pending = false;
 
+    // Read again rather than kept from the tick: a handler may have set up another
+    // animation, and the old frame number on it is a pose it does not stand on.
+    const float frame_no = ss_runtime_get_frame_no(runtime_ctx);
     float draw_frame = _sub_frame_enabled ? frame_no : floorf(frame_no);
     // An override changes what the frame draws without changing which frame it
     // is, so it has to defeat the dedup the same way a held-frame effect does.
@@ -1343,6 +1221,151 @@ void SsInternalPlayer::update(float delta_seconds) {
         && !(stack_in_motion && !ss_runtime_is_clock_pausing(runtime_ctx))) return;
 
     _seek_and_redraw(frame_no, delta_seconds, was_looped);
+}
+
+const ss::format::SsAnimeBinary* SsInternalPlayer::_take_passed_events() {
+    _passed_events.clear();
+    const int count = ss_runtime_get_passed_event_count(runtime_ctx);
+    if (count <= 0 || !_currentAnimationData || _ssabRes.is_null()) return nullptr;
+    for (int i = 0; i < count; i++) {
+        PassedEvent passed;
+        passed.source = ss_runtime_get_passed_event_source_handle(runtime_ctx, i);
+        passed.animation = ss_runtime_get_source_animation_index(runtime_ctx, passed.source);
+        passed.event = ss_runtime_get_passed_event_index(runtime_ctx, i);
+        _passed_events.push_back(passed);
+    }
+    return _ssabRes->get_ss_anime_binary();
+}
+
+void SsInternalPlayer::_dispatch_passed_events(const ss::format::SsAnimeBinary* p_binary) {
+    const auto* animations = p_binary ? p_binary->animations() : nullptr;
+    if (animations == nullptr) return;
+    // Each index addresses the event table of the animation of the source that
+    // fired it, so the table is looked up per event. Reading them all against
+    // the animation set up here reports other events, or none, once a crossfade
+    // on track 0 has handed the track to another animation.
+    for (uint32_t n = 0; n < _passed_events.size(); n++) {
+        const PassedEvent passed = _passed_events[n];
+        const uint32_t source = passed.source;
+        const int32_t anim_idx = passed.animation;
+        if (anim_idx < 0 || (uint32_t)anim_idx >= animations->size()) continue;
+        const auto* events = animations->Get((uint32_t)anim_idx)->events();
+        if (events == nullptr) continue;
+        const int32_t event_idx = passed.event;
+        // A not-found (-1), or an index past that table, would read past the
+        // FlatBuffer.
+        if (event_idx < 0 || (uint32_t)event_idx >= events->size()) continue;
+        auto events_per_frame = events->Get((uint32_t)event_idx);
+        if (!events_per_frame) continue;
+
+        // The frame the keys were authored on, which is not necessarily the
+        // frame they were noticed on: one tick can step across several.
+        const int frame_no = (int)events_per_frame->frame_index();
+
+        if (auto users = events_per_frame->users()) {
+            for (uint32_t j = 0; j < users->size(); j++) {
+                auto user = users->Get(j);
+                if (!user || !user->value()) continue;
+                auto val = user->value();
+
+                const int part_index = (int)user->part_index();
+
+                Dictionary payload;
+                payload["part_index"] = part_index;
+                payload["part_name"] = get_part_name(part_index);
+                payload["frame_no"] = frame_no;
+                payload["source"] = (int64_t)source;
+                if (auto i = val->integer()) payload["integer"] = i->value();
+                if (auto r = val->rect())    payload["rect"]    = Rect2(r->left(), r->top(), r->right() - r->left(), r->bottom() - r->top());
+                if (auto p = val->point())   payload["point"]   = Vector2(p->v1(), p->v2());
+                if (auto s = val->str())     payload["string"]  = String::utf8(s->c_str());
+
+                if (_event_sink) _event_sink->onUserData(payload);
+            }
+        }
+
+        if (auto signals_vec = events_per_frame->signals()) {
+            for (uint32_t j = 0; j < signals_vec->size(); j++) {
+                auto sig_event = signals_vec->Get(j);
+                if (!sig_event || !sig_event->value()) continue;
+                auto val = sig_event->value();
+                if (!val->active() || !val->command_id()) continue;
+
+                String command = String::utf8(val->command_id()->c_str());
+                const int part_index = (int)sig_event->part_index();
+
+                // Kept apart from `value_dict`, whose keys are the parameter
+                // ids the animator authored — a fixed key placed in there
+                // could shadow one of them.
+                Dictionary info;
+                info["part_index"] = part_index;
+                info["part_name"] = get_part_name(part_index);
+                info["frame_no"] = frame_no;
+                info["source"] = (int64_t)source;
+
+                Dictionary value_dict;
+
+                if (auto params = val->params()) {
+                    for (uint32_t k = 0; k < params->size(); k++) {
+                        auto param = params->Get(k);
+                        if (!param || !param->param_id()) continue;
+                        String p_id = String::utf8(param->param_id()->c_str());
+
+                        switch (param->value_type()) {
+                            case ss::format::SignalCommandParamValue_Bool: {
+                                if (auto b = param->value_as_Bool()) value_dict[p_id] = b->value();
+                                break;
+                            }
+                            case ss::format::SignalCommandParamValue_Index: {
+                                if (auto i = param->value_as_Index()) value_dict[p_id] = i->value();
+                                break;
+                            }
+                            case ss::format::SignalCommandParamValue_Integer: {
+                                if (auto i = param->value_as_Integer()) value_dict[p_id] = i->value();
+                                break;
+                            }
+                            case ss::format::SignalCommandParamValue_Floating: {
+                                if (auto f = param->value_as_Floating()) value_dict[p_id] = f->value();
+                                break;
+                            }
+                            case ss::format::SignalCommandParamValue_Text: {
+                                if (auto t = param->value_as_Text()) {
+                                    if (t->value()) value_dict[p_id] = String::utf8(t->value()->c_str());
+                                }
+                                break;
+                            }
+                            default:
+                                break;
+                        }
+                    }
+                }
+
+                if (_event_sink) _event_sink->onSignal(command, value_dict, info);
+            }
+        }
+
+        if (auto audios = events_per_frame->audios()) {
+            for (uint32_t j = 0; j < audios->size(); j++) {
+                auto audio_event = audios->Get(j);
+                if (!audio_event || !audio_event->value()) continue;
+                auto val = audio_event->value();
+
+                const int part_index = (int)audio_event->part_index();
+
+                Dictionary payload;
+                payload["part_index"] = part_index;
+                payload["part_name"] = get_part_name(part_index);
+                payload["frame_no"] = frame_no;
+                payload["source"] = (int64_t)source;
+                payload["sound_list_name_hash"] = (int64_t)val->sound_list_name_hash();
+                payload["sound_name_hash"] = (int64_t)val->sound_name_hash();
+                if (val->sound_name()) payload["sound_name"] = String::utf8(val->sound_name()->c_str());
+                payload["loop_num"] = val->loop_num();
+
+                if (_event_sink) _event_sink->onAudio(payload);
+            }
+        }
+    }
 }
 
 void SsInternalPlayer::redraw_pending_overrides() {
