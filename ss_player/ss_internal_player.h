@@ -416,6 +416,7 @@ public:
 private:
     // The frame the last seek landed on, until the update that reports it (see isSeekLanding).
     bool _seek_pending = false;
+    int _stopped_seek_reported_frame = -1;
     int _seek_landing_frame = -1;
     void _mark_seek_landing();
 
@@ -1120,6 +1121,7 @@ private:
         int32_t event = -1;
     };
     LocalVector<PassedEvent> _passed_events;
+    void _report_stopped_seek();
     const ss::format::SsAnimeBinary* _take_passed_events();
     void _dispatch_passed_events(const ss::format::SsAnimeBinary* p_binary);
 

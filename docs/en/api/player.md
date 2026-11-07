@@ -270,4 +270,4 @@ The `frame_no` property is animatable, so an `AnimationPlayer` can scrub a Sprit
 > [!IMPORTANT]
 > While the `AnimationPlayer` drives `frame_no`, do **not** let the node play itself — leave `Autoplay` off and don't call `play()`. Otherwise the node's own playback and the keyframed `frame_no` fight each other every frame.
 
-No setup beyond this is required: keyframe values live in the `AnimationPlayer`'s animation (the node's `frame_no` is not stored in the scene), and the same track drives playback at runtime.
+No setup beyond this is required: keyframe values live in the `AnimationPlayer`'s animation (the node's `frame_no` is not stored in the scene), and the same track drives playback at runtime. Each frame the track lands on fires its `user_data`, `signal_emitted` and `audio` once; the frames it steps over fire nothing, and a landing frame's audio keys are not sounded.

@@ -876,6 +876,7 @@ void SsInternalPlayer::play(float p_start_frame) {
     _reset_slots_playback_state();
     // play() starts from its own frame, whose keys do sound, so a seek made before it is dropped.
     _seek_pending = false;
+    _stopped_seek_reported_frame = -1;
     if (p_start_frame >= 0.0f) {
         ss_runtime_play_with_start_frame(runtime_ctx, p_start_frame);
     } else {
@@ -1164,6 +1165,7 @@ void SsInternalPlayer::update(float delta_seconds) {
     const bool stack_in_motion = ss_runtime_is_stack_in_motion(runtime_ctx);
     if (!ss_runtime_is_playing(runtime_ctx)
         && !(stack_in_motion && ss_runtime_is_clock_playing(runtime_ctx))) {
+        _report_stopped_seek();
         // A stopped or finished player does not reach the draw-dedup at the
         // bottom at all, so an override taken here would wait for the next
         // play(). Redraw the frame it is already holding. (A *paused* player
@@ -1221,6 +1223,20 @@ void SsInternalPlayer::update(float delta_seconds) {
         && !(stack_in_motion && !ss_runtime_is_clock_pausing(runtime_ctx))) return;
 
     _seek_and_redraw(frame_no, delta_seconds, was_looped);
+}
+
+void SsInternalPlayer::_report_stopped_seek() {
+    if (!_seek_pending) return;
+    // Only an update reports the frame a seek lands on, and a stopped player runs
+    // none of its own. Only when the frame changes: an AnimationPlayer sets
+    // frame_no every tick, and would fire a key once a tick while it holds a frame.
+    if (_seek_landing_frame != _stopped_seek_reported_frame) {
+        _stopped_seek_reported_frame = _seek_landing_frame;
+        ss_runtime_update(runtime_ctx, 0.0f);
+        const Ref<SsParsedSsab> held_parse = _parsed;
+        _dispatch_passed_events(_take_passed_events());
+    }
+    _seek_pending = false;
 }
 
 const ss::format::SsAnimeBinary* SsInternalPlayer::_take_passed_events() {
@@ -4021,6 +4037,7 @@ bool SsInternalPlayer::_build_mesh_geometry(const DrawFrame& f, int p_idx,
 }
 
 void SsInternalPlayer::_fetchAnimation() {
+    _stopped_seek_reported_frame = -1;
     if ((_strAnimationSelected.is_empty() && _animationSelectedHash == 0) || _ssabRes.is_null()) {
         ss_runtime_reset(runtime_ctx);
         _reconfigure();

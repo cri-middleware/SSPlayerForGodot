@@ -269,4 +269,4 @@ func _play_audio(payload: Dictionary, ssab: SSABResource, player: Node) -> void:
 > [!IMPORTANT]
 > `AnimationPlayer` が `frame_no` を駆動している間は、ノードを**自走させない**でください（`Autoplay` をオフにし、`play()` も呼ばない）。さもないとノード自身の再生とキーフレームの `frame_no` が毎フレーム競合します。
 
-これ以上の準備は不要です。キー値は `AnimationPlayer` のアニメーション側に保存され（ノードの `frame_no` はシーンに保存されません）、同じトラックがランタイムでも再生を駆動します。
+これ以上の準備は不要です。キー値は `AnimationPlayer` のアニメーション側に保存され（ノードの `frame_no` はシーンに保存されません）、同じトラックがランタイムでも再生を駆動します。トラックが到達したフレームごとに、そのフレームの `user_data`・`signal_emitted`・`audio` が 1 回発火します。飛び越えたフレームは発火せず、到達したフレームの音声キーは鳴りません。

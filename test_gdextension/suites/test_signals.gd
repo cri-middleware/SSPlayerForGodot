@@ -233,7 +233,7 @@ func _sound_player(heard: Array) -> Array:
 ## A seek lands on a frame without crossing its keys: the `audio` signal still
 ## reports them, but they are not sounded — playing, paused or stopped alike.
 func test_a_seek_does_not_sound_the_frame_it_lands_on() -> void:
-	for state in ["playing", "paused"]:
+	for state in ["playing", "paused", "stopped"]:
 		var heard: Array = []
 		var pb := _sound_player(heard)
 		var p = pb[0]
@@ -243,6 +243,8 @@ func test_a_seek_does_not_sound_the_frame_it_lands_on() -> void:
 		p.advance(step)
 		if state == "paused":
 			p.pause()
+		elif state == "stopped":
+			p.stop()
 		heard.clear()
 		backend.frames.clear()
 		p.frame_no = 10.0
@@ -292,6 +294,28 @@ func test_a_handler_can_swap_the_pack_mid_tick() -> void:
 	p.advance(1.0)
 	gt(heard.size(), 0, "a key fired")
 	eq(p.ssab, load(BASIC), "and the swap took")
+
+
+## What an AnimationPlayer does to a stopped node: a set every tick, many of them
+## inside the one frame, and some holding it.
+func test_a_stopped_seek_reports_its_landing_frame_once() -> void:
+	var p = make_player(USER_DATA)
+	p.set_animation("anime_1")
+	var heard: Array = []
+	p.user_data.connect(func(d): heard.append(int(d.get("frame_no", -1))))
+	var step := 1.0 / maxf(1.0, float(p.get_frame_rate()))
+	p.frame_no = 10.0
+	p.advance(step)
+	eq(heard, [10], "the landing frame's key fires")
+	for i in 3:
+		p.frame_no = 10.5
+		p.advance(step)
+	eq(heard, [10], "standing on the frame does not fire it again")
+	p.frame_no = 8.0
+	p.advance(step)
+	p.frame_no = 10.0
+	p.advance(step)
+	eq(heard, [10, 10], "coming back to it does")
 
 
 func test_moving_track_0_is_a_seek_too() -> void:
