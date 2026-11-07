@@ -314,11 +314,9 @@ RID SsInternalPlayer::_ensure_batch_ci(int batch_idx) {
 }
 
 namespace {
-// Every failure below reports what the caller asked for and what was there
-// instead. Required is what the caller
-// cannot get another way: which pack, and what they asked it for. Listing the
-// names that WOULD have worked is deliberately not here -- `get_animation_names()`
-// and the inspector's Animation dropdown both already show them.
+// Labels for the error messages below, in the words the caller used. The names
+// that would have worked are left out on purpose: get_animation_names() and the
+// inspector's Animation dropdown already list them.
 
 // The bound pack, as the user would find it in the FileSystem dock. A pack
 // built in memory has no path, so say that rather than print empty quotes.
@@ -344,6 +342,9 @@ String part_label(const ss::format::PartData* p_part, int p_index) {
         return vformat("\"%s\"", String::utf8(p_part->name()->c_str()));
     }
     return vformat("#%d", p_index);
+}
+void warn_mask_writers_dropped() {
+    WARN_PRINT_ONCE("SpriteStudio: an animation masks with more than 96 mask parts at once (instances count each time they are placed); the rest are ignored. Restructure the data to use fewer.");
 }
 } // namespace
 
@@ -402,8 +403,7 @@ void SsInternalPlayer::_rebuild_part_index_map() {
         _part_names[i] = nm;
         // A mesh part is "skinned" when its binding carries influence bones; a
         // rigid (deform-only) mesh has none and follows its node transform
-        // faithfully. Same test every sibling player uses (PartMeshBinding
-        // influence_bone length > 0), so the flag agrees across engines.
+        // faithfully.
         const auto* mb = pd ? pd->mesh_binding() : nullptr;
         const auto* bones = mb ? mb->influence_bone() : nullptr;
         _part_skinned[i] = (bones && bones->size() > 0) ? 1 : 0;
@@ -457,7 +457,7 @@ String SsInternalPlayer::get_part_name(int p_part_index) const {
     return _part_names[p_part_index];
 }
 
-// ---- Override Layer (Phase 2) --------------------------------------------
+// ---- Part overrides ------------------------------------------------------
 
 bool SsInternalPlayer::_override_applied(bool p_ok) {
     if (p_ok) _overrides_dirty = true;
@@ -535,7 +535,9 @@ bool SsInternalPlayer::clear_part_cell_override(int p_part_index) {
 
 bool SsInternalPlayer::clear_all_part_overrides() {
     if (runtime_ctx == nullptr) return false;
-    return _override_applied(ss_runtime_clear_all_part_overrides(runtime_ctx));
+    const bool ok = ss_runtime_clear_all_part_overrides(runtime_ctx);
+    if (ok) _overrides_dirty = true;
+    return ok;
 }
 
 // ---- Animation mixing ----------------------------------------------------
@@ -546,8 +548,12 @@ bool SsInternalPlayer::_mixing_applied(bool p_ok) {
         // way it shows an override: without stepping the animation.
         _overrides_dirty = true;
     }
-    _note_runtime_refusal(p_ok);
     return p_ok;
+}
+
+bool SsInternalPlayer::_mixing_reported(bool p_ok) {
+    _note_runtime_refusal(p_ok);
+    return _mixing_applied(p_ok);
 }
 
 uint32_t SsInternalPlayer::_find_animation_hash(const String& p_name) const {
@@ -582,7 +588,7 @@ bool SsInternalPlayer::setTrackAnimation(int p_track, const String& p_name) {
     SS_TRACK_OR_FAIL(p_track, false);
     const ss::format::AnimationData* animation = _ssabRes->find_animation(p_name);
     if (animation == nullptr) return false;
-    if (!_mixing_applied(ss_runtime_set_track_animation_by_hash(runtime_ctx, (uint32_t)p_track, animation->name_hash()))) return false;
+    if (!_mixing_reported(ss_runtime_set_track_animation_by_hash(runtime_ctx, (uint32_t)p_track, animation->name_hash()))) return false;
     if (p_track == 0) _track_zero_switched(animation);
     return true;
 }
@@ -610,7 +616,7 @@ float SsInternalPlayer::getTrackAlpha(int p_track) const {
 
 bool SsInternalPlayer::setTrackBlend(int p_track, int p_blend) {
     SS_TRACK_OR_FAIL(p_track, false);
-    return _mixing_applied(ss_runtime_set_track_blend(runtime_ctx, (uint32_t)p_track, (uint32_t)p_blend));
+    return _mixing_reported(ss_runtime_set_track_blend(runtime_ctx, (uint32_t)p_track, (uint32_t)p_blend));
 }
 
 int SsInternalPlayer::getTrackBlend(int p_track) const {
@@ -739,7 +745,7 @@ bool SsInternalPlayer::crossfade(int p_track, const String& p_name, float p_dura
     const ss::format::AnimationData* animation = _ssabRes->find_animation(p_name);
     if (animation == nullptr) return false;
     // The runtime's fades run in the milliseconds `update` hands it.
-    if (!_mixing_applied(ss_runtime_crossfade_by_hash(runtime_ctx, (uint32_t)p_track, animation->name_hash(), p_duration_seconds * 1000.0f))) return false;
+    if (!_mixing_reported(ss_runtime_crossfade_by_hash(runtime_ctx, (uint32_t)p_track, animation->name_hash(), p_duration_seconds * 1000.0f))) return false;
     // The incoming animation takes over track 0 when the fade begins, not when
     // it completes.
     if (p_track == 0) _track_zero_switched(animation);
@@ -775,7 +781,7 @@ int64_t SsInternalPlayer::addTrackSource(int p_track, const String& p_name, floa
     const uint32_t hash = _find_animation_hash(p_name);
     if (hash == 0) return -1;
     const uint32_t handle = ss_runtime_add_track_source_by_hash(runtime_ctx, (uint32_t)p_track, hash, p_weight);
-    if (!_mixing_applied(handle != SS_RUNTIME_INVALID_HANDLE)) return -1;
+    if (!_mixing_reported(handle != SS_RUNTIME_INVALID_HANDLE)) return -1;
     return (int64_t)handle;
 }
 
@@ -818,6 +824,20 @@ float SsInternalPlayer::getSourceEventThreshold(int64_t p_source) const {
 
 void SsInternalPlayer::onSSABReloaded() {
     String prev_anim = _strAnimationSelected;
+    // Setting the animation up again stops it and puts the loop count and the
+    // section back to their defaults. A re-import changed the pack, not what the
+    // caller asked of this player. `_parsed` still holds the old buffer here, so
+    // the old animation can be read; a section that was the whole of it stays the
+    // whole of the new one, which may be longer.
+    const int loop = ss_runtime_get_loop_count(runtime_ctx);
+    const int section_start = ss_runtime_get_start_frame(runtime_ctx);
+    const int section_end = ss_runtime_get_end_frame(runtime_ctx);
+    const bool narrowed = _currentAnimationData
+            && (section_start != _currentAnimationData->start_frame() || section_end != _currentAnimationData->end_frame());
+    const bool playing = ss_runtime_is_playing(runtime_ctx);
+    const bool pausing = ss_runtime_is_pausing(runtime_ctx);
+    const float frame = ss_runtime_get_frame_no(runtime_ctx);
+
     Ref<SSABResource> current = _ssabRes;
     setSSABResource(current);
 
@@ -830,6 +850,21 @@ void SsInternalPlayer::onSSABReloaded() {
             }
         }
     }
+
+    ss_runtime_set_loop_count(runtime_ctx, loop);
+    if (!_currentAnimationData || _strAnimationSelected != prev_anim) return;
+    if (narrowed) ss_runtime_set_animation_section(runtime_ctx, section_start, section_end);
+    // The seek clamps to what the new data has; play's start frame does not.
+    ss_runtime_set_frame_no(runtime_ctx, frame);
+    const float kept = ss_runtime_get_frame_no(runtime_ctx);
+    if (playing) {
+        ss_runtime_play_with_start_frame(runtime_ctx, kept);
+        if (pausing) ss_runtime_pause(runtime_ctx);
+    }
+    // Carrying on is not starting over. The keys of the frame it stands on have
+    // fired, so this takes the report that would fire them again.
+    ss_runtime_update(runtime_ctx, 0.0f);
+    _seek_and_redraw(kept, 0.0f, false);
 }
 
 void SsInternalPlayer::setAnimation(const String& strName) {
@@ -876,6 +911,7 @@ void SsInternalPlayer::play(float p_start_frame) {
     _reset_slots_playback_state();
     // play() starts from its own frame, whose keys do sound, so a seek made before it is dropped.
     _seek_pending = false;
+    _stopped_seek_reported_frame = -1;
     if (p_start_frame >= 0.0f) {
         ss_runtime_play_with_start_frame(runtime_ctx, p_start_frame);
     } else {
@@ -937,6 +973,7 @@ int SsInternalPlayer::getTotalFrames() const {
 }
 
 void SsInternalPlayer::setFrameRate(int p_fps) {
+    _frame_rate_override = p_fps;
     ss_runtime_set_frame_rate(runtime_ctx, p_fps);
 }
 
@@ -1055,37 +1092,21 @@ void SsInternalPlayer::setCanvasItemDefaults(int p_texture_filter, int p_texture
     }
 }
 
-void SsInternalPlayer::setCellMapOverrideTexture(uint32_t cellmap_name_hash, const Ref<Texture2D>& texture) {
-    if (cellmap_name_hash == 0) return;
-    if (texture.is_valid()) {
-        _textures[cellmap_name_hash] = texture;
+void SsInternalPlayer::setCellMapOverrideTexture(const String& p_cellmap_name, const Ref<Texture2D>& p_texture) {
+    if (p_texture.is_valid()) {
+        _texture_overrides[p_cellmap_name] = p_texture;
     } else {
-        if (_ssabRes.is_valid()) {
-            auto a = _ssabRes->get_ss_anime_binary();
-            if (a->cellmaps() != nullptr) {
-                for (int i = 0; i < a->cellmaps()->size(); i++) {
-                    auto cellmap = a->cellmaps()->Get(i);
-                    if (cellmap->name_hash() == cellmap_name_hash) {
-                        String strImage = _ssabRes->get_parent_dir().path_join(String::utf8(cellmap->image_path()->c_str()));
-                        Ref<Texture2D> original_tex = SsResourceLoader::get_singleton()->load(strImage);
-                        _textures[cellmap_name_hash] = original_tex;
-                        return;
-                    }
-                }
-            }
-            if (a->external_textures() != nullptr) {
-                for (int i = 0; i < a->external_textures()->size(); i++) {
-                    auto etexture = a->external_textures()->Get(i);
-                    if (etexture->name_hash() == cellmap_name_hash) {
-                        String strImage = _ssabRes->get_parent_dir().path_join(String::utf8(etexture->name()->c_str()));
-                        Ref<Texture2D> original_tex = SsResourceLoader::get_singleton()->load(strImage);
-                        _textures[cellmap_name_hash] = original_tex;
-                        return;
-                    }
-                }
-            }
-        }
+        _texture_overrides.erase(p_cellmap_name);
     }
+    if (_ssabRes.is_null()) return;
+    _loadTextures(_ssabRes);
+    // A stopped player has to show this the way it shows a part override.
+    _overrides_dirty = true;
+}
+
+Ref<Texture2D> SsInternalPlayer::getCellMapOverrideTexture(const String& p_cellmap_name) const {
+    const Ref<Texture2D>* texture = _texture_overrides.getptr(p_cellmap_name);
+    return texture ? *texture : Ref<Texture2D>();
 }
 
 Ref<Texture2D> SsInternalPlayer::getCellMapTexture(uint32_t cellmap_name_hash) const {
@@ -1102,20 +1123,24 @@ void SsInternalPlayer::_loadTextures(const Ref<SSABResource>& ssabRes) {
         for (int i = 0; i < a->cellmaps()->size(); i++) {
             auto cellmap = a->cellmaps()->Get(i);
             String strImage = _ssabRes->get_parent_dir().path_join(String::utf8(cellmap->image_path()->c_str()));
-            Ref<Texture2D> texture = SsResourceLoader::get_singleton()->load(strImage);
-            _textures[cellmap->name_hash()] = texture;
+            _textures[cellmap->name_hash()] = _cellmap_texture(String::utf8(cellmap->name()->c_str()), strImage);
         }
     }
     if (a->external_textures() != nullptr) {
         for (int i = 0; i < a->external_textures()->size(); i++) {
             auto etexture = a->external_textures()->Get(i);
             String strImage = _ssabRes->get_parent_dir().path_join(String::utf8(etexture->name()->c_str()));
-            Ref<Texture2D> texture = SsResourceLoader::get_singleton()->load(strImage);
-            _textures[etexture->name_hash()] = texture;
+            _textures[etexture->name_hash()] = _cellmap_texture(String::utf8(etexture->name()->c_str()), strImage);
         }
     }
 }
 
+Ref<Texture2D> SsInternalPlayer::_cellmap_texture(const String& p_name, const String& p_image_path) const {
+    const Ref<Texture2D> override_texture = getCellMapOverrideTexture(p_name);
+    if (override_texture.is_valid()) return override_texture;
+    Ref<Texture2D> texture = SsResourceLoader::get_singleton()->load(p_image_path);
+    return texture;
+}
 
 namespace {
     constexpr int CORNERS_COUNT = 4;
@@ -1140,7 +1165,9 @@ bool SsInternalPlayer::_needs_continuous_update() const {
         if (slot.effect_slot && ss_effect_slot_is_independent(slot.effect_slot)) return true;
     }
     for (const auto& st : _instance_children) {
-        if (st.player && st.instance_slot && ss_instance_slot_is_independent(st.instance_slot)) return true;
+        if (!st.player) continue;
+        if (st.instance_slot && ss_instance_slot_is_independent(st.instance_slot)) return true;
+        if (st.player->_needs_continuous_update()) return true;
     }
     return false;
 }
@@ -1164,6 +1191,7 @@ void SsInternalPlayer::update(float delta_seconds) {
     const bool stack_in_motion = ss_runtime_is_stack_in_motion(runtime_ctx);
     if (!ss_runtime_is_playing(runtime_ctx)
         && !(stack_in_motion && ss_runtime_is_clock_playing(runtime_ctx))) {
+        _report_stopped_seek();
         // A stopped or finished player does not reach the draw-dedup at the
         // bottom at all, so an override taken here would wait for the next
         // play(). Redraw the frame it is already holding. (A *paused* player
@@ -1178,160 +1206,39 @@ void SsInternalPlayer::update(float delta_seconds) {
     // would otherwise repeat every tick.
     const bool was_finished = ss_runtime_is_finished(runtime_ctx);
     auto d = delta_seconds * 1000.0f;
-    float frame_no = ss_runtime_update(runtime_ctx, d);
+    ss_runtime_update(runtime_ctx, d);
 
     // `just_looped` is a pulse the runtime clears on entry to every update, so
     // reading it right after the tick is what catches it.
     const bool was_looped = ss_runtime_just_looped(runtime_ctx);
+    const bool just_finished = !was_finished && ss_runtime_is_finished(runtime_ctx);
+
+    // Read before any handler runs, with the parse held until the last one has
+    // returned: a handler that sets up another animation leaves the reported
+    // indices pointing into the wrong event table, and one that swaps the SSAB
+    // frees the table.
+    const Ref<SsParsedSsab> held_parse = _parsed;
+    const ss::format::SsAnimeBinary* binary = _take_passed_events();
+    const uint32_t animation_before_handlers = _animationSelectedHash;
+
     if (was_looped) {
         if (_event_sink) _event_sink->onAnimationLooped(_strAnimationSelected);
     }
-    if (!was_finished && ss_runtime_is_finished(runtime_ctx)) {
+    if (just_finished) {
         if (_event_sink) _event_sink->onAnimationFinished(_strAnimationSelected);
     }
 
-    // Process passed events (user data / signal / audio) BEFORE the draw-dedup
-    // early-return below. `ss_runtime_update` reports every frame it stepped
-    // through this tick — including the start frame on the first update after
-    // play() (the runtime's `needs_evaluation`). Gating event handling on a
-    // change of integer draw frame would drop a start-frame event (e.g. an audio
-    // key on frame 0) whenever that first tick doesn't advance the integer frame
-    // — a timing-dependent loss seen in the editor preview but not a running
-    // project. Events must fire whenever the runtime reports them, regardless of
-    // whether we also redraw.
-    // Each index addresses the event table of the animation of the source that
-    // fired it, so the table is looked up per event. Reading them all against
-    // the animation set up here reports other events, or none, once a crossfade
-    // on track 0 has handed the track to another animation.
-    const int event_count = ss_runtime_get_passed_event_count(runtime_ctx);
-    const auto* animations = (event_count > 0 && _currentAnimationData && _ssabRes.is_valid())
-                             ? _ssabRes->get_ss_anime_binary()->animations() : nullptr;
-    if (animations != nullptr) {
-        for (int i = 0; i < event_count; i++) {
-            const uint32_t source = ss_runtime_get_passed_event_source_handle(runtime_ctx, i);
-            const int32_t anim_idx = ss_runtime_get_source_animation_index(runtime_ctx, source);
-            if (anim_idx < 0 || (uint32_t)anim_idx >= animations->size()) continue;
-            const auto* events = animations->Get((uint32_t)anim_idx)->events();
-            if (events == nullptr) continue;
-            int event_idx = ss_runtime_get_passed_event_index(runtime_ctx, i);
-            // A not-found (-1), or an index past that table, would read past the
-            // FlatBuffer.
-            if (event_idx < 0 || (uint32_t)event_idx >= events->size()) continue;
-            auto events_per_frame = events->Get((uint32_t)event_idx);
-            if (!events_per_frame) continue;
-
-            // The frame the keys were authored on, which is not necessarily the
-            // frame they were noticed on: one tick can step across several.
-            const int frame_no = (int)events_per_frame->frame_index();
-
-            if (auto users = events_per_frame->users()) {
-                for (uint32_t j = 0; j < users->size(); j++) {
-                    auto user = users->Get(j);
-                    if (!user || !user->value()) continue;
-                    auto val = user->value();
-
-                    const int part_index = (int)user->part_index();
-
-                    Dictionary payload;
-                    payload["part_index"] = part_index;
-                    payload["part_name"] = get_part_name(part_index);
-                    payload["frame_no"] = frame_no;
-                    payload["source"] = (int64_t)source;
-                    if (auto i = val->integer()) payload["integer"] = i->value();
-                    if (auto r = val->rect())    payload["rect"]    = Rect2(r->left(), r->top(), r->right() - r->left(), r->bottom() - r->top());
-                    if (auto p = val->point())   payload["point"]   = Vector2(p->v1(), p->v2());
-                    if (auto s = val->str())     payload["string"]  = String::utf8(s->c_str());
-
-                    if (_event_sink) _event_sink->onUserData(payload);
-                }
-            }
-
-            if (auto signals_vec = events_per_frame->signals()) {
-                for (uint32_t j = 0; j < signals_vec->size(); j++) {
-                    auto sig_event = signals_vec->Get(j);
-                    if (!sig_event || !sig_event->value()) continue;
-                    auto val = sig_event->value();
-                    if (!val->active() || !val->command_id()) continue;
-
-                    String command = String::utf8(val->command_id()->c_str());
-                    const int part_index = (int)sig_event->part_index();
-
-                    // Kept apart from `value_dict`, whose keys are the parameter
-                    // ids the animator authored — a fixed key placed in there
-                    // could shadow one of them.
-                    Dictionary info;
-                    info["part_index"] = part_index;
-                    info["part_name"] = get_part_name(part_index);
-                    info["frame_no"] = frame_no;
-                    info["source"] = (int64_t)source;
-
-                    Dictionary value_dict;
-
-                    if (auto params = val->params()) {
-                        for (uint32_t k = 0; k < params->size(); k++) {
-                            auto param = params->Get(k);
-                            if (!param || !param->param_id()) continue;
-                            String p_id = String::utf8(param->param_id()->c_str());
-
-                            switch (param->value_type()) {
-                                case ss::format::SignalCommandParamValue_Bool: {
-                                    if (auto b = param->value_as_Bool()) value_dict[p_id] = b->value();
-                                    break;
-                                }
-                                case ss::format::SignalCommandParamValue_Index: {
-                                    if (auto i = param->value_as_Index()) value_dict[p_id] = i->value();
-                                    break;
-                                }
-                                case ss::format::SignalCommandParamValue_Integer: {
-                                    if (auto i = param->value_as_Integer()) value_dict[p_id] = i->value();
-                                    break;
-                                }
-                                case ss::format::SignalCommandParamValue_Floating: {
-                                    if (auto f = param->value_as_Floating()) value_dict[p_id] = f->value();
-                                    break;
-                                }
-                                case ss::format::SignalCommandParamValue_Text: {
-                                    if (auto t = param->value_as_Text()) {
-                                        if (t->value()) value_dict[p_id] = String::utf8(t->value()->c_str());
-                                    }
-                                    break;
-                                }
-                                default:
-                                    break;
-                            }
-                        }
-                    }
-
-                    if (_event_sink) _event_sink->onSignal(command, value_dict, info);
-                }
-            }
-
-            if (auto audios = events_per_frame->audios()) {
-                for (uint32_t j = 0; j < audios->size(); j++) {
-                    auto audio_event = audios->Get(j);
-                    if (!audio_event || !audio_event->value()) continue;
-                    auto val = audio_event->value();
-
-                    const int part_index = (int)audio_event->part_index();
-
-                    Dictionary payload;
-                    payload["part_index"] = part_index;
-                    payload["part_name"] = get_part_name(part_index);
-                    payload["frame_no"] = frame_no;
-                    payload["source"] = (int64_t)source;
-                    payload["sound_list_name_hash"] = (int64_t)val->sound_list_name_hash();
-                    payload["sound_name_hash"] = (int64_t)val->sound_name_hash();
-                    if (val->sound_name()) payload["sound_name"] = String::utf8(val->sound_name()->c_str());
-                    payload["loop_num"] = val->loop_num();
-
-                    if (_event_sink) _event_sink->onAudio(payload);
-                }
-            }
-        }
-    }
+    // Events fire before the draw dedup: ss_runtime_update reports every frame it
+    // stepped through, including the start frame after play(), and gating on a
+    // change of the integer draw frame would drop a start-frame event (an audio
+    // key on frame 0, say).
+    _dispatch_passed_events(binary);
     // The update that reports a seek's landing frame is over.
     _seek_pending = false;
 
+    // Read again rather than kept from the tick: a handler may have set up another
+    // animation, and the old frame number on it is a pose it does not stand on.
+    const float frame_no = ss_runtime_get_frame_no(runtime_ctx);
     float draw_frame = _sub_frame_enabled ? frame_no : floorf(frame_no);
     // An override changes what the frame draws without changing which frame it
     // is, so it has to defeat the dedup the same way a held-frame effect does.
@@ -1342,7 +1249,168 @@ void SsInternalPlayer::update(float delta_seconds) {
         && !_mask_resize_pending
         && !(stack_in_motion && !ss_runtime_is_clock_pausing(runtime_ctx))) return;
 
-    _seek_and_redraw(frame_no, delta_seconds, was_looped);
+    _seek_and_redraw(frame_no, delta_seconds, was_looped && _animationSelectedHash == animation_before_handlers);
+}
+
+void SsInternalPlayer::_report_stopped_seek() {
+    if (!_seek_pending) return;
+    // Only an update reports the frame a seek lands on, and a stopped player runs
+    // none of its own. Only when the frame changes: an AnimationPlayer sets
+    // frame_no every tick, and would fire a key once a tick while it holds a frame.
+    const int landing = _seek_landing_frame;
+    if (landing != _stopped_seek_reported_frame) {
+        _stopped_seek_reported_frame = landing;
+        ss_runtime_update(runtime_ctx, 0.0f);
+        const Ref<SsParsedSsab> held_parse = _parsed;
+        _dispatch_passed_events(_take_passed_events());
+    }
+    // A handler that sought elsewhere has its own landing frame for the next tick.
+    if (_seek_landing_frame == landing) _seek_pending = false;
+}
+
+const ss::format::SsAnimeBinary* SsInternalPlayer::_take_passed_events() {
+    _passed_events.clear();
+    const int count = ss_runtime_get_passed_event_count(runtime_ctx);
+    if (count <= 0 || !_currentAnimationData || _ssabRes.is_null()) return nullptr;
+    for (int i = 0; i < count; i++) {
+        PassedEvent passed;
+        passed.source = ss_runtime_get_passed_event_source_handle(runtime_ctx, i);
+        passed.animation = ss_runtime_get_source_animation_index(runtime_ctx, passed.source);
+        passed.event = ss_runtime_get_passed_event_index(runtime_ctx, i);
+        _passed_events.push_back(passed);
+    }
+    return _ssabRes->get_ss_anime_binary();
+}
+
+void SsInternalPlayer::_dispatch_passed_events(const ss::format::SsAnimeBinary* p_binary) {
+    const auto* animations = p_binary ? p_binary->animations() : nullptr;
+    if (animations == nullptr) return;
+    // Each index addresses the event table of the animation of the source that
+    // fired it, so the table is looked up per event. Reading them all against
+    // the animation set up here reports other events, or none, once a crossfade
+    // on track 0 has handed the track to another animation.
+    for (uint32_t n = 0; n < _passed_events.size(); n++) {
+        const PassedEvent passed = _passed_events[n];
+        const uint32_t source = passed.source;
+        const int32_t anim_idx = passed.animation;
+        if (anim_idx < 0 || (uint32_t)anim_idx >= animations->size()) continue;
+        const auto* events = animations->Get((uint32_t)anim_idx)->events();
+        if (events == nullptr) continue;
+        const int32_t event_idx = passed.event;
+        // A not-found (-1), or an index past that table, would read past the
+        // FlatBuffer.
+        if (event_idx < 0 || (uint32_t)event_idx >= events->size()) continue;
+        auto events_per_frame = events->Get((uint32_t)event_idx);
+        if (!events_per_frame) continue;
+
+        // The frame the keys were authored on, which is not necessarily the
+        // frame they were noticed on: one tick can step across several.
+        const int frame_no = (int)events_per_frame->frame_index();
+
+        if (auto users = events_per_frame->users()) {
+            for (uint32_t j = 0; j < users->size(); j++) {
+                auto user = users->Get(j);
+                if (!user || !user->value()) continue;
+                auto val = user->value();
+
+                const int part_index = (int)user->part_index();
+
+                Dictionary payload;
+                payload["part_index"] = part_index;
+                payload["part_name"] = get_part_name(part_index);
+                payload["frame_no"] = frame_no;
+                payload["source"] = (int64_t)source;
+                if (auto i = val->integer()) payload["integer"] = i->value();
+                if (auto r = val->rect())    payload["rect"]    = Rect2(r->left(), r->top(), r->right() - r->left(), r->bottom() - r->top());
+                if (auto p = val->point())   payload["point"]   = Vector2(p->v1(), p->v2());
+                if (auto s = val->str())     payload["string"]  = String::utf8(s->c_str());
+
+                if (_event_sink) _event_sink->onUserData(payload);
+            }
+        }
+
+        if (auto signals_vec = events_per_frame->signals()) {
+            for (uint32_t j = 0; j < signals_vec->size(); j++) {
+                auto sig_event = signals_vec->Get(j);
+                if (!sig_event || !sig_event->value()) continue;
+                auto val = sig_event->value();
+                if (!val->active() || !val->command_id()) continue;
+
+                String command = String::utf8(val->command_id()->c_str());
+                const int part_index = (int)sig_event->part_index();
+
+                // Kept apart from `value_dict`, whose keys are the parameter
+                // ids the animator authored — a fixed key placed in there
+                // could shadow one of them.
+                Dictionary info;
+                info["part_index"] = part_index;
+                info["part_name"] = get_part_name(part_index);
+                info["frame_no"] = frame_no;
+                info["source"] = (int64_t)source;
+
+                Dictionary value_dict;
+
+                if (auto params = val->params()) {
+                    for (uint32_t k = 0; k < params->size(); k++) {
+                        auto param = params->Get(k);
+                        if (!param || !param->param_id()) continue;
+                        String p_id = String::utf8(param->param_id()->c_str());
+
+                        switch (param->value_type()) {
+                            case ss::format::SignalCommandParamValue_Bool: {
+                                if (auto b = param->value_as_Bool()) value_dict[p_id] = b->value();
+                                break;
+                            }
+                            case ss::format::SignalCommandParamValue_Index: {
+                                if (auto i = param->value_as_Index()) value_dict[p_id] = i->value();
+                                break;
+                            }
+                            case ss::format::SignalCommandParamValue_Integer: {
+                                if (auto i = param->value_as_Integer()) value_dict[p_id] = i->value();
+                                break;
+                            }
+                            case ss::format::SignalCommandParamValue_Floating: {
+                                if (auto f = param->value_as_Floating()) value_dict[p_id] = f->value();
+                                break;
+                            }
+                            case ss::format::SignalCommandParamValue_Text: {
+                                if (auto t = param->value_as_Text()) {
+                                    if (t->value()) value_dict[p_id] = String::utf8(t->value()->c_str());
+                                }
+                                break;
+                            }
+                            default:
+                                break;
+                        }
+                    }
+                }
+
+                if (_event_sink) _event_sink->onSignal(command, value_dict, info);
+            }
+        }
+
+        if (auto audios = events_per_frame->audios()) {
+            for (uint32_t j = 0; j < audios->size(); j++) {
+                auto audio_event = audios->Get(j);
+                if (!audio_event || !audio_event->value()) continue;
+                auto val = audio_event->value();
+
+                const int part_index = (int)audio_event->part_index();
+
+                Dictionary payload;
+                payload["part_index"] = part_index;
+                payload["part_name"] = get_part_name(part_index);
+                payload["frame_no"] = frame_no;
+                payload["source"] = (int64_t)source;
+                payload["sound_list_name_hash"] = (int64_t)val->sound_list_name_hash();
+                payload["sound_name_hash"] = (int64_t)val->sound_name_hash();
+                if (val->sound_name()) payload["sound_name"] = String::utf8(val->sound_name()->c_str());
+                payload["loop_num"] = val->loop_num();
+
+                if (_event_sink) _event_sink->onAudio(payload);
+            }
+        }
+    }
 }
 
 void SsInternalPlayer::redraw_pending_overrides() {
@@ -1391,9 +1459,9 @@ bool SsInternalPlayer::_build_mask_writers(const DrawFrame& f) {
         if (pure_mask) pure_mask_flags[p_idx] = 1;
 
         // A writer only writes where its per-frame mask is non-zero and it is not
-        // hidden. Both live in FrameData, so this is the one
-        // half of the classification PartData cannot answer: an authored MASK of 0
-        // is how a writer is switched off over a range of frames, and the cutout
+        // hidden. Both live in FrameData, so this is the one half of the
+        // classification PartData cannot answer: an authored MASK of 0 is how a
+        // writer is switched off over a range of frames, and the cutout
         // threshold cannot stand in for it — a shape mask samples no texture, so
         // its coverage is its whole geometry whatever the threshold says. A part
         // with no PartState this frame was not evaluated and writes nothing, which
@@ -1402,9 +1470,12 @@ bool SsInternalPlayer::_build_mask_writers(const DrawFrame& f) {
         const auto* ps = (p_idx < (int)_parts_by_idx.size()) ? _parts_by_idx[p_idx] : nullptr;
         if (!ps || ps->mask() == 0.0f || ps->hide()) continue;
 
-        // Bitmap holds 24 writers; keep scanning past that so the pure masks that
-        // did not fit are still flagged above.
-        if ((int)_mask_writers.size() >= MAX_MASK_WRITERS) continue;
+        // The bitmap holds MAX_MASK_WRITERS writers; keep scanning past that so the
+        // pure masks that did not fit are still flagged above.
+        if ((int)_mask_writers.size() >= MAX_MASK_WRITERS) {
+            warn_mask_writers_dropped();
+            continue;
+        }
 
         MaskWriter w;
         w.part_index = p_idx;
@@ -1546,9 +1617,7 @@ void SsInternalPlayer::_render_mask_coverage(const DrawFrame& f) {
     // placed on was numbered by the caller.
     _mask_writers_dropped = false;
     _mask_collect_tree(this, f, Transform2D(), -1.0f, rs, have_bbox, bmin, bmax);
-    if (_mask_writers_dropped) {
-        WARN_PRINT_ONCE("SpriteStudio: an animation masks with more than 96 mask parts at once (instances count each time they are placed); the rest are ignored. Restructure the data to use fewer.");
-    }
+    if (_mask_writers_dropped) warn_mask_writers_dropped();
 
     if (!have_bbox) {
         _mask_tree_spans.clear();
@@ -1586,7 +1655,7 @@ void SsInternalPlayer::_render_mask_coverage(const DrawFrame& f) {
         rs->viewport_set_canvas_transform(_mask_target->viewport, _mask_tile_canvas(tile), ct);
     }
 
-    // player-local -> coverage UV [0,1], handed to maskable shaders (P3).
+    // player-local -> coverage UV [0,1], handed to maskable shaders.
     Transform2D uv;
     uv.columns[0] = Vector2(1.0f / bsize.x, 0);
     uv.columns[1] = Vector2(0, 1.0f / bsize.y);
@@ -1598,7 +1667,7 @@ void SsInternalPlayer::_render_mask_coverage(const DrawFrame& f) {
     // rasterized with, sliding the mask off its target as the bbox moves.
     _mask_local_to_uv = uv;
 
-    // Frame mask state consumed by the maskable emit path (P3).
+    // Frame mask state consumed by the maskable emit path.
     _mask_coverage_tex = rs->viewport_get_texture(_mask_target->viewport);
 
     // Decide the size class to borrow next frame from this frame's footprint.
@@ -2210,11 +2279,13 @@ SsInternalPlayer::_child_mask_context(const ss::format::PartData* pd) const {
     if (!pd) return c;
     // Only the instance part's own flags reach the sub-animation — not what this
     // player itself inherited — and they do whether or not anything above masks
-    // (SpriteStudio 7.5 on InstancePropagationTired3).
+    // (this is how the SpriteStudio editor draws it).
     c.influence = pd->mask_influence();
     c.visible_inside = pd->visible_inside_mask();
-    // Whether a mask from here or above can reach the sub-animation's parts.
-    c.masked = _mask_active();
+    // Whether a mask from here or above can reach the sub-animation's parts. A
+    // clipping anywhere below counts: an earlier instance can leave it open, and a
+    // child with no writer of its own has no other way to learn that.
+    c.masked = _mask_active() || _tree_has_clipping();
     return c;
 }
 
@@ -2227,15 +2298,14 @@ SsInternalPlayer::_resolve_part_mask(const DrawFrame& f, int p_idx, uint16_t ran
     const InheritedMaskContext c = _compose_mask_context(pd);
     // A part opts out with mask_influence == 0, which the composition has
     // already folded in. For a clipping writer the *same* mask_influence is both
-    // its write op and its target flag, so mask_write must not
-    // force it to be a target: a mask_influence == 0 clipping part is opted out,
+    // its write op and its target flag, so mask_write must not force it to be a
+    // target: a mask_influence == 0 clipping part is opted out,
     // and its own colour is only clipped by *other* masks per its real influence.
     if (!c.influence) return d;
 
     d.visible_inside = c.visible_inside;
     // A part that draws only inside a mask draws nowhere that no mask covers —
-    // even when the animation has no mask at all (SpriteStudio 7.5), so it is
-    // always tested. With no writer the test fails everywhere.
+    // even when the animation has no mask at all, so it is always tested. With no writer the test fails everywhere.
     if (c.visible_inside) {
         d.masked = true;
         return d;
@@ -2259,8 +2329,7 @@ void SsInternalPlayer::_apply_inherited_mask(RID coverage_tex, const Array& meta
         if (rec.pm.mat.is_null()) continue;
         // The owner numbered this player's ranks on the tree sequence just now.
         // `ss_mask_visible_inside` was stamped per part while building, with the
-        // composed polarity — flattening it here is exactly the bug this walk
-        // exists to avoid.
+        // composed polarity; this walk must leave it alone.
         _send_mask_test(rec.pm.mat, _held_mask_uniforms(rec.pm), local_to_uv, count, meta, meta_version, tiles,
                         rec.rank < _mask_seq.size() ? _mask_seq[rec.rank] : 0.0f, coverage_tex);
     }
@@ -2333,7 +2402,7 @@ void SsInternalPlayer::_drawAnimation(float frame_no, float delta_seconds, bool 
 
     _index_frame_parts(f);
 
-    // CBP masking: collect this frame's mask writers. The top-root player owns
+    // Masking: collect this frame's mask writers. The top-root player owns
     // the mask state for the whole instance tree: it numbers the tree and bakes
     // every writer in it into one coverage bitmap. Instance children have drawn
     // already (they draw before the player that holds them), so their writers
@@ -2456,7 +2525,7 @@ void SsInternalPlayer::_drawAnimation(float frame_no, float delta_seconds, bool 
         } else if (kind == ss::runtime::DrawBatchKind_Mesh) {
             _emit_mesh_batch(f, batch, draw_order_data);
         }
-        // DrawBatchKind_Text / Nines: not yet implemented. Mask is not missing —
+        // DrawBatchKind_Text / Nines: not drawn (see docs/en/limitations.md). Mask is not missing —
         // it is consumed by the mask planner above, not emitted as a batch here.
     }
     _flush_default_run(f.rs);
@@ -2551,10 +2620,6 @@ void SsInternalPlayer::_flush_default_run(RenderingServer* rs) {
     _emit_partcolor_mesh(rs, run_ci, s.indices, _run.index_count, s.verts, s.colors, s.uvs,
                          s.custom0, _run.vertex_count, _run.texture);
 }
-
-
-
-
 
 void SsInternalPlayer::_fx_run_reserve(int quads) {
     EffectStreams& s = _fx_streams;
@@ -2705,6 +2770,7 @@ Ref<SSABResource> SsInternalPlayer::_resolve_ssab_by_hash(uint32_t pack_hash, ui
 }
 
 void SsInternalPlayer::_clear_instance_children() {
+    _static_tree_clipping = -1;
     for (uint32_t i = 0; i < _instance_children.size(); i++) {
         InstanceChildState& st = _instance_children[i];
         if (st.player) {
@@ -2762,8 +2828,8 @@ void SsInternalPlayer::_setup_instance_children() {
         child->setSSABResource(source);
         child->setAnimationByHash(anim_name_hash);
         child->stop();
-        // Keep the child hidden by default; _update_instance_children flips
-        // it visible only once an EventInstance becomes active for the slot.
+        // Hidden until _emit_instance_slot draws it (the draw loop hides every
+        // child first).
         child->setRootVisible(false);
         // Parenting under the slot's batch canvas_item is performed each
         // frame in _emit_instance_slot — batch CIs are recyclable so a
@@ -2892,6 +2958,25 @@ bool SsInternalPlayer::_has_mask_capable_parts() const {
     return found;
 }
 
+bool SsInternalPlayer::_tree_has_clipping() const {
+    if (_static_tree_clipping >= 0) return _static_tree_clipping != 0;
+    bool found = false;
+    const auto* binary = _ssabRes.is_null() ? nullptr : _ssabRes->get_ss_anime_binary();
+    const auto* parts_meta = binary ? binary->parts() : nullptr;
+    if (parts_meta) {
+        for (uint32_t i = 0; i < parts_meta->size() && !found; i++) {
+            const auto* pd = parts_meta->Get(i);
+            found = pd && pd->mask_write();
+        }
+    }
+    for (uint32_t i = 0; i < _instance_children.size() && !found; i++) {
+        const SsInternalPlayer* child = _instance_children[i].player;
+        found = child && child->_tree_has_clipping();
+    }
+    _static_tree_clipping = found ? 1 : 0;
+    return found;
+}
+
 void SsInternalPlayer::_drive_instance_slot(InstanceChildState& state,
                                             SsInternalPlayer* child,
                                             const ss_event_instance_info& info,
@@ -2997,8 +3082,8 @@ void SsInternalPlayer::_emit_instance_slot(const DrawFrame& f, RID ci, int p_idx
 void SsInternalPlayer::_step_effect_slots(const DrawFrame& f) {
     // Every slot, every frame, whether or not its part is in this frame's draw
     // order: a hidden effect part has no Effect batch, and stepping only the
-    // drawn ones froze an independently playing effect for as long as its part
-    // was hidden. A hidden part's slot steps with `draw` off, which moves its
+    // drawn ones would freeze an independently playing effect while its part is
+    // hidden. A hidden part's slot steps with `draw` off, which moves its
     // clock and builds no plan. The draw then reads each step back
     // (`_emit_effect_slot`).
     //
@@ -3146,8 +3231,8 @@ int SsInternalPlayer::_build_normal(const DrawFrame& f, int p_idx,
     const auto partColorIndex = part->part_color();
     if ((flags & ss::runtime::UpdateAttributeFlags_AttributePartColor) && partColorIndex >= 0 && f.frameData->parts_color() != nullptr) {
         auto pc = f.frameData->parts_color()->Get(partColorIndex);
-        // SDK converter has applied SS6-style mediation; ssab fields now carry
-        // a consistent semantic regardless of the source (blend_type, target):
+        // The converter has mediated these; ssab fields carry a consistent
+        // semantic regardless of the source (blend_type, target):
         //   pc->lt/rt/lb/rb->rgba.a  = rateAlpha (final-alpha source, u8)
         //   pc->lt/rt/lb/rb->rate    = colorA    (blend weight, float)
         auto to_color = [](const ss::runtime::SsAttributePartColorKeyValueColor& c) {
@@ -3168,8 +3253,7 @@ int SsInternalPlayer::_build_normal(const DrawFrame& f, int p_idx,
         if (blend_idx < 0 || blend_idx > 3) blend_idx = 0;
     }
 
-    // Output premultiplied-alpha flag. Held at 0 (disabled); the shader path
-    // reads this per-vertex so PMA can be enabled globally or per texture.
+    // Output premultiplied-alpha flag. Held at 0: premultiplied output is off.
     const float pma_flag = 0.0f;
 
     for (int j = 0; j < CORNERS_COUNT; j++) {
@@ -3304,7 +3388,6 @@ Vector4 SsInternalPlayer::_resolve_cell_rect_uv(const DrawFrame& f, int p_idx, c
     }
     const float* m = f.cell_meta + (p_idx * 6);
     // cell_meta layout: [pivot_x, pivot_y, size_w, size_h, rect_left, rect_top].
-    // See ssruntime/src/core/framedata.rs::evaluate_layer (cell_meta_per_part write).
     const float size_w    = m[2];
     const float size_h    = m[3];
     const float rect_left = m[4];
@@ -3389,8 +3472,7 @@ void SsInternalPlayer::_emit_partcolor_mesh(RenderingServer* rs, RID ci,
     // The PartColor goes in CUSTOM1 and there is no COLOR stream, so the
     // shader's COLOR is the canvas item's modulate alone (see ss_shader_setup.h).
     // Quantised the way the engine quantises ARRAY_COLOR -- to 8 bits,
-    // truncated, with the product in double -- so a part draws exactly as it
-    // did when the colour rode in COLOR. Carried as floats rather than as
+    // truncated, with the product in double. Carried as floats rather than as
     // RGBA8_UNORM, which would match ARRAY_COLOR byte for byte: the
     // Compatibility renderer does not read an RGBA8 custom stream back
     // correctly, and part colours lose their green and blue.
@@ -3587,8 +3669,8 @@ bool SsInternalPlayer::_build_shape_geometry(const DrawFrame& f, int p_idx,
         corner_colors[1] = to_color(pc->rt());
         corner_colors[2] = to_color(pc->lb());
         corner_colors[3] = to_color(pc->rb());
-        // Shape parts intentionally skip the PartColor compositing formula —
-        // the spec says "per-vertex color = pc.rgba directly, no calculation".
+        // Shape parts skip the PartColor compositing formula: the per-vertex
+        // colour is pc.rgba as it is.
         // Force the shader's per-vertex inputs to Mix mode with rate=1.0 so
         // ss_partcolor_blend(white, pc.rgb, varg) collapses to pc.rgb. The
         // original pc->blend_type() is preserved in ssab for inspection; the
@@ -3704,7 +3786,7 @@ void SsInternalPlayer::_emit_normal_batch(const DrawFrame& f,
         const float* drawing_m = f.get_world_matrix(p_idx);
         if (!drawing_m) continue;
 
-        // CBP masking: parts inside an active writer's scope must run the mask
+        // Masking: parts inside an active writer's scope must run the mask
         // test, which needs per-part uniforms (rank / polarity) — so force the
         // per-part path for them even when their shader is otherwise batchable.
         // visible_inside_mask parts draw ONLY inside a mask, so they must run the
@@ -3719,9 +3801,7 @@ void SsInternalPlayer::_emit_normal_batch(const DrawFrame& f,
         if (psi.is_per_part || masked) {
             // Draw the default parts gathered ahead of this per-part part first,
             // so they keep a lower (behind) draw_index than it — this per-part
-            // CI is acquired (and indexed) right below. Without it the run's
-            // parts would all sink behind the batch's per-part parts, which hid
-            // the rank-1 "face" behind the rank-0 shader-driven "head".
+            // CI is acquired (and indexed) right below.
             _flush_default_run(rs);
             // Per-part path: build into the small scratch buffers (vbase=0),
             // acquire dedicated canvas_item + ShaderMaterial, emit one mesh.
@@ -3793,9 +3873,8 @@ void SsInternalPlayer::_emit_shape_batch(const DrawFrame& f,
     if (count == 0) return;
 
     // batch->blend_type() is the runtime BlendType; converted to the ssab
-    // BlendType by raw u8 value (same convention as _emit_normal_batch). The
-    // shape pipeline now shares the PartColor shader with Normal/Mesh, so
-    // the GPU framebuffer blend is selected via _apply_partcolor_material.
+    // BlendType by raw u8 value (same convention as _emit_normal_batch). Shapes
+    // share the PartColor shader with Normal/Mesh, so the GPU framebuffer blend is selected via _apply_partcolor_material.
     const auto ssab_blend = (ss::format::BlendType)batch->blend_type();
 
     for (uint16_t k = 0; k < count; k++) {
@@ -3814,7 +3893,7 @@ void SsInternalPlayer::_emit_shape_batch(const DrawFrame& f,
         // returns white (Godot's default) for any UV. The PartColor formula
         // therefore composites against an implicit white "shape pixel".
 
-        // CBP masking: a maskable shape must run the per-part mask test, which
+        // Masking: a maskable shape must run the per-part mask test, which
         // needs per-part uniforms (rank / polarity) — so force the per-part path
         // for it. See _emit_normal_batch for the flag semantics.
         const uint16_t rank = (uint16_t)(batch->start_rank() + k);
@@ -3879,7 +3958,7 @@ void SsInternalPlayer::_emit_mesh_batch(const DrawFrame& f,
 
         if (!_build_mesh_geometry(f, p_idx, part, inv_tex_size, _mesh_buf)) continue;
 
-        // CBP masking: a masked target must run the mask test. A part opts out
+        // Masking: a masked target must run the mask test. A part opts out
         // with mask_influence=0; write_mask clipping parts are always affected.
         const uint16_t rank = (uint16_t)(batch->start_rank() + k);
         const PartMaskDecision md = _resolve_part_mask(f, p_idx, rank);
@@ -3946,7 +4025,7 @@ bool SsInternalPlayer::_build_mesh_geometry(const DrawFrame& f, int p_idx,
     }
 
     // Mesh part color is "Overall" only (a single flat color for the whole
-    // part — see SS6 DrawMesh); resolve once, apply to every vertex. After
+    // part); resolve once, apply to every vertex. After
     // SDK converter mediation: rgba.a = rateAlpha, rate = colorA, regardless
     // of the source target.
     const float part_alpha = part->alpha();
@@ -3998,9 +4077,20 @@ bool SsInternalPlayer::_build_mesh_geometry(const DrawFrame& f, int p_idx,
 }
 
 void SsInternalPlayer::_fetchAnimation() {
+    _stopped_seek_reported_frame = -1;
     if ((_strAnimationSelected.is_empty() && _animationSelectedHash == 0) || _ssabRes.is_null()) {
+        // Reset is the runtime's teardown and takes these with it. To this player an
+        // empty SSAB is one more SSAB change, and those keep them.
+        const float speed = ss_runtime_get_speed_scale(runtime_ctx);
+        const bool skip = ss_runtime_get_skip_frames(runtime_ctx);
+        const int direction = ss_runtime_get_playback_direction(runtime_ctx);
+        const int style = ss_runtime_get_playback_style(runtime_ctx);
         ss_runtime_reset(runtime_ctx);
         _reconfigure();
+        ss_runtime_set_speed_scale(runtime_ctx, speed);
+        ss_runtime_set_skip_frames(runtime_ctx, skip);
+        ss_runtime_set_playback_direction(runtime_ctx, direction, style);
+        ss_runtime_set_frame_rate(runtime_ctx, _frame_rate_override);
         _res_rebind_pending = true;
         _currentAnimationData = nullptr;
         // Free instance children before their parent canvas items — each
@@ -4034,8 +4124,7 @@ void SsInternalPlayer::_fetchAnimation() {
     // runtime the part identities may be new, so it drops every part override —
     // correct for a new SSAB, wrong for an animation change within one, where
     // Permanent-priority overrides are documented to persist (the runtime's
-    // setup step keeps them). Re-binding here made every `animation = ...`
-    // discard them.
+    // setup step keeps them).
     if (_res_rebind_pending || _parsed.is_null()) {
         // The resource's parse of its current buffer, shared with every other
         // player of it (and the instance children that play from it); a buffer

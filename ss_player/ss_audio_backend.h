@@ -3,10 +3,12 @@
 #ifdef SPRITESTUDIO_GODOT_EXTENSION
 #include <godot_cpp/classes/node.hpp>
 #include <godot_cpp/classes/resource.hpp>
+#include <godot_cpp/core/gdvirtual.gen.inc>
 #include <godot_cpp/variant/dictionary.hpp>
 using namespace godot;
 #else
 #include "core/io/resource.h"
+#include "core/object/gdvirtual.gen.h"
 #include "core/variant/dictionary.h"
 #include "scene/main/node.h"
 #endif
@@ -18,15 +20,15 @@ using namespace godot;
 // custom backend (e.g. audio middleware) assign a subclass of this resource to
 // the player's "audio_backend" property.
 //
-// Subclass it (in GDScript or C++) and implement `play_audio`. The default
-// implementation is a no-op — assigning a backend always suppresses built-in
+// Subclass it and implement `_play_audio` in GDScript, or override `play_audio`
+// in C++. The default is a no-op — assigning a backend always suppresses built-in
 // playback, so the backend fully owns play-count / lifecycle management. It is
 // invoked only for forward playback (reverse audio is a documented limitation),
 // and not for the frame a seek lands on.
 //
 // GDScript example:
 //   extends SpriteStudioAudioBackend
-//   func play_audio(payload: Dictionary, ssab: SSABResource, player: Node) -> void:
+//   func _play_audio(payload: Dictionary, ssab: SSABResource, player: Node) -> void:
 //       var info := ssab.get_sound_info(payload["sound_list_name_hash"], payload["sound_name_hash"])
 //       # ... hand info["path"] / payload["loop_num"] to your middleware ...
 class SpriteStudioAudioBackend : public Resource {
@@ -34,6 +36,8 @@ class SpriteStudioAudioBackend : public Resource {
 
 protected:
     static void _bind_methods();
+
+    GDVIRTUAL3(_play_audio, Dictionary, Ref<SSABResource>, Node *)
 
 public:
     // Plays one audio event. `payload` is the same Dictionary emitted by the

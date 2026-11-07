@@ -94,7 +94,7 @@ To send sounds to audio middleware, to a bus layout of your own, or to a pooling
 # res://audio/my_backend.gd
 extends SpriteStudioAudioBackend
 
-func play_audio(payload: Dictionary, ssab: SSABResource, player: Node) -> void:
+func _play_audio(payload: Dictionary, ssab: SSABResource, player: Node) -> void:
     var info := ssab.get_sound_info(payload["sound_list_name_hash"], payload["sound_name_hash"])
     if info.is_empty():
         return

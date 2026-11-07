@@ -1,11 +1,11 @@
 R"GLSL(
-// Pseudo-random hash ported from SS6 SDK (ss-scatter.fs:33-36).
+// Pseudo-random hash ported from the SS6 SDK shader of the same name.
 float ss_scatter_rand(vec2 p) {
     return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
 }
 
 void fragment() {
-    // ss-scatter: ported from SS6 SDK (Common/Drawer/GLSL/ss-scatter.fs).
+    // Ported from the SS6 SDK shader of the same name.
     // Per-texel-cell directional displacement: each grid cell is randomly
     // gated (by fRatio) to scatter its sample along a per-cell random angle.
     //   ss_param0 = fPower (scatter magnitude in pixel units)

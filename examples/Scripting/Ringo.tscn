@@ -11,7 +11,6 @@ position = Vector2(560, 567)
 ssab = ExtResource("1_w6qk1")
 current_animation = "attack1"
 sub_frame_enabled = true
-animation_section_end = 19
 cellmaps/Ringo = null
 
 [node name="Label" type="Label" parent="." unique_id=1577769087]

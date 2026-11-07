@@ -1,11 +1,11 @@
 R"GLSL(
-// Pseudo-random hash ported from SS6 SDK (ss-noise.fs:31-34).
+// Pseudo-random hash ported from the SS6 SDK shader of the same name.
 float ss_noise_rand(vec2 p) {
     return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
 }
 
 void fragment() {
-    // ss-noise: ported from SS6 SDK (Common/Drawer/GLSL/ss-noise.fs).
+    // Ported from the SS6 SDK shader of the same name.
     //   ss_param0 = fPower  (noise intensity 0..1)
     //   ss_param1 = fColor  (color decorrelation 0..1)
     //   ss_param2 = fPhase  (offset; animating this scrolls the noise)

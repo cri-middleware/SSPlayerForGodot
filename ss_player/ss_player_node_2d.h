@@ -52,7 +52,7 @@ public:
     // How long a part override outlives the keyframes it overrides. Mirrors
     // the runtime's `priority_mode` encoding.
     enum OverridePriority {
-        // The Brain's own enumerator names.
+        // The runtime's own enumerator names.
         OVERRIDE_PRIORITY_OVERWRITE_ON_NEXT_KEYFRAME, // the animation takes the attribute back at its next key, for good
         OVERRIDE_PRIORITY_HOLD_UNTIL_NEXT_ANIMATION,  // held until another animation is set up
         OVERRIDE_PRIORITY_PERMANENT,                  // survives animation changes
@@ -81,7 +81,7 @@ private:
     bool _get( const StringName& p_name, Variant& r_property ) const;
     void _get_property_list( List<PropertyInfo>* p_list ) const;
     // Injects the hints that depend on the bound resource / current animation
-    // (the `animation` name list, and the frame + section ranges) into the
+    // (the `current_animation` name list, and the frame + section ranges) into the
     // statically registered properties. Same signature in module + godot-cpp.
     void _validate_property( PropertyInfo& p_property ) const;
 
@@ -106,8 +106,7 @@ public:
     // Which way the playhead is actually travelling, not the configured heading
     // (getPlaybackDirection). Diverges under ping-pong, and it is what gates audio.
     bool isPlayingForward() const;
-    // The loop pulse: true only inside the tick that crossed a boundary, which is
-    // why it is not called is_looped, here or in the Brain.
+    // The loop pulse: true only inside the tick that crossed a boundary.
     bool justLooped() const;
     // The completion state, and sticky where just_looped is a pulse: it holds until
     // the next play()/set_animation(). Never true under an infinite loop count, and
@@ -253,7 +252,7 @@ public:
     // stays put while a state plays another.
     Rect2 get_canvas_rect_of(const String& p_animation) const;
 
-    // ---- Override Layer (Phase 2): per-part runtime overrides -------------
+    // ---- Part overrides ---------------------------------------------------
     // Overrides win over both keyframes and blend for the named part. Return
     // false when the part name is unknown / no animation is bound.
     // See OverridePriority and ColorBlendOperation for the enum values.
@@ -356,10 +355,9 @@ private:
     Ref<SpriteStudioAudioBackend> _audio_backend;
 
     // Routes one audio event to the backend / built-in controller, applying the
-    // forward-playback and editor guards. The "audio" signal fires regardless.
+    // forward-playback and seek-landing guards. The "audio" signal fires regardless.
     void _handle_audio(const Dictionary& payload);
 
-    HashMap<String, Ref<Texture2D>> _cellmap_overrides;
     // The commands already reported as having done nothing, by the call and
     // what it was given, since the SSAB was set. See _refused.
     HashSet<String> _reported_refusals;
@@ -375,8 +373,7 @@ private:
     // On, so a node dropped into a scene animates when the scene runs. A player
     // sitting on its first frame reads as broken, and there is no code to call
     // `play()` for a node that was placed rather than constructed -- which is
-    // what an `autoplay` property is for. ForUnity's `AutoPlay` defaults the
-    // same way, for the same reason.
+    // what an `autoplay` property is for.
     bool _autoplay = true;
     // The loop count as configured on the node — an inspector property, so it is
     // the node's own state and has to outlive an animation change. The runtime

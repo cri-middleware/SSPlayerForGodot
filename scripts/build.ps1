@@ -33,8 +33,8 @@ $scons_default_opts = @{
     custom_modules = "../ss_player"
 }
 
-# winbuild default options
-$winbuild_default_opts = @{
+# This script's own options
+$script_default_opts = @{
     cpus = $cpus
     ccache = "no"
     version = (((Get-Content (Join-Path $baseDirectory "GODOT_VERSION.txt") -Raw).Trim() -split '\.')[0..1] -join '.')
@@ -44,7 +44,7 @@ $winbuild_default_opts = @{
 
 $opts = @{}
 $opts += $scons_default_opts
-$opts += $winbuild_default_opts
+$opts += $script_default_opts
 
 $APP = Split-Path -Leaf $PSCommandPath
 function usage() {
@@ -53,10 +53,9 @@ function usage() {
     echo "  arch=<arch>         Target architecture (default: ${HOST_ARCH})"
     echo "  target=<target>     Target (default: ${scons_default_opts.target})"
     echo "  cpus=<nums>         number of scons -j option (default: $cpus)"
-    # echo "  ccache=<yes|no>     Enable ccache (default: $($winbuild_default_opts.ccache))"
-    echo "  version=<version>   Godot version. $APP uses this version at can not getting Godot version from git branch or tag. (default: $($winbuild_default_opts.version))"
-    echo "  strip=<yes|no>      Accepted for parity with build.sh; MSVC keeps debug info in a separate .pdb, so nothing is stripped (default: $($winbuild_default_opts.strip))"
-    echo "  deps=<yes|no>       Install the missing Godot third-party build dependencies (AccessKit / ANGLE) before building (default: $($winbuild_default_opts.deps))"
+    echo "  version=<version>   Godot version. $APP uses this version at can not getting Godot version from git branch or tag. (default: $($script_default_opts.version))"
+    echo "  strip=<yes|no>      Accepted for parity with build.sh; MSVC keeps debug info in a separate .pdb, so nothing is stripped (default: $($script_default_opts.strip))"
+    echo "  deps=<yes|no>       Install the missing Godot third-party build dependencies (AccessKit / ANGLE) before building (default: $($script_default_opts.deps))"
     echo "Godot scons options: "
     pushd $rootDirectory/godot
     scons --help
@@ -75,21 +74,6 @@ foreach ($item in $Args) {
 $opts
 echo ""
 
-# # ccache
-# if ($opts.ccache -eq "yes")
-# {
-#     if ($env:CCACHE -ne $null) {
-#         $CCACHE = $env:CCACHE
-#     } else {
-#         if (Get-Command -Name sccache) {
-#             $CCACHE = sccache
-#         } elseif (Get-Command -Name sccache) {
-#             $CCACHE = ccache
-#         }
-#         echo "set $CCACHE as CCACHE"
-#     }
-# }
-
 # get Godot Version
 if (![string]::IsNullOrEmpty($GODOT_BRANCH)) {
     $VERSION = $GODOT_BRANCH
@@ -100,11 +84,11 @@ if (![string]::IsNullOrEmpty($GODOT_BRANCH)) {
 }
 echo "Godot Version: ${VERSION}"
 
-# validate scons command options from winbuild options
+# validate scons command options from this script's options
 $scons_command_opts = ""
 foreach ($key in $opts.Keys) {
-    if ($winbuild_default_opts.ContainsKey($key)) {
-        # skip winbuild default options
+    if ($script_default_opts.ContainsKey($key)) {
+        # skip this script's own options
         continue
     }
     $scons_command_opts += " $key=$($opts[$key])"

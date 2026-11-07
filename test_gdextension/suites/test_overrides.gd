@@ -2,7 +2,7 @@
 ##
 ## **An override lands on the next update, not on the call.** `is_part_hidden`
 ## reports what the last computed frame said — `_part_hidden` is filled from the
-## Brain's draw plan in `SsInternalPlayer` — so a host that sets an override and
+## runtime's draw plan in `SsInternalPlayer` — so a host that sets an override and
 ## reads it back without stepping sees the old answer and concludes the call did
 ## nothing. Every case here steps once after setting, deliberately, and
 ## `test_an_override_lands_on_the_next_update` is the one that states it.
@@ -42,8 +42,8 @@ func test_an_override_lands_on_the_next_update() -> void:
 
 ## The update it lands on does not have to be one that *moves* the frame. Every
 ## redraw path dedups on the draw frame, so a project driving its own playback —
-## `advance(0.0)`, a frame held at a section end — used to leave the override in
-## the runtime, unseen, until something happened to step.
+## `advance(0.0)`, a frame held at a section end — would leave the override in
+## the runtime, unseen, until something stepped.
 func test_an_override_lands_on_a_frame_that_did_not_move() -> void:
 	var before: float = player.get_frame_no()
 	player.set_part_visibility_override(part, true)

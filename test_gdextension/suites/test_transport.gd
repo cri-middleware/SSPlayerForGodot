@@ -24,6 +24,53 @@ func test_a_player_starts_stopped() -> void:
 	near(player.get_frame_no(), 0.0, "the head starts at the first frame")
 
 
+func _saved_properties() -> Array:
+	var scene := PackedScene.new()
+	eq(scene.pack(player), OK, "the player packs")
+	var state := scene.get_state()
+	var names := []
+	for i in state.get_node_property_count(0):
+		names.append(state.get_node_property_name(0, i))
+	return names
+
+
+## An end saved untouched would cut off the frames a later reconvert adds.
+func test_only_a_narrowed_section_is_saved() -> void:
+	var names := _saved_properties()
+	not_ok(names.has("animation_section_start"), "an untouched start is not saved")
+	not_ok(names.has("animation_section_end"), "an untouched end is not saved")
+	ok(player.set_animation_section(2, 5), "the section narrows")
+	names = _saved_properties()
+	ok(names.has("animation_section_start"), "a moved start is saved")
+	ok(names.has("animation_section_end"), "a moved end is saved")
+
+
+func test_naming_the_current_animation_changes_nothing() -> void:
+	player.loop_count = 2
+	var finished: Array = []
+	player.animation_finished.connect(func(anim): finished.append(anim))
+	player.play()
+	for i in 100:
+		player.set_animation("anime_1")
+		player.advance(dt)
+	eq(finished.size(), 1, "a finite loop still finishes")
+	not_ok(player.is_playing(), "and stops")
+
+
+func test_an_emptied_player_keeps_its_playback_settings() -> void:
+	player.speed_scale = 2.0
+	player.set_frame_rate(12)
+	player.frame_skip_enabled = false
+	player.set_playback_direction(1, 0)
+	var pack: Resource = player.ssab
+	player.ssab = null
+	player.ssab = pack
+	near(player.speed_scale, 2.0, "the speed stays")
+	eq(player.get_frame_rate(), 12, "the frame rate stays")
+	not_ok(player.frame_skip_enabled, "frame skipping stays off")
+	eq(player.get_playback_direction(), 1, "the direction stays")
+
+
 func test_play_starts_it_and_advance_moves_the_head() -> void:
 	player.play()
 	ok(player.is_playing(), "playing after play()")

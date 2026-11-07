@@ -10,6 +10,5 @@ position = Vector2(599, 581)
 ssab = ExtResource("1_w6qk1")
 current_animation = "kaiten"
 sub_frame_enabled = true
-animation_section_end = 79
 cellmaps/Ringo = null
 script = ExtResource("2_demo")

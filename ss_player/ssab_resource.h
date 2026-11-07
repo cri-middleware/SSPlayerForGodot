@@ -89,8 +89,8 @@ public:
   // the canvas. What it is instead is free to read and it is where the author
   // decided the empty space belongs.
   //
-  // It is authored **per animation**, not per pack — `Ringo`'s `dead` is
-  // 1300x600 against 800x600 for most of the rest — so a caller that caches one
+  // It is authored **per animation**, not per pack — a death clip can sit on a
+  // wider canvas than the rest — so a caller that caches one
   // has to refresh it when the animation changes.
   Vector2 get_canvas_size(const String &anim_name);
   // That canvas as a box in player-local (Y-down) space. The pivot is

@@ -1,6 +1,6 @@
 R"GLSL(
 void fragment() {
-    // ss-move: ported from SS6 SDK (Common/Drawer/GLSL/ss-move.fs).
+    // Ported from the SS6 SDK shader of the same name.
     // Directional motion-blur-ish smear that accumulates back-traced
     // texture samples along (sin(dir*PI), cos(dir*PI)).
     //   ss_param0 = fDistance  (signed; sign reverses the trace direction)

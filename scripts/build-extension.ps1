@@ -20,8 +20,8 @@ $scons_default_opts = @{
     api_version = (& (Join-Path $baseDirectory "godot-api-version.ps1"))
 }
 
-# winbuild default options
-$winbuild_default_opts = @{
+# This script's own options
+$script_default_opts = @{
     cpus = $cpus
     ccache = "no"
     strip = "no"
@@ -29,7 +29,7 @@ $winbuild_default_opts = @{
 
 $opts = @{}
 $opts += $scons_default_opts
-$opts += $winbuild_default_opts
+$opts += $script_default_opts
 
 $APP = Split-Path -Leaf $PSCommandPath
 function usage() {
@@ -40,8 +40,7 @@ function usage() {
     echo "  cpus=<nums>         number of scons -j option (default: $cpus)"
     echo "  target=<target>     build target (default: $($scons_default_opts.target))"
     echo "  api_version=<ver>   Target Godot API version (default: $($scons_default_opts.api_version))"
-    echo "  strip=<yes|no>      Accepted for parity with build-extension.sh; godot-cpp already links without symbols unless debug_symbols=yes, so nothing is stripped (default: $($winbuild_default_opts.strip))"
-    # echo "  ccache=<yes|no>     Enable ccache (default: $($winbuild_default_opts.ccache))"
+    echo "  strip=<yes|no>      Accepted for parity with build-extension.sh; godot-cpp already links without symbols unless debug_symbols=yes, so nothing is stripped (default: $($script_default_opts.strip))"
     echo "Godot scons options: "
     pushd $rootDirectory/godot-cpp
     scons --help
@@ -60,11 +59,11 @@ foreach ($item in $Args) {
 $opts
 echo ""
 
-# validate scons command options from winbuild options
+# validate scons command options from this script's options
 $scons_command_opts = ""
 foreach ($key in $opts.Keys) {
-    if ($winbuild_default_opts.ContainsKey($key)) {
-        # skip winbuild default options
+    if ($script_default_opts.ContainsKey($key)) {
+        # skip this script's own options
         continue
     }
     $scons_command_opts += " $key=$($opts[$key])"

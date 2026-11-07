@@ -1,7 +1,7 @@
 extends SpriteStudioPlayer2D
 
 # Example script demonstrating how to connect and handle user data 
-# from a SpriteStudio animation in v2.x.
+# from a SpriteStudio animation.
 
 func _ready():
 	# Connect to the "user_data" signal emitted by SpriteStudioPlayer2D
@@ -13,7 +13,6 @@ func _on_ss_user_data(payload: Dictionary):
 	# The origin is always present; the authored values only when they were set.
 	print("part=" + str(payload["part_name"]) + " frame=" + str(payload["frame_no"]))
 
-	# In v2.x, user data is packed into a Dictionary
 	if payload.has("integer"):
 		print("int_value=" + str(payload["integer"]))
 	if payload.has("rect"):

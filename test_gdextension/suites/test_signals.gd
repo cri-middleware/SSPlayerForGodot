@@ -133,7 +133,7 @@ func _play_once(p: Node) -> void:
 
 
 ## UserData.ssab keys the `UDAT` part at frames 0 and 10; the frame-10 key holds
-## 987654321, (56, 78), the rect 5 6 7 8 and 「10フレーム到達のお知らせ」.
+## 987654321, (56, 78), the rect 5 6 7 8 and a Japanese string (asserted below).
 func test_user_data_carries_the_key_and_where_it_sits() -> void:
 	var p = make_player(USER_DATA)
 	var got: Array = []
@@ -215,8 +215,7 @@ func test_audio_fires_whether_or_not_the_node_plays_it() -> void:
 class RecordingBackend extends SpriteStudioAudioBackend:
 	var frames: Array = []
 
-	@warning_ignore("native_method_override")
-	func play_audio(payload, _ssab, _player) -> void:
+	func _play_audio(payload: Dictionary, _ssab: SSABResource, _player: Node) -> void:
 		frames.append(int(payload.get("frame_no", -1)))
 
 
@@ -234,7 +233,7 @@ func _sound_player(heard: Array) -> Array:
 ## A seek lands on a frame without crossing its keys: the `audio` signal still
 ## reports them, but they are not sounded — playing, paused or stopped alike.
 func test_a_seek_does_not_sound_the_frame_it_lands_on() -> void:
-	for state in ["playing", "paused"]:
+	for state in ["playing", "paused", "stopped"]:
 		var heard: Array = []
 		var pb := _sound_player(heard)
 		var p = pb[0]
@@ -244,12 +243,96 @@ func test_a_seek_does_not_sound_the_frame_it_lands_on() -> void:
 		p.advance(step)
 		if state == "paused":
 			p.pause()
+		elif state == "stopped":
+			p.stop()
 		heard.clear()
 		backend.frames.clear()
 		p.frame_no = 10.0
 		p.advance(step)
 		has(heard, 10, "%s: the landing frame's key is still reported" % state)
 		eq(backend.frames.has(10), false, "%s: but it is not sounded" % state)
+
+
+func _pose(p: Node) -> String:
+	var pose := ""
+	for part in p.get_part_names():
+		pose += str(p.get_part_transform(part))
+	return pose
+
+
+## The documented attack-then-idle pattern. The frame the tick ended on, drawn on
+## the animation the handler chose, is a pose that animation does not stand on.
+func test_a_handler_that_switches_animation_draws_its_first_frame() -> void:
+	var p = make_player(RINGO)
+	p.set_animation("wait1")
+	var first := _pose(p)
+	p.set_animation("attack1")
+	p.loop_count = 1
+	p.animation_finished.connect(func(_name):
+		p.set_animation("wait1")
+		p.play())
+	p.play()
+	var step := 1.0 / maxf(1.0, float(p.get_frame_rate()))
+	for i in 40:
+		p.advance(step)
+		if p.get_current_animation() == "wait1":
+			break
+	eq(p.get_current_animation(), "wait1", "the handler switched")
+	eq(_pose(p), first, "and the tick drew the new animation's first frame")
+
+
+## One long tick reports several keys, and the first handler frees the table the
+## rest of them index.
+func test_a_handler_can_swap_the_pack_mid_tick() -> void:
+	var p = make_player(USER_DATA)
+	p.set_animation("anime_1")
+	var heard: Array = []
+	p.user_data.connect(func(d):
+		heard.append(d)
+		p.ssab = load(BASIC))
+	p.play()
+	p.advance(1.0)
+	gt(heard.size(), 0, "a key fired")
+	eq(p.ssab, load(BASIC), "and the swap took")
+
+
+## What an AnimationPlayer does to a stopped node: a set every tick, many of them
+## inside the one frame, and some holding it.
+func test_a_stopped_seek_reports_its_landing_frame_once() -> void:
+	var p = make_player(USER_DATA)
+	p.set_animation("anime_1")
+	var heard: Array = []
+	p.user_data.connect(func(d): heard.append(int(d.get("frame_no", -1))))
+	var step := 1.0 / maxf(1.0, float(p.get_frame_rate()))
+	p.frame_no = 10.0
+	p.advance(step)
+	eq(heard, [10], "the landing frame's key fires")
+	for i in 3:
+		p.frame_no = 10.5
+		p.advance(step)
+	eq(heard, [10], "standing on the frame does not fire it again")
+	p.frame_no = 8.0
+	p.advance(step)
+	p.frame_no = 10.0
+	p.advance(step)
+	eq(heard, [10, 10], "coming back to it does")
+
+
+func test_a_handler_can_seek_again_from_a_stopped_report() -> void:
+	var p = make_player(USER_DATA)
+	p.set_animation("anime_1")
+	var heard: Array = []
+	var moved := [false]
+	p.user_data.connect(func(d):
+		heard.append(int(d.get("frame_no", -1)))
+		if not moved[0]:
+			moved[0] = true
+			p.frame_no = 0.0)
+	var step := 1.0 / maxf(1.0, float(p.get_frame_rate()))
+	p.frame_no = 10.0
+	p.advance(step)
+	p.advance(step)
+	eq(heard, [10, 0], "the handler's own seek reports on the next tick")
 
 
 func test_moving_track_0_is_a_seek_too() -> void:

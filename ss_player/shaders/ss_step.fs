@@ -1,6 +1,6 @@
 R"GLSL(
 void fragment() {
-    // ss-step: ported from SS6 SDK (Common/Drawer/GLSL/ss-step.fs).
+    // Ported from the SS6 SDK shader of the same name.
     // ss_param0 = fThreshold (signed; sign flips bright/dark target),
     // ss_param1 = fStage     (number of posterise stages),
     // ss_param2 = fColor     (mix between mono and texture-tinted).

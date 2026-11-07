@@ -244,12 +244,12 @@ SpriteStudio 上でユーザーデータに設定した値が `Dictionary` と�
 
 オーバーライド可能なメソッドを 1 つだけ持つ `Resource` のサブクラスです。`audio_backend` に割り当てると **内蔵再生は抑制されます**（`audio_volume` と `audio_bus` も含む）。ボイスのライフサイクルと再生回数の管理はバックエンド側の責務になります。
 
-* `play_audio(payload: Dictionary, ssab: SSABResource, player: Node) -> void`: 内蔵再生が鳴らすはずだったオーディオイベントごとに 1 回呼ばれます。内蔵再生と同じく、`play_audio` がオフのとき、順方向に再生していないとき（`is_playing_forward()` が `false`）、シークの到達フレームでは呼ばれません。いずれの場合も `audio` シグナルは送られます。`payload` は `audio` シグナルと同じ内容です。既定の実装は何もしません。
+* `_play_audio(payload: Dictionary, ssab: SSABResource, player: Node) -> void`: 内蔵再生が鳴らすはずだったオーディオイベントごとに 1 回呼ばれます。内蔵再生と同じく、`play_audio` がオフのとき、順方向に再生していないとき（`is_playing_forward()` が `false`）、シークの到達フレームでは呼ばれません。いずれの場合も `audio` シグナルは送られます。`payload` は `audio` シグナルと同じ内容です。既定の実装は何もしません。
 
 ```gdscript
 extends SpriteStudioAudioBackend
 
-func play_audio(payload: Dictionary, ssab: SSABResource, player: Node) -> void:
+func _play_audio(payload: Dictionary, ssab: SSABResource, player: Node) -> void:
     var info := ssab.get_sound_info(payload["sound_list_name_hash"], payload["sound_name_hash"])
     if not info.is_empty():
         MyMiddleware.play(info["path"], payload["loop_num"])
@@ -269,4 +269,4 @@ func play_audio(payload: Dictionary, ssab: SSABResource, player: Node) -> void:
 > [!IMPORTANT]
 > `AnimationPlayer` が `frame_no` を駆動している間は、ノードを**自走させない**でください（`Autoplay` をオフにし、`play()` も呼ばない）。さもないとノード自身の再生とキーフレームの `frame_no` が毎フレーム競合します。
 
-これ以上の準備は不要です。キー値は `AnimationPlayer` のアニメーション側に保存され（ノードの `frame_no` はシーンに保存されません）、同じトラックがランタイムでも再生を駆動します。
+これ以上の準備は不要です。キー値は `AnimationPlayer` のアニメーション側に保存され（ノードの `frame_no` はシーンに保存されません）、同じトラックがランタイムでも再生を駆動します。トラックが到達したフレームごとに、そのフレームの `user_data`・`signal_emitted`・`audio` が 1 回発火します。飛び越えたフレームは発火せず、到達したフレームの音声キーは鳴りません。

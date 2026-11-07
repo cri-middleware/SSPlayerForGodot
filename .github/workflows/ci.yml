@@ -213,8 +213,7 @@ jobs:
     name: ${{ matrix.name }}
     if: github.event_name != 'pull_request' || github.base_ref == 'main'
     runs-on: ${{ matrix.os }}
-    # A cold custom-module build takes most of this; Windows' editor is the
-    # longest, near an hour.
+    # A cold custom-module build takes most of this; Windows' editor is the longest.
     timeout-minutes: 120
     strategy:
       fail-fast: false

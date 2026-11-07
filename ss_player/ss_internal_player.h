@@ -169,7 +169,7 @@ public:
     // name->AnimationData lookup in their own binary.
     const ss::format::AnimationData* getCurrentAnimationData() const { return _currentAnimationData; }
 
-    // Playback control — 1:1 mirror of the previous SpriteStudioPlayer2D API.
+    // Playback control.
     bool isPlaying() const;
     // True when the effective playback direction is forward (speed > 0 and not
     // reversed). Audio playback is gated on this: the runtime fires audio events
@@ -180,8 +180,7 @@ public:
     // the frame it landed on; that update's keys there are not sounded.
     bool isSeekLanding(int p_frame_no) const { return _seek_pending && p_frame_no == _seek_landing_frame; }
     // The loop pulse. The runtime clears it at the top of every update, so it only
-    // reads true inside the tick that crossed — hence not `isLooped`, here or in
-    // the Brain, whose C ABI spells it `ss_runtime_just_looped`.
+    // reads true inside the tick that crossed.
     bool justLooped() const;
     // The completion state. Unlike justLooped this is sticky: it latches when every
     // configured loop has played and stays true until the next play()/setAnimation().
@@ -270,11 +269,11 @@ public:
     // target already borrowed is re-parented on the spot.
     void setHostViewport(RID p_viewport);
 
-    void setCellMapOverrideTexture(uint32_t cellmap_name_hash, const Ref<Texture2D>& texture);
+    void setCellMapOverrideTexture(const String& p_cellmap_name, const Ref<Texture2D>& p_texture);
+    Ref<Texture2D> getCellMapOverrideTexture(const String& p_cellmap_name) const;
     Ref<Texture2D> getCellMapTexture(uint32_t cellmap_name_hash) const;
 
-    // Re-apply current resource after the underlying binary changes on disk
-    // (mirrors the previous Resource::changed signal handler).
+    // Re-apply the current resource after its binary changes on disk.
     void onSSABReloaded();
 
     // ---- Part query API (for follow / attachment nodes) -------------------
@@ -329,7 +328,7 @@ public:
     static bool find_label_frame(const ss::format::AnimationData* p_animation, const LocalVector<SsLabel>& p_labels,
                                  const String& p_label, int& r_frame);
 
-    // ---- Override Layer (Phase 2): per-part runtime overrides ------------
+    // ---- Part overrides ---------------------------------------------------
     // Thin wrappers over the ssruntime override FFI. Each is a no-op returning
     // false when the part index is invalid or no runtime context is bound.
     // priority: 0=on-next-keyframe (NON), 1=until-next-animation, 2=permanent
@@ -416,6 +415,8 @@ public:
 private:
     // The frame the last seek landed on, until the update that reports it (see isSeekLanding).
     bool _seek_pending = false;
+    int _stopped_seek_reported_frame = -1;
+    int _frame_rate_override = 0;
     int _seek_landing_frame = -1;
     void _mark_seek_landing();
 
@@ -431,14 +432,16 @@ private:
 
     Ref<SSABResource> _ssabRes;
     HashMap<uint32_t, Ref<Texture2D>> _textures;
-    // Materials used by Shape and Effect batches; no PartColor mediation, the
-    // CanvasItem blend_mode does the work.
+    // By cell map name, so they outlast a reload or a pack that lacks the name.
+    // _textures is rebuilt from the pack and these.
+    HashMap<String, Ref<Texture2D>> _texture_overrides;
+    Ref<Texture2D> _cellmap_texture(const String& p_name, const String& p_image_path) const;
+    // Materials for Effect batches: a CanvasItemMaterial blend mode, no PartColor.
     HashMap<int, Ref<CanvasItemMaterial>> _blend_materials;
-    // Shared ShaderMaterial cache for shader variants whose catalog entry has
-    // `is_per_part=false` (Default and any future shareable variants). Key is
-    // a composite of (shader_id_hash << 32 | blend_type) so the same material
-    // is reused across parts with matching shader+blend. Per-part variants
-    // are not cached here — they come from a per-shader_id pool (TBD).
+    // Shared ShaderMaterial cache for the Default variant (is_per_part=false). Key
+    // is a composite of (shader_id_hash << 32 | blend_type) so the same material
+    // is reused across parts with matching shader+blend. Per-part variants use
+    // _per_part_material_pools.
     HashMap<uint64_t, Ref<ShaderMaterial>> _partcolor_materials;
     // Source Shader resources keyed by the same (shader_id_hash, blend_type)
     // composite. Shaders themselves are always shareable (the per-part
@@ -577,6 +580,9 @@ private:
     // `_drawAnimation`, which both the owner's and the child's path go through.
     bool _overrides_dirty = false;
     bool _mixing_applied(bool p_ok);
+    // For the calls the node reports: a reason nothing takes would stay behind and
+    // name the next failure.
+    bool _mixing_reported(bool p_ok);
     // The resolved animation's name hash, or 0 for a name the SSAB lacks.
     uint32_t _find_animation_hash(const String& p_name) const;
     // A crossfade or a track animation on track 0 hands the character to
@@ -590,9 +596,7 @@ private:
 
     // Per-Instance-part state: child player + transition tracking. Indexed by
     // part_index; non-Instance slots hold a default-constructed entry with
-    // `player == nullptr`. Identity of the last applied EventInstance setup
-    // is compared against `ss_event_instance_info` returned from ssruntime to
-    // detect transitions and re-apply playback config only on the edge.
+    // `player == nullptr`.
     struct InstanceChildState {
         SsInternalPlayer* player = nullptr;
         // Owns transition detection, child-ctx playback config, and frame
@@ -632,7 +636,7 @@ private:
     HashMap<uint32_t, Ref<SSABResource>> _external_ssabs_by_pack_hash;
 
     // Per-frame draw context: SoA pointers and frame-shared bindings fetched
-    // once at the top of `drawAnimation`.
+    // once at the top of `_drawAnimation`.
     struct DrawFrame {
         RenderingServer* rs;
         const ss::runtime::FrameData* frameData;
@@ -716,7 +720,7 @@ private:
     };
 
     // Shape batches share the shader pipeline with Normal/Mesh. Without a
-    // texture, the shader's default sampler returns white, so the SS6 PartColor
+    // texture, the shader's default sampler returns white, so the PartColor
     // compositing formula reduces to a meaningful tint over white. The CUSTOM0
     // stream carries the same (rate, blend_idx, pma_flag, reserved) tuple; UVs
     // are zero-filled because there's no texture to sample meaningfully.
@@ -740,8 +744,7 @@ private:
         SsVec2Array verts;
         SsVec2Array uvs;
         SsColorArray colors;
-        // 4 floats per vertex: (rate, blend_idx, pma_flag, reserved). See the
-        // shader source comment for the role of each component.
+        // 4 floats per vertex: (rate, blend_idx, pma_flag, reserved).
         SsFloatArray custom0;
         SsIntArray indices;
     };
@@ -832,7 +835,7 @@ private:
     ShapeGeometryBuffers _shape_buf;
     MeshGeometryBuffers _mesh_buf;
 
-    // ---- CBP masking (clever bit packing) ----------------------------------
+    // ---- Masking -----------------------------------------------------------
     // One entry per part that writes the mask this frame. Rebuilt by
     // `_build_mask_writers` each frame from draw_order, static PartData, and the
     // per-frame mask / hide that say whether a writer writes at all.
@@ -919,19 +922,19 @@ private:
     // or an ancestor instance part that is a mask target reaches it.
     bool _mask_active() const { return _has_mask_capable_parts() || _inherited_mask.masked; }
 
-    // ---- CBP coverage bitmap (offscreen RGBA8, 24 mask bits per tile) ------
+    // ---- Coverage bitmap (offscreen RGBA8, 24 mask bits per tile) ----------
     // The coverage render target (viewport + canvas + canvas-item pool) is a
     // size-classed resource borrowed from a process-global pool while this
     // player is actively masking, and returned when it stops. The mask writers'
     // geometry is rendered into it by `_render_mask_coverage`; maskable shaders
-    // sample the result (P3). Acquired by `_acquire_mask_target`, returned by
+    // sample the result. Acquired by `_acquire_mask_target`, returned by
     // `_release_mask_target` / `_free_mask_targets`. The viewport renders with
     // UPDATE_ONCE, parented to `_host_viewport` so it is drawn before the parts
     // that sample it.
     SsMaskCoverageTarget* _mask_target = nullptr; // borrowed; null when idle
     RID _host_viewport;                        // viewport the owning node draws into
     bool _mask_pool_registered = false;        // this player counts as a pool user
-    Ref<Shader> _mask_write_shader;            // loaded from SS_MASK_WRITE
+    Ref<Shader> _mask_write_shader;            // loaded from SS_MASK_WRITE_SHADER
     Vector<Ref<ShaderMaterial>> _mask_write_materials; // per-instance, pooled
     int _mask_write_materials_in_use = 0;
     // What each of `_mask_write_materials` was last given (see MaskUniforms).
@@ -1011,7 +1014,7 @@ private:
     SsVec2Array _cov_xform_verts;
 
     // Frame mask state derived by _render_mask_coverage and consumed when
-    // emitting maskable parts (P3). `_mask_meta_array` is one Vec4 per writer:
+    // emitting maskable parts. `_mask_meta_array` is one Vec4 per writer:
     // (open, close, bit, op_invert) — the writer's interval on the tree sequence.
     Array _mask_meta_array;
     // Bumped whenever a frame's `_mask_meta_array` differs from the one before,
@@ -1039,7 +1042,7 @@ private:
     // the instance part's own flags take part, one level deep: what the caller
     // itself inherited from further up does not reach the sub-animation, and
     // the flags apply whether or not anything above masks at all. That is what
-    // SpriteStudio 7.5 draws for InstancePropagationTired3 (a mask_influence==0
+    // the SpriteStudio editor draws (a mask_influence==0
     // instance leaves its own parts unmasked, while the parts of the instances
     // inside it are still judged on their own instance parts). The identity is
     // (influence = true, visible_inside = false), so a top-level animation
@@ -1068,6 +1071,8 @@ private:
     // part tree is pack-level, so selecting another animation cannot change it),
     // so it is computed once and reset in `setSSABResource`.
     bool _has_mask_capable_parts() const;
+    bool _tree_has_clipping() const;
+    mutable int8_t _static_tree_clipping = -1; // -1 unknown, 0 no, 1 yes
     mutable int8_t _static_mask_capable = -1; // -1 unknown, 0 no, 1 yes
 
     // The resolved per-part outcome for one frame.
@@ -1076,8 +1081,7 @@ private:
         bool visible_inside = false; // polarity, after composition
     };
     // Single seam for "is this part masked, and with which polarity" — the emit
-    // paths all go through here so composition (and any future caching or
-    // shared-material fast path) lives in one place.
+    // paths all go through here so composition lives in one place.
     PartMaskDecision _resolve_part_mask(const DrawFrame& f, int p_idx, uint16_t rank) const;
     // Write the decision onto the part's material, and enrol it in the owner's
     // walk when this player is an instance child.
@@ -1111,6 +1115,16 @@ private:
     // is a change the next draw has to pick up. Passes the result through so
     // the mutators stay one line.
     bool _override_applied(bool p_ok);
+    struct PassedEvent {
+        uint32_t source = 0;
+        int32_t animation = -1;
+        int32_t event = -1;
+    };
+    LocalVector<PassedEvent> _passed_events;
+    void _report_stopped_seek();
+    const ss::format::SsAnimeBinary* _take_passed_events();
+    void _dispatch_passed_events(const ss::format::SsAnimeBinary* p_binary);
+
     // Why the runtime refused the last override or mixing command, from its
     // last error; empty when the command stopped before reaching the runtime.
     // The user-facing node reports it, once.
@@ -1186,7 +1200,7 @@ private:
     void _reset_slots_playback_state();
     // Per-tick instance child driver. Runs in the sim phase (called from
     // `update`), before `_drawAnimation`. Per slot, queries
-    // `ss_runtime_get_active_event_instance` (returns SS6 default semantics
+    // `ss_runtime_get_active_event_instance` (returns the default semantics
     // when no event is active), then delegates to `_drive_instance_slot`.
     // `_emit_instance_slot` later positions the already-drawn child under
     // the slot's batch CI.
@@ -1206,11 +1220,8 @@ private:
     // children would stay frozen at their previous end_frame.
     void _update_instance_children(float parent_frame_no, float delta_seconds, bool parent_looped);
 
-    // Per-slot driver: detects the transition edge (info identity changed
-    // vs. `state.last_*`), resolves label hashes against the *child's*
-    // runtime context (so dynamic-swap of the child's ssab keeps working),
-    // applies playback config + `play()` only on transition, then steps the
-    // child synced or independent.
+    // Per-slot driver: hands the slot's step to ss_instance_slot_step, starts the
+    // child with play() on a transition, then redraws it if its frame changed.
     void _drive_instance_slot(InstanceChildState& state,
                               SsInternalPlayer* child,
                               const ss_event_instance_info& info,
@@ -1237,10 +1248,10 @@ private:
     bool _subtree_borrow_stale() const;
 
     void _apply_blend_material(RenderingServer* rs, RID ci, ss::format::BlendType blend_type);
-    // ShaderMaterial variant for Normal and Mesh batches. PartColor is handled
+    // ShaderMaterial variant for Normal, Shape and Mesh batches. PartColor is handled
     // in the shader (per-vertex CUSTOM0 carries rate / blend_idx / pma flag).
-    // `shader_id_hash` selects the fragment shader variant from SHADER_CATALOG
-    // (see ss_internal_player.cpp); parts without an SS Shader attribute pass
+    // `shader_id_hash` selects the fragment shader variant from EMBEDDED_SHADERS
+    // (ss_shader_setup.h); parts without an SS Shader attribute pass
     // the Default id_hash so all callers share one dispatch path.
     void _apply_partcolor_material(RenderingServer* rs, RID ci, uint32_t shader_id_hash, ss::format::BlendType blend_type);
     Ref<Shader> _ensure_partcolor_shader(uint32_t shader_id_hash, ss::format::BlendType blend_type);
@@ -1261,9 +1272,7 @@ private:
     // `cellmap_name_hash` is fnv1a of the cellmap name without .ssce — the
     // same hash that keys `_textures` (which is populated by `_loadTextures`
     // from cellmap entries). Returns a null Ref when the hash is 0 (no map
-    // bound) or the cellmap is not loaded. `cell_name_hash` is currently
-    // unused — the per-cell pixel rect inside the cellmap atlas is left to
-    // the shader / future task. See ss_library_fs.glsl uniforms.
+    // bound) or the cellmap is not loaded.
     Ref<Texture2D> _resolve_map_texture(uint32_t cellmap_name_hash);
     // Read the part's SS Shader attribute (if any) out of the current
     // frame's PartAttributeShader vector and pair it with the catalog entry.

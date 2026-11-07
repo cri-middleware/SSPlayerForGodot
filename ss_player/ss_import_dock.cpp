@@ -59,7 +59,7 @@ SSImportControl::SSImportControl() {
     set_h_size_flags(Control::SIZE_EXPAND_FILL);
     set_v_size_flags(Control::SIZE_EXPAND_FILL);
 
-    // 2. Output Dir row
+    // Output Dir row
     {
         VBoxContainer *output_vbox = memnew(VBoxContainer);
         add_child(output_vbox);
@@ -107,7 +107,7 @@ SSImportControl::SSImportControl() {
     file_dialog->connect("dir_selected", Callable(this, "_on_dir_selected"));
     add_child(file_dialog);
 
-    // 3. Drop area (compact, fixed height)
+    // Drop area (compact, fixed height)
     {
         drop_panel = memnew(Panel);
         drop_panel->set_custom_minimum_size(Size2(0, 200));
@@ -135,7 +135,7 @@ SSImportControl::SSImportControl() {
         drop_panel->add_child(instruction_label);
     }
 
-    // 4. Recent SSPJs section
+    // Recent SSPJs section
     {
         HBoxContainer *recent_header = memnew(HBoxContainer);
         add_child(recent_header);
@@ -160,12 +160,12 @@ SSImportControl::SSImportControl() {
         scroll->add_child(recent_vbox);
     }
 
-    // 5. Right-click popup (single shared instance)
+    // Right-click popup (single shared instance)
     recent_popup = memnew(PopupMenu);
     recent_popup->connect("id_pressed", Callable(this, "_on_recent_menu_id_pressed"));
     add_child(recent_popup);
 
-    // 6. Footer: plugin + converter version (moved to bottom)
+    // Footer: plugin + converter version
     {
         VBoxContainer *vbox = memnew(VBoxContainer);
         add_child(vbox);

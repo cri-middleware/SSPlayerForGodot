@@ -27,8 +27,7 @@
 // Library functions come before entry points so vertex()/fragment() can call
 // them without forward declarations.
 //
-// `_PartColorCoef` table (ss_library_vs.glsl) mirrors the SS6 SDK reference
-// (Common/Drawer/ssplayer_render_gl.cpp:1203-1206):
+// `_PartColorCoef` table (ss_library_vs.glsl) mirrors the SS6 SDK's:
 //   Mix (0): fSrc=1-r, fDst=+r, fDstSrc=0   -> lerp(pixel, color, r)
 //   Mul (1): fSrc=1-r, fDst=+r, fDstSrc=1   -> pixel * lerp(1, color, r)
 //   Add (2): fSrc=1,   fDst=+r, fDstSrc=0   -> pixel + color * r
@@ -43,13 +42,9 @@
 // applies it to any other canvas item. Both ride in varyings because the
 // fragment stage's COLOR already has the texture multiplied in.
 //
-// `ss_partcolor_blend()` applies the SS6 SDK PartColor compositing formula
-// (Common/Drawer/GLSL/default.fs:27). `ss_input_texture()` and
-// `ss_output_color()` are I/O extension points: the former wraps the input
-// sampler call (so future variants can fold inverse-PMA or other input-side
-// conversions there), and the latter wraps the output stage (currently
-// optional premultiplied-alpha conversion; linear/HDR conversions would
-// also go here).
+// `ss_partcolor_blend()` applies the SS6 SDK PartColor compositing formula.
+// `ss_input_texture()` wraps the input sampler call, and `ss_output_color()`
+// wraps the output stage (optional premultiplied-alpha conversion).
 const char* SHADER_HEADER = "shader_type canvas_item;\n";
 
 const char* LIBRARY_VS =
@@ -69,8 +64,7 @@ const char* DEFAULT_FS =
 ;
 
 // SS6 SDK port: "ss-sepia". Sepia / grayscale tone with a single signed
-// strength parameter (ss_param0). See shaders/ss_sepia.fs for the
-// migration mapping from the SS6 reference.
+// strength parameter (ss_param0).
 const char* SS_SEPIA_FS =
 #include "shaders/ss_sepia.fs"
 ;
@@ -161,7 +155,7 @@ const char* SS_SPOT_FS =
 ;
 
 // One render_mode line per GPU framebuffer blend variant. The four entries
-// correspond to SsBlendType::{Mix, Mul, Add, Sub} by enum value (0/1/2/3);
+// correspond to ss::format::BlendType {Mix, Mul, Add, Sub} by enum value (0/1/2/3);
 // any other blend value falls back to Mix. Mul also defines SS_BLEND_MUL,
 // which ss_output_color needs to keep transparent texels out of the multiply.
 inline const char* partcolor_render_mode_str(int blend_idx_for_render_mode) {

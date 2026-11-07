@@ -1,7 +1,7 @@
 extends Node2D
 
 # Example script demonstrating how to change textures (CellMap Overrides) 
-# at runtime in v2.x.
+# at runtime.
 
 @export var to_texture: Texture2D
 @export var change: bool = false

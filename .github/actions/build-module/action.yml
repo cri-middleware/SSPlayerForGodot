@@ -4,7 +4,7 @@ description: Build Godot itself with ss_player compiled in, for one platform and
 # Expects the runtime for the platform in ss_player/runtime/, which the calling
 # job has already built for the GDExtension. Godot is cloned at the tag in
 # scripts/GODOT_VERSION.txt, so with the SCons cache restored only ss_player and
-# the link are rebuilt; a cold build is 15-60 minutes, depending on the platform.
+# the link are rebuilt.
 
 inputs:
   platform:

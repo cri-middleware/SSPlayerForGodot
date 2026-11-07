@@ -28,5 +28,5 @@ public:
 #endif
 };
 
-#endif // CLICKABLE_LABEL_HPP
+#endif // CLICKABLE_LABEL_H
 #endif // #ifdef TOOLS_ENABLED

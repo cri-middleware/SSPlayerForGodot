@@ -1,5 +1,5 @@
 ; Test project for the headless suite. Not a sample — the samples are under
-; examples/, and MAINTAINING_PLAYERS.md is why they stay separate: a project
+; examples/, and they stay separate: a project
 ; that is both the demo and the scratch pad fills its source map with whatever
 ; a developer converted last and stops being committable.
 ;

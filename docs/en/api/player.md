@@ -245,12 +245,12 @@ Audio parts play through Godot out of the box — the node owns a pooled set of 
 
 A `Resource` subclass with a single overridable method. Assigning one to `audio_backend` **suppresses the built-in playback**, `audio_volume` and `audio_bus` included, so the backend owns voice lifecycle and play counts.
 
-* `play_audio(payload: Dictionary, ssab: SSABResource, player: Node) -> void`: Called once for each audio event the built-in playback would have sounded, with the same `payload` the `audio` signal carries. Like the built-in playback, it is not called while `play_audio` is off, while playback is not moving forward (`is_playing_forward()` is `false`), or for the frame a seek landed on; the `audio` signal is still sent in all three cases. The default implementation does nothing.
+* `_play_audio(payload: Dictionary, ssab: SSABResource, player: Node) -> void`: Called once for each audio event the built-in playback would have sounded, with the same `payload` the `audio` signal carries. Like the built-in playback, it is not called while `play_audio` is off, while playback is not moving forward (`is_playing_forward()` is `false`), or for the frame a seek landed on; the `audio` signal is still sent in all three cases. The default implementation does nothing.
 
 ```gdscript
 extends SpriteStudioAudioBackend
 
-func play_audio(payload: Dictionary, ssab: SSABResource, player: Node) -> void:
+func _play_audio(payload: Dictionary, ssab: SSABResource, player: Node) -> void:
     var info := ssab.get_sound_info(payload["sound_list_name_hash"], payload["sound_name_hash"])
     if not info.is_empty():
         MyMiddleware.play(info["path"], payload["loop_num"])
@@ -270,4 +270,4 @@ The `frame_no` property is animatable, so an `AnimationPlayer` can scrub a Sprit
 > [!IMPORTANT]
 > While the `AnimationPlayer` drives `frame_no`, do **not** let the node play itself — leave `Autoplay` off and don't call `play()`. Otherwise the node's own playback and the keyframed `frame_no` fight each other every frame.
 
-No setup beyond this is required: keyframe values live in the `AnimationPlayer`'s animation (the node's `frame_no` is not stored in the scene), and the same track drives playback at runtime.
+No setup beyond this is required: keyframe values live in the `AnimationPlayer`'s animation (the node's `frame_no` is not stored in the scene), and the same track drives playback at runtime. Each frame the track lands on fires its `user_data`, `signal_emitted` and `audio` once; the frames it steps over fire nothing, and a landing frame's audio keys are not sounded.

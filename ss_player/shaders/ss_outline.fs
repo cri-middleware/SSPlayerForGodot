@@ -1,6 +1,6 @@
 R"GLSL(
 void fragment() {
-    // ss-outline: ported from SS6 SDK (Common/Drawer/GLSL/ss-outline.fs).
+    // Ported from the SS6 SDK shader of the same name.
     // ss_param0 = fThreshold (signed); |fThreshold| is the alpha cutoff
     // used to test the 4-neighbour cross. A pixel survives when its own
     // alpha is above the cutoff AND at least one orthogonal neighbour is

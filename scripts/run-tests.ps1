@@ -165,9 +165,8 @@ custom module build), so loading the extension registers every class twice.
     exit 2
 }
 
-# Asked of the output as a whole. `-notmatch` on an array returns the lines that
-# lack the marker, so it read every finished run as stopped, and an empty one as
-# finished.
+# Asked of the output as a whole: `-notmatch` on an array returns the lines that
+# lack the marker, not a boolean.
 $finished = @($output | ForEach-Object { "$_" } |
               Select-String -SimpleMatch "==== SUITE FINISHED ====").Count -gt 0
 if (-not $finished) {

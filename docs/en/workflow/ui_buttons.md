@@ -68,7 +68,7 @@ The states are read from the animation the player has selected. Selecting anothe
 | `stretch_mode` | `STRETCH_FIT` | `STRETCH_FIT` fits the whole canvas inside the button; `STRETCH_COVER` fills the button with it; `STRETCH_KEEP` keeps the authored size with the player's origin at the button's center |
 | `alignment_horizontal` / `alignment_vertical` | `ALIGNMENT_CENTER` | Where the canvas sits when its shape differs from the button's: `ALIGNMENT_BEGIN` (left / top), `ALIGNMENT_CENTER`, `ALIGNMENT_END` (right / bottom). Ignored with `STRETCH_KEEP` |
 
-The canvas is the one the selected animation was authored in (see [The authored canvas](../api/player.md#the-authored-canvas)), so the fit does not change when a `state_clips` entry plays an animation with another canvas. Shift the artwork within it with the player's `offset`. Turn on the button's `clip_contents` to cut off what overhangs.
+The canvas is the one the selected animation was authored in (see [The authored canvas](../api/player.md#the-authored-canvas)), so the fit does not change when a `state_clips` entry plays an animation with another canvas. `STRETCH_FIT` and `STRETCH_COVER` fit the canvas with the player's `offset` applied, so `offset` does not move the artwork. To place it yourself, use `STRETCH_KEEP`, where `offset` moves it. Turn on the button's `clip_contents` to cut off what overhangs.
 
 ## Clicks on the artwork only
 

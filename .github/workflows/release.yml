@@ -1,8 +1,8 @@
 name: release gdextension
-# workflow_dispatch のみ。ref で役割が決まる。
-# ブランチからの実行はビルドのみ (release/X.Y ブランチ上の QA 用)。
-# v* タグからの実行は、upload_release (既定 true) で下書きの Release も作る。
-# タグにすでに Release があれば、下書きでも公開済みでも触れない。
+# workflow_dispatch only; the ref decides the role.
+# From a branch the run only builds (QA on a release/X.Y branch).
+# From a v* tag it also drafts the GitHub Release (upload_release, default true).
+# A tag that already has a Release, draft or published, is left untouched.
 on:
   workflow_dispatch:
     inputs:
@@ -20,7 +20,7 @@ env:
   SCONS_CACHE: ~/.scons_cache
 
 # Least-privilege default token; the package job below elevates to
-# contents: write only to publish the GitHub Release.
+# contents: write only to draft the GitHub Release.
 permissions:
   contents: read
 
@@ -41,7 +41,7 @@ jobs:
         include:
           - name: 🐧 Linux (GCC)
           # A Linux binary runs only on a glibc at least as new as the one it was
-          # built against, and ubuntu-latest is moving to 26.04. 24.04 keeps the
+          # built against, and ubuntu-latest may move to a newer one. 24.04 keeps the
           # floor where the SDK's Linux builds are.
             os: ubuntu-24.04
             platform: linux
@@ -167,8 +167,6 @@ jobs:
 
           CERTIFICATE_PATH="$RUNNER_TEMP/build_certificate.p12"
           # Random per-run password for the throwaway keychain; never persisted.
-          # (The org also holds a TMP_KC_PASS secret, deliberately unused here —
-          # generating the password per run is strictly better than sharing one.)
           KEYCHAIN_PASSWORD="$(openssl rand -base64 24)"
 
           echo -n "$APPLE_DEV_ID_APP_CERT" | base64 --decode > "$CERTIFICATE_PATH"
@@ -281,7 +279,7 @@ jobs:
     needs: gdextension
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # Needs write access to publish the GitHub Release (softprops/action-gh-release).
+    # Needs write access to draft the GitHub Release (softprops/action-gh-release).
     permissions:
       contents: write
 

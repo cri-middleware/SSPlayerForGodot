@@ -36,7 +36,7 @@
 		</member>
 		<member name="on_part_hidden" type="int" setter="set_on_part_hidden" getter="get_on_part_hidden" enum="SpriteStudioPartAttachment2D.HiddenBehavior" default="0">
 			What to do on frames where the tracked part is hidden. See [enum HiddenBehavior].
-			This applies only to a part that exists but is hidden on the current frame. A part that is absent from the animation altogether always hides the target.
+			This applies only to a part that exists but is hidden on the current frame. A part name the [SSABResource] does not have always hides the target.
 			The attachment shows again only a target it hid itself, so a target you hide yourself stays hidden.
 		</member>
 	</members>

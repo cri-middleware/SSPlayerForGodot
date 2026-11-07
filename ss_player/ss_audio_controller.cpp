@@ -38,14 +38,9 @@ void SsAudioController::_start_voice(Voice &v, const Ref<AudioStream> &stream, f
 void SsAudioController::play(const Dictionary &payload, const Ref<SSABResource> &ssab,
                             SpriteStudioAudioBackend *backend, float volume, const StringName &bus) {
     // Override hook: hand the event off and skip built-in playback entirely
-    // (the backend owns play-count / lifecycle). Dispatched via callv so a
-    // GDScript subclass overriding play_audio is invoked.
+    // (the backend owns play-count / lifecycle).
     if (backend != nullptr) {
-        Array args;
-        args.push_back(payload);
-        args.push_back(ssab);
-        args.push_back(_owner);
-        backend->callv("play_audio", args);
+        backend->play_audio(payload, ssab, _owner);
         return;
     }
 

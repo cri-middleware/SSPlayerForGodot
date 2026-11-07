@@ -48,10 +48,7 @@ func _step(text: String, secs: float) -> void:
 
 func _run_demo() -> void:
 	# Discover what the loaded SSAB offers (also handy as a reference in Output).
-#	print("parts:    ", get_part_names())
 	var cellmap: String = get_cellmap_names()[0] # "Ringo"
-#	print("cellmap:  ", cellmap)
-#	print("cells:    ", get_cell_names(cellmap))
 
 	# Since the same part is accessed repeatedly, identify it by part-ID
 	# rather than its name (accessing by ID is slightly faster).
@@ -61,12 +58,12 @@ func _run_demo() -> void:
 		clear_all_part_overrides()
 		await _step("Ringo Override Demo — no overrides", 1.5)
 
-		# 1) Color — tint the body red (Normal-only; priority 1 = until next animation,
+		# 1) Color — tint the body blue (Normal-only; priority 1 = until next animation,
 		#    so it survives animation loops).
 
 #		set_part_color_override("apple", Color(0.0, 0.2, 1.0, 0.75))			# Access by name.
 		set_part_color_override_by_index(part_id, Color(0.0, 0.2, 1.0, 0.75))	# Access by id.
-		await _step("1) Color override:  body -> red", 2.0)
+		await _step("1) Color override:  body -> blue", 2.0)
 
 		# 2) Color (4 corners) — one colour per vertex gives a gradient across the part.
 		#    Corner order is left-top, right-top, left-bottom, right-bottom. This shares
@@ -76,12 +73,12 @@ func _run_demo() -> void:
 			Color(0.1, 0.3, 1.0, 1.0), Color(0.1, 0.3, 1.0, 1.0)]))
 		await _step("2) Corner colour override:  body -> red-to-blue gradient", 2.0)
 
-		# 3) Visibility — force-hide the 'apple' and cascade to its children (the whole face).
+		# 3) Visibility — force-hide 'apple', and 'heta' by its own call.
 		clear_all_part_overrides()
 #		set_part_visibility_override("apple", true, true)			# Access by name.
 		set_part_visibility_override_by_index(part_id, true, false)	# Access by id.
 		set_part_visibility_override("heta", true, false)
-		await _step("3) Visibility override:  hide 'apple' with cascade ('heta' disappears)", 2.0)
+		await _step("3) Visibility override:  hide 'apple', and 'heta' by its own call", 2.0)
 
 		# 4) Cell — swap the 'apple' sprite to the 'effect3' cell in the Ringo cellmap.
 		clear_all_part_overrides()

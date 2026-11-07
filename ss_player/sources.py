@@ -3,7 +3,7 @@ import subprocess
 
 # FlatBuffers is used header-only here: the generated format/*.h headers pull in
 # flatbuffers/flatbuffers.h, whose whole reachable set (buffer/table/vector/
-# verifier/builder, 16 headers) is inline. Nothing links against the flatc-side
+# verifier/builder) is inline. Nothing links against the flatc-side
 # translation units (idl_parser.cpp, idl_gen_text.cpp, reflection.cpp,
 # util.cpp) -- schema compilation is libssconverter's job on the Rust side -- so
 # they are not built, and flatbuffers/src is not on the include path.
@@ -27,7 +27,7 @@ _ANDROID_ARCH_TO_ABI = {
 }
 
 def get_runtime_lib_path(base_dir, platform, arch):
-    # Unify logic: platforms like macos, ios, and web typically don't use arch subdirs in this project's structure
+    # These platforms ship a single library set, so there is no arch subdirectory.
     if platform in ['macos', 'ios', 'web']:
         return os.path.join(base_dir, "runtime", "libs", platform)
     elif platform == 'android':

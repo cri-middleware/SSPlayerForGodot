@@ -1,6 +1,6 @@
 R"GLSL(
 void fragment() {
-    // ss-blur: ported from SS6 SDK (Common/Drawer/GLSL/ss-blur.fs).
+    // Ported from the SS6 SDK shader of the same name.
     // 9-tap box blur over a roughly 16-pixel radius scaled by ss_param0
     // (-1..1 focus shift).
     //

@@ -35,7 +35,7 @@ class SSEditorPlugin : public EditorPlugin {
 
     // Bottom-panel transport UI (AnimationPlayer-style) shown when a
     // SpriteStudioPlayer2D is selected. The dock is always visible
-    // to support Godot 4.3+ floating windows, but disabled when unselected.
+    // to support floating windows, but disabled when unselected.
     SSPlaybackPanel *playback_panel = nullptr;
     Button *playback_panel_button = nullptr;
 
