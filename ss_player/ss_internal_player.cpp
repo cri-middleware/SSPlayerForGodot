@@ -1177,7 +1177,9 @@ bool SsInternalPlayer::_needs_continuous_update() const {
         if (slot.effect_slot && ss_effect_slot_is_independent(slot.effect_slot)) return true;
     }
     for (const auto& st : _instance_children) {
-        if (st.player && st.instance_slot && ss_instance_slot_is_independent(st.instance_slot)) return true;
+        if (!st.player) continue;
+        if (st.instance_slot && ss_instance_slot_is_independent(st.instance_slot)) return true;
+        if (st.player->_needs_continuous_update()) return true;
     }
     return false;
 }
