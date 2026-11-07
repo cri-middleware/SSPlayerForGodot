@@ -57,6 +57,20 @@ func test_naming_the_current_animation_changes_nothing() -> void:
 	not_ok(player.is_playing(), "and stops")
 
 
+func test_an_emptied_player_keeps_its_playback_settings() -> void:
+	player.speed_scale = 2.0
+	player.set_frame_rate(12)
+	player.frame_skip_enabled = false
+	player.set_playback_direction(1, 0)
+	var pack: Resource = player.ssab
+	player.ssab = null
+	player.ssab = pack
+	near(player.speed_scale, 2.0, "the speed stays")
+	eq(player.get_frame_rate(), 12, "the frame rate stays")
+	not_ok(player.frame_skip_enabled, "frame skipping stays off")
+	eq(player.get_playback_direction(), 1, "the direction stays")
+
+
 func test_play_starts_it_and_advance_moves_the_head() -> void:
 	player.play()
 	ok(player.is_playing(), "playing after play()")

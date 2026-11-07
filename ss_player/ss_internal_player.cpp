@@ -976,6 +976,7 @@ int SsInternalPlayer::getTotalFrames() const {
 }
 
 void SsInternalPlayer::setFrameRate(int p_fps) {
+    _frame_rate_override = p_fps;
     ss_runtime_set_frame_rate(runtime_ctx, p_fps);
 }
 
@@ -4087,8 +4088,18 @@ bool SsInternalPlayer::_build_mesh_geometry(const DrawFrame& f, int p_idx,
 void SsInternalPlayer::_fetchAnimation() {
     _stopped_seek_reported_frame = -1;
     if ((_strAnimationSelected.is_empty() && _animationSelectedHash == 0) || _ssabRes.is_null()) {
+        // Reset is the runtime's teardown and takes these with it. To this player an
+        // empty SSAB is one more SSAB change, and those keep them.
+        const float speed = ss_runtime_get_speed_scale(runtime_ctx);
+        const bool skip = ss_runtime_get_skip_frames(runtime_ctx);
+        const int direction = ss_runtime_get_playback_direction(runtime_ctx);
+        const int style = ss_runtime_get_playback_style(runtime_ctx);
         ss_runtime_reset(runtime_ctx);
         _reconfigure();
+        ss_runtime_set_speed_scale(runtime_ctx, speed);
+        ss_runtime_set_skip_frames(runtime_ctx, skip);
+        ss_runtime_set_playback_direction(runtime_ctx, direction, style);
+        ss_runtime_set_frame_rate(runtime_ctx, _frame_rate_override);
         _res_rebind_pending = true;
         _currentAnimationData = nullptr;
         // Free instance children before their parent canvas items — each

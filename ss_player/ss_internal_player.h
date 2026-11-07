@@ -417,6 +417,7 @@ private:
     // The frame the last seek landed on, until the update that reports it (see isSeekLanding).
     bool _seek_pending = false;
     int _stopped_seek_reported_frame = -1;
+    int _frame_rate_override = 0;
     int _seek_landing_frame = -1;
     void _mark_seek_landing();
 
