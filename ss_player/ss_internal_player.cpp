@@ -3092,10 +3092,10 @@ void SsInternalPlayer::_step_effect_slots(const DrawFrame& f) {
     // resolution, particle quad emission — runs inside ss_effect_slot_step.
     // The returned EffectDrawPlan carries everything Godot needs to draw:
     // commands keyed by cellmap_hash + blend, plus flat verts/uvs/colors/indices.
-    // _currentAnimationData is null whenever _fetchAnimation bailed out; the
-    // effect simulator still needs a sane frame rate to step with.
-    const float fps = (_currentAnimationData && _currentAnimationData->fps() > 0)
-                      ? (float)_currentAnimationData->fps() : 60.0f;
+    // The rate the animation plays at, the override included. The runtime reports 0
+    // with no animation set up; the effect simulator still needs a sane rate to step with.
+    const int frame_rate = ss_runtime_get_frame_rate(runtime_ctx);
+    const float fps = frame_rate > 0 ? (float)frame_rate : 60.0f;
     const auto* parts = f.frameData->parts();
     for (uint32_t i = 0; i < _effect_slots.size(); i++) {
         EffectSlotState& slot = _effect_slots[i];
