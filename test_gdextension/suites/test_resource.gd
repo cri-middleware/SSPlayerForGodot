@@ -13,6 +13,8 @@ const INSTANCE := "res://ssab_generated/overall/Instance.ssab"
 const SOUND := "res://ssab_generated/overall/Sound.ssab"
 ## A pack written by a case, for what only a file on disk can show.
 const SCRATCH := "user://test_resource_scratch.ssab"
+## Beside the fixtures, where a player finds the textures of the packs written to it.
+const GROWING := "res://ssab_generated/overall/test_resource_growing.ssab"
 
 var player: Node
 
@@ -24,6 +26,8 @@ func setup() -> void:
 func teardown() -> void:
 	if FileAccess.file_exists(SCRATCH):
 		DirAccess.remove_absolute(SCRATCH)
+	if FileAccess.file_exists(GROWING):
+		DirAccess.remove_absolute(GROWING)
 
 
 func _write(path: String, bytes: PackedByteArray) -> void:
@@ -229,16 +233,46 @@ func test_a_pack_reloaded_in_place_keeps_its_players_playing() -> void:
 	var res: Resource = load(RINGO)
 	var p := make_player(RINGO)
 	p.set_animation("walk")
+	p.loop_count = 3
 	p.play()
 	var dt := 1.0 / maxf(1.0, float(p.get_frame_rate()))
-	p.advance(dt)
+	for i in 3:
+		p.advance(dt)
 	eq(res.load_from_file(RINGO), OK, "the pack reloaded in place")
 	p.advance(dt)
 	eq(p.get_current_animation(), "walk", "the player kept its animation")
-	p.play()
-	for i in 3:
-		p.advance(dt)
-	near(p.get_frame_no(), 3.0, "and plays from the new bytes", 0.001)
+	ok(p.is_playing(), "kept playing")
+	eq(p.loop_count, 3, "kept its loop count")
+	near(p.get_frame_no(), 4.0, "and carried on from where it stood", 0.001)
+
+
+## What the importer does after a reconvert, on a player that is not playing.
+func test_a_reload_keeps_a_narrowed_section_and_a_held_frame() -> void:
+	var res: Resource = load(RINGO)
+	var p := make_player(RINGO)
+	p.set_animation("walk")
+	p.loop_count = 3
+	ok(p.set_animation_section(5, 15), "the section narrows")
+	p.frame_no = 8.0
+	res.emit_changed()
+	eq(p.loop_count, 3, "the loop count stays")
+	eq(p.get_animation_section_start(), 5, "the section's start stays")
+	eq(p.get_animation_section_end(), 15, "the section's end stays")
+	near(p.get_frame_no(), 8.0, "the held frame stays")
+	not_ok(p.is_playing(), "and it is still stopped")
+
+
+## A reconvert that lengthened the animation: a section nobody narrowed follows it.
+func test_a_reload_lets_a_whole_section_grow() -> void:
+	_write(GROWING, load(BASIC).data)
+	var res: Resource = load(GROWING)
+	var p := make_player(GROWING)
+	p.set_animation("anime_1")
+	var short_end: int = p.get_animation_section_end()
+	_write(GROWING, load(SOUND).data)
+	eq(res.load_from_file(GROWING), OK, "the longer pack reloaded in place")
+	p.advance(0.0)
+	gt(p.get_animation_section_end(), short_end, "the section grew with the animation")
 
 
 ## `data` is a storage property, so a copy of a pack carries its bytes. What a

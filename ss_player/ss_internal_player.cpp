@@ -818,6 +818,20 @@ float SsInternalPlayer::getSourceEventThreshold(int64_t p_source) const {
 
 void SsInternalPlayer::onSSABReloaded() {
     String prev_anim = _strAnimationSelected;
+    // Setting the animation up again stops it and puts the loop count and the
+    // section back to their defaults. A re-import changed the pack, not what the
+    // caller asked of this player. `_parsed` still holds the old buffer here, so
+    // the old animation can be read; a section that was the whole of it stays the
+    // whole of the new one, which may be longer.
+    const int loop = ss_runtime_get_loop_count(runtime_ctx);
+    const int section_start = ss_runtime_get_start_frame(runtime_ctx);
+    const int section_end = ss_runtime_get_end_frame(runtime_ctx);
+    const bool narrowed = _currentAnimationData
+            && (section_start != _currentAnimationData->start_frame() || section_end != _currentAnimationData->end_frame());
+    const bool playing = ss_runtime_is_playing(runtime_ctx);
+    const bool pausing = ss_runtime_is_pausing(runtime_ctx);
+    const float frame = ss_runtime_get_frame_no(runtime_ctx);
+
     Ref<SSABResource> current = _ssabRes;
     setSSABResource(current);
 
@@ -830,6 +844,20 @@ void SsInternalPlayer::onSSABReloaded() {
             }
         }
     }
+
+    ss_runtime_set_loop_count(runtime_ctx, loop);
+    if (!_currentAnimationData || _strAnimationSelected != prev_anim) return;
+    if (narrowed) ss_runtime_set_animation_section(runtime_ctx, section_start, section_end);
+    // The seek clamps to what the new data has; play's start frame does not.
+    ss_runtime_set_frame_no(runtime_ctx, frame);
+    const float kept = ss_runtime_get_frame_no(runtime_ctx);
+    if (playing) {
+        ss_runtime_play_with_start_frame(runtime_ctx, kept);
+        if (pausing) ss_runtime_pause(runtime_ctx);
+        // Carrying on is not starting over: the frame it stands on does not sound.
+        _mark_seek_landing();
+    }
+    _seek_and_redraw(kept, 0.0f, false);
 }
 
 void SsInternalPlayer::setAnimation(const String& strName) {
