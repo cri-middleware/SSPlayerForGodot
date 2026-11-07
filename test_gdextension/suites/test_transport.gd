@@ -45,6 +45,18 @@ func test_only_a_narrowed_section_is_saved() -> void:
 	ok(names.has("animation_section_end"), "a moved end is saved")
 
 
+func test_naming_the_current_animation_changes_nothing() -> void:
+	player.loop_count = 2
+	var finished: Array = []
+	player.animation_finished.connect(func(anim): finished.append(anim))
+	player.play()
+	for i in 100:
+		player.set_animation("anime_1")
+		player.advance(dt)
+	eq(finished.size(), 1, "a finite loop still finishes")
+	not_ok(player.is_playing(), "and stops")
+
+
 func test_play_starts_it_and_advance_moves_the_head() -> void:
 	player.play()
 	ok(player.is_playing(), "playing after play()")

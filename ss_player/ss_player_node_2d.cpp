@@ -453,12 +453,15 @@ bool SpriteStudioPlayer2D::set_source_event_threshold(int64_t source, float thre
 float SpriteStudioPlayer2D::get_source_event_threshold(int64_t source) const { return _internal->getSourceEventThreshold(source); }
 
 void SpriteStudioPlayer2D::setAnimation(const String& strName) {
-    const String before = _internal->getCurrentAnimation();
+    // Naming the animation already set up changes nothing. A state machine does
+    // it every frame, and writing the loop count rearms it: a finite loop would
+    // never finish.
+    if (strName == _internal->getCurrentAnimation()) return;
     _internal->setAnimation(strName);
     _apply_transport_settings();
     notify_property_list_changed();
     update_configuration_warnings();
-    if (_internal->getCurrentAnimation() != before) _drawn_rect_changed();
+    _drawn_rect_changed();
 }
 
 String SpriteStudioPlayer2D::getCurrentAnimation() const {
