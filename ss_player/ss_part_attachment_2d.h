@@ -28,8 +28,8 @@ class SpriteStudioPartAttachment2D : public Node2D {
     GDCLASS(SpriteStudioPartAttachment2D, Node2D);
 
 public:
-    // Behaviour when the tracked part is hidden on the current frame. A part
-    // absent from the animation entirely always hides the target regardless.
+    // Behaviour when the tracked part is hidden on the current frame. A part name
+    // the asset does not have always hides the target regardless.
     enum HiddenBehavior {
         FOLLOW_ALWAYS, // keep following the part's frame while it is hidden
         HIDE_TARGET,   // hide the driven target while the part is hidden
@@ -42,7 +42,7 @@ private:
     bool _use_global_coordinates = true;
     bool _update_position = true;
     bool _update_rotation = true;
-    // Off by default, as in every sibling Player: a follower is placed AT the
+    // Off by default: a follower is placed AT the
     // part, not SIZED BY it, and a health bar or a name plate stretching with a
     // breathing animation is rarely what was wanted. Turn it on for something
     // that is part of the artwork — a weapon in a hand. With all three on the

@@ -1,6 +1,6 @@
 R"GLSL(
 void fragment() {
-    // ss-wave: ported from SS6 SDK (Common/Drawer/GLSL/ss-wave.fs).
+    // Ported from the SS6 SDK shader of the same name.
     // Sinusoidal horizontal warp driven by texture-V coordinate.
     //   ss_param0 = fWidth   (frequency along V)
     //   ss_param1 = fHeight  (amplitude in pixel-width units; *0.5 of 384)

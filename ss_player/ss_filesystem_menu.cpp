@@ -247,7 +247,7 @@ void SSFileSystemContextMenu::_on_sspj_file_selected(const String &p_sspj_path) 
         return;
     }
 
-    // Stored sspj paths are always global (matching auto-recorded entries).
+    // record_ssab_source takes a global path and stores it relative to the project.
     String global_sspj = ProjectSettings::get_singleton()->globalize_path(p_sspj_path);
     importer->record_ssab_source(pending_ssab_path, global_sspj);
 

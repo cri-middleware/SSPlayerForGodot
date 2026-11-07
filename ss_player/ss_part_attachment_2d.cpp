@@ -95,7 +95,7 @@ void SpriteStudioPartAttachment2D::_on_player_frame_updated(float frame_no) {
 
     int idx = player->find_part_index(_part_name);
     if (idx < 0) {
-        // Part absent from this animation: nothing to follow, so hide the target.
+        // Unknown part name: nothing to follow, so hide the target.
         _hide_target(target);
         return;
     }

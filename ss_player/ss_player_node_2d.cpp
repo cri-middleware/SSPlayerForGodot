@@ -35,7 +35,8 @@ public:
     void onAudio(const Dictionary& payload) override {
         // Observation channel: always fires (any direction, even in the editor).
         _owner->emit_signal(SNAME("audio"), payload);
-        // Built-in / backend playback (forward-only, runtime-only).
+        // Built-in / backend playback (forward playback only, and not on a seek's
+        // landing frame).
         _owner->_handle_audio(payload);
     }
 
@@ -286,7 +287,7 @@ void SpriteStudioPlayer2D::_drawn_rect_changed() {
     emit_signal(SNAME("item_rect_changed"));
 }
 
-// ---- Override Layer (Phase 2) --------------------------------------------
+// ---- Part overrides ------------------------------------------------------
 
 // By-index variants. The runtime addresses parts by index, so these skip the
 // name lookup — resolve a name once via find_part_index() and reuse the index.
@@ -310,9 +311,9 @@ bool SpriteStudioPlayer2D::set_part_color_override_by_index(int part_index, cons
 bool SpriteStudioPlayer2D::set_part_color_override_corners_by_index(int part_index, const PackedColorArray& corners,
                                                                     ColorBlendOperation blend_op, OverridePriority priority) {
     // One argument rather than four, so this reads the same shape as the
-    // single-colour form. Four is the only
-    // valid length: a shorter array would silently leave corners at whatever the
-    // default Color is, which looks like a gradient bug rather than a bad call.
+    // single-colour form. Four is the only valid length: a shorter array would
+    // silently leave corners at whatever the default Color is, which looks like a
+    // gradient bug rather than a bad call.
     ERR_FAIL_COND_V_MSG(corners.size() != 4, false,
                         "corners must hold exactly 4 colours, in left-top, right-top, left-bottom, right-bottom order");
     return _refused(_internal->set_part_color_override_corners(part_index, corners[0], corners[1], corners[2], corners[3], (int)blend_op, (int)priority),
@@ -524,12 +525,10 @@ void SpriteStudioPlayer2D::set_audio_backend(const Ref<SpriteStudioAudioBackend>
 }
 Ref<SpriteStudioAudioBackend> SpriteStudioPlayer2D::get_audio_backend() const { return _audio_backend; }
 
-// Spelled the Godot way, not the family's. Every sibling Player calls this pair
-// `flipX` / `flipY`; here it is `flip_h` / `flip_v` with an `is_flipped_*`
-// reader, because that is what `Sprite2D` and `AnimatedSprite2D` already put on
-// a 2D node — a Godot user reaches for `flip_h` on anything that draws, and an
-// inspector row called `flip_x` next to a Sprite2D's `flip_h` would read as a
-// different feature. A departure with a reason.
+// `flip_h` / `flip_v` with an `is_flipped_*` reader, because that is what
+// `Sprite2D` and `AnimatedSprite2D` already put on a 2D node — a Godot user
+// reaches for `flip_h` on anything that draws, and an inspector row called
+// `flip_x` next to a Sprite2D's `flip_h` would read as a different feature.
 void SpriteStudioPlayer2D::set_flip_h(bool p_flip) {
     _flip_h = p_flip;
     _update_root_transform();
@@ -847,7 +846,7 @@ void SpriteStudioPlayer2D::_bind_methods() {
     ClassDB::bind_method( D_METHOD( "get_canvas_size" ), &SpriteStudioPlayer2D::get_canvas_size );
     ClassDB::bind_method( D_METHOD( "get_canvas_rect" ), &SpriteStudioPlayer2D::get_canvas_rect );
 
-    // ---- Override Layer (Phase 2): per-part runtime overrides -------------
+    // ---- Part overrides ---------------------------------------------------
     ClassDB::bind_method( D_METHOD( "set_part_visibility_override", "part_name", "force_hidden", "cascade" ), &SpriteStudioPlayer2D::set_part_visibility_override, DEFVAL(false) );
     ClassDB::bind_method( D_METHOD( "clear_part_visibility_override", "part_name" ), &SpriteStudioPlayer2D::clear_part_visibility_override );
     ClassDB::bind_method( D_METHOD( "set_part_color_override", "part_name", "color", "blend_op", "priority" ), &SpriteStudioPlayer2D::set_part_color_override, DEFVAL(COLOR_BLEND_MIX), DEFVAL(OVERRIDE_PRIORITY_HOLD_UNTIL_NEXT_ANIMATION) );
@@ -912,11 +911,9 @@ void SpriteStudioPlayer2D::_bind_methods() {
             PropertyInfo(Variant::DICTIONARY, "payload")
         )
     );
-    // The conventions' stem for this one is `signal`,
-    // and this is the one place the
-    // family cannot spell it: `signal` is a GDScript keyword, so a signal by
-    // that name cannot be connected to or awaited without fighting the parser.
-    // `_emitted` is the smallest suffix that keeps the stem readable.
+    // `signal` is a GDScript keyword, so a signal by that name cannot be connected
+    // to or awaited without fighting the parser. `_emitted` is the smallest suffix
+    // that keeps the name readable.
     ADD_SIGNAL(
         MethodInfo(
             "signal_emitted",
@@ -932,10 +929,7 @@ void SpriteStudioPlayer2D::_bind_methods() {
         )
     );
 
-    // Not in the conventions' required set:
-    // a host that called set_animation() already knows what it selected.
-    // It earns its place here because `current_animation` is an exported
-    // property, so the inspector, an AnimationPlayer track or a tool script can
+    // `current_animation` is an exported property, so the inspector, an AnimationPlayer track or a tool script can
     // mount a different clip without any of the node's own callers touching it.
     ADD_SIGNAL(MethodInfo("animation_changed", PropertyInfo(Variant::STRING, "anim_name")));
     ADD_SIGNAL(MethodInfo("animation_started", PropertyInfo(Variant::STRING, "anim_name")));
@@ -949,7 +943,7 @@ void SpriteStudioPlayer2D::_bind_methods() {
 
     // Properties are registered statically so they land in ClassDB (visible to
     // class_get_property_list and to binding generators). The hints that depend
-    // on the bound resource — the `animation` name list and the frame / section
+    // on the bound resource — the `current_animation` name list and the frame / section
     // ranges — are injected per-instance by _validate_property. The order here
     // is the inspector order; `cellmaps/*` still comes from _get_property_list
     // because its entries depend on the resource's cell maps.
@@ -958,10 +952,9 @@ void SpriteStudioPlayer2D::_bind_methods() {
         "set_ssab_resource",
         "get_ssab_resource"
     );
-    // The accessors are deliberately asymmetric. `set_animation` is the verb the
-    // whole family publishes and `get_current_animation` is its read,
-    // and ADD_PROPERTY names the two
-    // independently -- so the property reads as Godot expects
+    // The accessors are deliberately asymmetric: `set_animation` and its read
+    // `get_current_animation`, which ADD_PROPERTY names independently -- so the
+    // property reads as Godot expects
     // (`AnimationPlayer.current_animation` is this same thing) without inventing a
     // `set_current_animation` that would be a second name for one operation.
     ADD_PROPERTY(PropertyInfo(Variant::STRING, "current_animation", PROPERTY_HINT_ENUM, ""), "set_animation", "get_current_animation");
@@ -1021,8 +1014,8 @@ void SpriteStudioPlayer2D::_bind_methods() {
 
 // Runtime-only properties. They stay reachable by name (`player.frame_rate = 30`)
 // but are deliberately absent from the property list, so they are neither shown
-// in the inspector nor stored in the scene. Everything the inspector does show
-// is registered statically in _bind_methods.
+// in the inspector nor stored in the scene. Except the cellmaps/* entries,
+// everything the inspector shows is registered statically in _bind_methods.
 bool SpriteStudioPlayer2D::_set(const StringName& p_name, const Variant& p_property) {
     String name = p_name;
     if (name == "frame_rate") {

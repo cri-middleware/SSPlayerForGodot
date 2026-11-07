@@ -1,6 +1,6 @@
 R"GLSL(
 void fragment() {
-    // ss-pix: ported from SS6 SDK (Common/Drawer/GLSL/ss-pix.fs).
+    // Ported from the SS6 SDK shader of the same name.
     // Pixelation by quantising UV to a coarse grid of (1 + 96 * fPower)
     // source texels per cell. fPower of 0 leaves the original 1-texel grid
     // (i.e. no quantisation); larger fPower yields chunkier pixels.

@@ -1,6 +1,6 @@
 R"GLSL(
 void fragment() {
-    // ss-sepia: ported from SS6 SDK (Common/Drawer/GLSL/ss-sepia.fs).
+    // Ported from the SS6 SDK shader of the same name.
     // ss_param0 carries the signed strength `fPower`:
     //   fPower > 0  : warming sepia tint over the luminance-grayscale.
     //   fPower < 0  : pure luminance-grayscale, no warming.
@@ -10,10 +10,10 @@ void fragment() {
     float fPower = ss_param0;
     vec4 Pixel = ss_input_texture(TEXTURE, UV);
 
-    // ITU-R BT.601 weights from the SS6 reference (ss-sepia.fs:33-35).
+    // ITU-R BT.601 weights.
     float gray = dot(Pixel.rgb, vec3(0.298912, 0.586611, 0.114478));
     vec3 GrayRgb = vec3(gray);
-    // Sepia tint scale from the SS6 reference (ss-sepia.fs:43-45).
+    // Sepia tint scale.
     vec3 SepiaRgb = GrayRgb * vec3(1.07, 0.74, 0.43);
     // step(edge, x) returns 1.0 when x >= edge — here we want 1.0 when
     // fPower <= 0.0, so we test step(fPower, 0.0).

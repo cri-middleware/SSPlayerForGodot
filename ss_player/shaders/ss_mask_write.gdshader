@@ -1,11 +1,11 @@
 R"GLSL(
-// CBP mask coverage write shader.
+// Mask coverage write shader.
 //
-// Used only for rendering mask-writer geometry into the player's private
-// coverage bitmap (an offscreen RGBA8 viewport). Each writer is assigned one
-// of 32 bits; `mask_bit_color` carries that bit pre-encoded into the correct
-// RGBA8 channel (e.g. R for bits 0..7, value (1<<(bit%8))/255). Additive
-// blending then ORs the disjoint bits together across writers.
+// Used only for rendering mask-writer geometry into a pooled coverage bitmap
+// (an offscreen RGBA8 viewport the player borrows while it masks). Each writer
+// gets one of up to 96 bits (24 per tile); `mask_bit_color` carries that bit
+// pre-encoded into the right RGB channel. Additive blending then ORs the
+// disjoint bits together across writers.
 //
 // LIMITATION: add is only equivalent to OR while no texel receives the same bit
 // twice. That holds across writers (their bits are disjoint) and for the quad /
@@ -35,7 +35,7 @@ void fragment() {
 	}
 	// Godot's canvas `blend_add` is premultiplied (src.rgb * src.a), so the bit
 	// must be written with alpha 1 or it is dropped. Bits live in R/G/B only
-	// (24 writers); the alpha channel is the "any coverage" accumulator.
+	// (24 writers a tile); the alpha channel is the "any coverage" accumulator.
 	COLOR = vec4(mask_bit_color.rgb, 1.0);
 }
 )GLSL"

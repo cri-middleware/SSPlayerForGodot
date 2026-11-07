@@ -1,6 +1,6 @@
 R"GLSL(
 void fragment() {
-    // ss-spot: ported from SS6 SDK (Common/Drawer/GLSL/ss-spot.fs).
+    // Ported from the SS6 SDK shader of the same name.
     // Radial spotlight gradient centred at the cell rect's centre. fPower
     // scales the radius; fDecay blends between two falloff curves
     // (1/r-style fR vs linear fL); fColor mixes between white and the

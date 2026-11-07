@@ -199,7 +199,6 @@ void SSImporter::_scan_finish_or_advance() {
 }
 
 void SSImporter::_end_scan_and_convert() {
-    // Loose .sspj keep the legacy layout: <output>/<stem>/
     for (int i = 0; i < _scan_loose_sspj.size(); i++) {
         const String &src = _scan_loose_sspj[i];
         _plan_src.push_back(src);
@@ -820,7 +819,7 @@ void SSImporter::queue_reconvert(const PackedStringArray &p_sspj_files, const Pa
 }
 
 // --------------------------------------------------------------------------
-// Source map + helpers (unchanged)
+// Source map + helpers
 // --------------------------------------------------------------------------
 
 String SSImporter::_make_relative_path(const String &p_abs_path) const {

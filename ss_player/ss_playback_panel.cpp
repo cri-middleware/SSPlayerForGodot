@@ -72,7 +72,7 @@ void SSPlaybackPanel::_bind_methods() {
 void SSPlaybackPanel::_build_ui() {
     // Row 1: transport buttons (left) + loop + speed (right).
     // Animation selection is intentionally NOT here — it lives in the
-    // inspector's `animation` enum (single source of truth). This panel only
+    // inspector's `current_animation` enum (single source of truth). This panel only
     // mirrors the resulting frame range/label via the player's
     // property_list_changed signal.
     HBoxContainer *toolbar = memnew(HBoxContainer);
@@ -153,8 +153,7 @@ void SSPlaybackPanel::_build_ui() {
     _frame_spin = memnew(SpinBox);
     _frame_spin->set_min(0.0);
     _frame_spin->set_step(0.01);
-    // Godot 4.3+ allows setting a custom step for the UI arrows while keeping a fine-grained underlying step.
-    // Using string "set" ensures compilation compatibility with older Godot 4.x GDExtension headers.
+    // A custom step for the UI arrows, over a fine-grained underlying step.
     _frame_spin->set("custom_arrow_step", 1.0);
     _frame_spin->set_tooltip_text(tr("Current frame."));
     _frame_spin->connect("value_changed", callable_mp(this, &SSPlaybackPanel::_on_frame_spin_changed));
@@ -340,10 +339,8 @@ void SSPlaybackPanel::_on_play_pressed() {
     if (!_player) {
         return;
     }
-    // Play from the current frame explicitly. play() with no arg resumes via
-    // ss_runtime_play, which does not restart from a stopped state; passing the
-    // current frame routes through play_with_start_frame so it reliably plays
-    // from wherever the playhead is.
+    // play() with no argument starts at the head of the section; passing the
+    // current frame plays on from where it stands.
     _player->play(_player->getFrameNo());
 }
 

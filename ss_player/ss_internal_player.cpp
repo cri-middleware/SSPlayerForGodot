@@ -314,11 +314,9 @@ RID SsInternalPlayer::_ensure_batch_ci(int batch_idx) {
 }
 
 namespace {
-// Every failure below reports what the caller asked for and what was there
-// instead. Required is what the caller
-// cannot get another way: which pack, and what they asked it for. Listing the
-// names that WOULD have worked is deliberately not here -- `get_animation_names()`
-// and the inspector's Animation dropdown both already show them.
+// Labels for the error messages below, in the words the caller used. The names
+// that would have worked are left out on purpose: get_animation_names() and the
+// inspector's Animation dropdown already list them.
 
 // The bound pack, as the user would find it in the FileSystem dock. A pack
 // built in memory has no path, so say that rather than print empty quotes.
@@ -406,8 +404,7 @@ void SsInternalPlayer::_rebuild_part_index_map() {
         _part_names[i] = nm;
         // A mesh part is "skinned" when its binding carries influence bones; a
         // rigid (deform-only) mesh has none and follows its node transform
-        // faithfully. Same test every sibling player uses (PartMeshBinding
-        // influence_bone length > 0), so the flag agrees across engines.
+        // faithfully.
         const auto* mb = pd ? pd->mesh_binding() : nullptr;
         const auto* bones = mb ? mb->influence_bone() : nullptr;
         _part_skinned[i] = (bones && bones->size() > 0) ? 1 : 0;
@@ -461,7 +458,7 @@ String SsInternalPlayer::get_part_name(int p_part_index) const {
     return _part_names[p_part_index];
 }
 
-// ---- Override Layer (Phase 2) --------------------------------------------
+// ---- Part overrides ------------------------------------------------------
 
 bool SsInternalPlayer::_override_applied(bool p_ok) {
     if (p_ok) _overrides_dirty = true;
@@ -1163,7 +1160,6 @@ void SsInternalPlayer::_loadTextures(const Ref<SSABResource>& ssabRes) {
     }
 }
 
-
 namespace {
     constexpr int CORNERS_COUNT = 4;
     constexpr int MAX_VERTICES_COUNT = 5;
@@ -1478,9 +1474,9 @@ bool SsInternalPlayer::_build_mask_writers(const DrawFrame& f) {
         if (pure_mask) pure_mask_flags[p_idx] = 1;
 
         // A writer only writes where its per-frame mask is non-zero and it is not
-        // hidden. Both live in FrameData, so this is the one
-        // half of the classification PartData cannot answer: an authored MASK of 0
-        // is how a writer is switched off over a range of frames, and the cutout
+        // hidden. Both live in FrameData, so this is the one half of the
+        // classification PartData cannot answer: an authored MASK of 0 is how a
+        // writer is switched off over a range of frames, and the cutout
         // threshold cannot stand in for it — a shape mask samples no texture, so
         // its coverage is its whole geometry whatever the threshold says. A part
         // with no PartState this frame was not evaluated and writes nothing, which
@@ -1674,7 +1670,7 @@ void SsInternalPlayer::_render_mask_coverage(const DrawFrame& f) {
         rs->viewport_set_canvas_transform(_mask_target->viewport, _mask_tile_canvas(tile), ct);
     }
 
-    // player-local -> coverage UV [0,1], handed to maskable shaders (P3).
+    // player-local -> coverage UV [0,1], handed to maskable shaders.
     Transform2D uv;
     uv.columns[0] = Vector2(1.0f / bsize.x, 0);
     uv.columns[1] = Vector2(0, 1.0f / bsize.y);
@@ -1686,7 +1682,7 @@ void SsInternalPlayer::_render_mask_coverage(const DrawFrame& f) {
     // rasterized with, sliding the mask off its target as the bbox moves.
     _mask_local_to_uv = uv;
 
-    // Frame mask state consumed by the maskable emit path (P3).
+    // Frame mask state consumed by the maskable emit path.
     _mask_coverage_tex = rs->viewport_get_texture(_mask_target->viewport);
 
     // Decide the size class to borrow next frame from this frame's footprint.
@@ -2298,7 +2294,7 @@ SsInternalPlayer::_child_mask_context(const ss::format::PartData* pd) const {
     if (!pd) return c;
     // Only the instance part's own flags reach the sub-animation — not what this
     // player itself inherited — and they do whether or not anything above masks
-    // (SpriteStudio 7.5 on InstancePropagationTired3).
+    // (this is how the SpriteStudio editor draws it).
     c.influence = pd->mask_influence();
     c.visible_inside = pd->visible_inside_mask();
     // Whether a mask from here or above can reach the sub-animation's parts. A
@@ -2317,15 +2313,14 @@ SsInternalPlayer::_resolve_part_mask(const DrawFrame& f, int p_idx, uint16_t ran
     const InheritedMaskContext c = _compose_mask_context(pd);
     // A part opts out with mask_influence == 0, which the composition has
     // already folded in. For a clipping writer the *same* mask_influence is both
-    // its write op and its target flag, so mask_write must not
-    // force it to be a target: a mask_influence == 0 clipping part is opted out,
+    // its write op and its target flag, so mask_write must not force it to be a
+    // target: a mask_influence == 0 clipping part is opted out,
     // and its own colour is only clipped by *other* masks per its real influence.
     if (!c.influence) return d;
 
     d.visible_inside = c.visible_inside;
     // A part that draws only inside a mask draws nowhere that no mask covers —
-    // even when the animation has no mask at all (SpriteStudio 7.5), so it is
-    // always tested. With no writer the test fails everywhere.
+    // even when the animation has no mask at all, so it is always tested. With no writer the test fails everywhere.
     if (c.visible_inside) {
         d.masked = true;
         return d;
@@ -2349,8 +2344,7 @@ void SsInternalPlayer::_apply_inherited_mask(RID coverage_tex, const Array& meta
         if (rec.pm.mat.is_null()) continue;
         // The owner numbered this player's ranks on the tree sequence just now.
         // `ss_mask_visible_inside` was stamped per part while building, with the
-        // composed polarity — flattening it here is exactly the bug this walk
-        // exists to avoid.
+        // composed polarity; this walk must leave it alone.
         _send_mask_test(rec.pm.mat, _held_mask_uniforms(rec.pm), local_to_uv, count, meta, meta_version, tiles,
                         rec.rank < _mask_seq.size() ? _mask_seq[rec.rank] : 0.0f, coverage_tex);
     }
@@ -2423,7 +2417,7 @@ void SsInternalPlayer::_drawAnimation(float frame_no, float delta_seconds, bool 
 
     _index_frame_parts(f);
 
-    // CBP masking: collect this frame's mask writers. The top-root player owns
+    // Masking: collect this frame's mask writers. The top-root player owns
     // the mask state for the whole instance tree: it numbers the tree and bakes
     // every writer in it into one coverage bitmap. Instance children have drawn
     // already (they draw before the player that holds them), so their writers
@@ -2546,7 +2540,7 @@ void SsInternalPlayer::_drawAnimation(float frame_no, float delta_seconds, bool 
         } else if (kind == ss::runtime::DrawBatchKind_Mesh) {
             _emit_mesh_batch(f, batch, draw_order_data);
         }
-        // DrawBatchKind_Text / Nines: not yet implemented. Mask is not missing —
+        // DrawBatchKind_Text / Nines: not drawn (see docs/en/limitations.md). Mask is not missing —
         // it is consumed by the mask planner above, not emitted as a batch here.
     }
     _flush_default_run(f.rs);
@@ -2641,10 +2635,6 @@ void SsInternalPlayer::_flush_default_run(RenderingServer* rs) {
     _emit_partcolor_mesh(rs, run_ci, s.indices, _run.index_count, s.verts, s.colors, s.uvs,
                          s.custom0, _run.vertex_count, _run.texture);
 }
-
-
-
-
 
 void SsInternalPlayer::_fx_run_reserve(int quads) {
     EffectStreams& s = _fx_streams;
@@ -2853,8 +2843,8 @@ void SsInternalPlayer::_setup_instance_children() {
         child->setSSABResource(source);
         child->setAnimationByHash(anim_name_hash);
         child->stop();
-        // Keep the child hidden by default; _update_instance_children flips
-        // it visible only once an EventInstance becomes active for the slot.
+        // Hidden until _emit_instance_slot draws it (the draw loop hides every
+        // child first).
         child->setRootVisible(false);
         // Parenting under the slot's batch canvas_item is performed each
         // frame in _emit_instance_slot — batch CIs are recyclable so a
@@ -3107,8 +3097,8 @@ void SsInternalPlayer::_emit_instance_slot(const DrawFrame& f, RID ci, int p_idx
 void SsInternalPlayer::_step_effect_slots(const DrawFrame& f) {
     // Every slot, every frame, whether or not its part is in this frame's draw
     // order: a hidden effect part has no Effect batch, and stepping only the
-    // drawn ones froze an independently playing effect for as long as its part
-    // was hidden. A hidden part's slot steps with `draw` off, which moves its
+    // drawn ones would freeze an independently playing effect while its part is
+    // hidden. A hidden part's slot steps with `draw` off, which moves its
     // clock and builds no plan. The draw then reads each step back
     // (`_emit_effect_slot`).
     //
@@ -3256,8 +3246,8 @@ int SsInternalPlayer::_build_normal(const DrawFrame& f, int p_idx,
     const auto partColorIndex = part->part_color();
     if ((flags & ss::runtime::UpdateAttributeFlags_AttributePartColor) && partColorIndex >= 0 && f.frameData->parts_color() != nullptr) {
         auto pc = f.frameData->parts_color()->Get(partColorIndex);
-        // SDK converter has applied SS6-style mediation; ssab fields now carry
-        // a consistent semantic regardless of the source (blend_type, target):
+        // The converter has mediated these; ssab fields carry a consistent
+        // semantic regardless of the source (blend_type, target):
         //   pc->lt/rt/lb/rb->rgba.a  = rateAlpha (final-alpha source, u8)
         //   pc->lt/rt/lb/rb->rate    = colorA    (blend weight, float)
         auto to_color = [](const ss::runtime::SsAttributePartColorKeyValueColor& c) {
@@ -3278,8 +3268,7 @@ int SsInternalPlayer::_build_normal(const DrawFrame& f, int p_idx,
         if (blend_idx < 0 || blend_idx > 3) blend_idx = 0;
     }
 
-    // Output premultiplied-alpha flag. Held at 0 (disabled); the shader path
-    // reads this per-vertex so PMA can be enabled globally or per texture.
+    // Output premultiplied-alpha flag. Held at 0: premultiplied output is off.
     const float pma_flag = 0.0f;
 
     for (int j = 0; j < CORNERS_COUNT; j++) {
@@ -3414,7 +3403,6 @@ Vector4 SsInternalPlayer::_resolve_cell_rect_uv(const DrawFrame& f, int p_idx, c
     }
     const float* m = f.cell_meta + (p_idx * 6);
     // cell_meta layout: [pivot_x, pivot_y, size_w, size_h, rect_left, rect_top].
-    // See ssruntime/src/core/framedata.rs::evaluate_layer (cell_meta_per_part write).
     const float size_w    = m[2];
     const float size_h    = m[3];
     const float rect_left = m[4];
@@ -3499,8 +3487,7 @@ void SsInternalPlayer::_emit_partcolor_mesh(RenderingServer* rs, RID ci,
     // The PartColor goes in CUSTOM1 and there is no COLOR stream, so the
     // shader's COLOR is the canvas item's modulate alone (see ss_shader_setup.h).
     // Quantised the way the engine quantises ARRAY_COLOR -- to 8 bits,
-    // truncated, with the product in double -- so a part draws exactly as it
-    // did when the colour rode in COLOR. Carried as floats rather than as
+    // truncated, with the product in double. Carried as floats rather than as
     // RGBA8_UNORM, which would match ARRAY_COLOR byte for byte: the
     // Compatibility renderer does not read an RGBA8 custom stream back
     // correctly, and part colours lose their green and blue.
@@ -3697,8 +3684,8 @@ bool SsInternalPlayer::_build_shape_geometry(const DrawFrame& f, int p_idx,
         corner_colors[1] = to_color(pc->rt());
         corner_colors[2] = to_color(pc->lb());
         corner_colors[3] = to_color(pc->rb());
-        // Shape parts intentionally skip the PartColor compositing formula —
-        // the spec says "per-vertex color = pc.rgba directly, no calculation".
+        // Shape parts skip the PartColor compositing formula: the per-vertex
+        // colour is pc.rgba as it is.
         // Force the shader's per-vertex inputs to Mix mode with rate=1.0 so
         // ss_partcolor_blend(white, pc.rgb, varg) collapses to pc.rgb. The
         // original pc->blend_type() is preserved in ssab for inspection; the
@@ -3814,7 +3801,7 @@ void SsInternalPlayer::_emit_normal_batch(const DrawFrame& f,
         const float* drawing_m = f.get_world_matrix(p_idx);
         if (!drawing_m) continue;
 
-        // CBP masking: parts inside an active writer's scope must run the mask
+        // Masking: parts inside an active writer's scope must run the mask
         // test, which needs per-part uniforms (rank / polarity) — so force the
         // per-part path for them even when their shader is otherwise batchable.
         // visible_inside_mask parts draw ONLY inside a mask, so they must run the
@@ -3829,9 +3816,7 @@ void SsInternalPlayer::_emit_normal_batch(const DrawFrame& f,
         if (psi.is_per_part || masked) {
             // Draw the default parts gathered ahead of this per-part part first,
             // so they keep a lower (behind) draw_index than it — this per-part
-            // CI is acquired (and indexed) right below. Without it the run's
-            // parts would all sink behind the batch's per-part parts, which hid
-            // the rank-1 "face" behind the rank-0 shader-driven "head".
+            // CI is acquired (and indexed) right below.
             _flush_default_run(rs);
             // Per-part path: build into the small scratch buffers (vbase=0),
             // acquire dedicated canvas_item + ShaderMaterial, emit one mesh.
@@ -3903,9 +3888,8 @@ void SsInternalPlayer::_emit_shape_batch(const DrawFrame& f,
     if (count == 0) return;
 
     // batch->blend_type() is the runtime BlendType; converted to the ssab
-    // BlendType by raw u8 value (same convention as _emit_normal_batch). The
-    // shape pipeline now shares the PartColor shader with Normal/Mesh, so
-    // the GPU framebuffer blend is selected via _apply_partcolor_material.
+    // BlendType by raw u8 value (same convention as _emit_normal_batch). Shapes
+    // share the PartColor shader with Normal/Mesh, so the GPU framebuffer blend is selected via _apply_partcolor_material.
     const auto ssab_blend = (ss::format::BlendType)batch->blend_type();
 
     for (uint16_t k = 0; k < count; k++) {
@@ -3924,7 +3908,7 @@ void SsInternalPlayer::_emit_shape_batch(const DrawFrame& f,
         // returns white (Godot's default) for any UV. The PartColor formula
         // therefore composites against an implicit white "shape pixel".
 
-        // CBP masking: a maskable shape must run the per-part mask test, which
+        // Masking: a maskable shape must run the per-part mask test, which
         // needs per-part uniforms (rank / polarity) — so force the per-part path
         // for it. See _emit_normal_batch for the flag semantics.
         const uint16_t rank = (uint16_t)(batch->start_rank() + k);
@@ -3989,7 +3973,7 @@ void SsInternalPlayer::_emit_mesh_batch(const DrawFrame& f,
 
         if (!_build_mesh_geometry(f, p_idx, part, inv_tex_size, _mesh_buf)) continue;
 
-        // CBP masking: a masked target must run the mask test. A part opts out
+        // Masking: a masked target must run the mask test. A part opts out
         // with mask_influence=0; write_mask clipping parts are always affected.
         const uint16_t rank = (uint16_t)(batch->start_rank() + k);
         const PartMaskDecision md = _resolve_part_mask(f, p_idx, rank);
@@ -4056,7 +4040,7 @@ bool SsInternalPlayer::_build_mesh_geometry(const DrawFrame& f, int p_idx,
     }
 
     // Mesh part color is "Overall" only (a single flat color for the whole
-    // part — see SS6 DrawMesh); resolve once, apply to every vertex. After
+    // part); resolve once, apply to every vertex. After
     // SDK converter mediation: rgba.a = rateAlpha, rate = colorA, regardless
     // of the source target.
     const float part_alpha = part->alpha();
@@ -4155,8 +4139,7 @@ void SsInternalPlayer::_fetchAnimation() {
     // runtime the part identities may be new, so it drops every part override —
     // correct for a new SSAB, wrong for an animation change within one, where
     // Permanent-priority overrides are documented to persist (the runtime's
-    // setup step keeps them). Re-binding here made every `animation = ...`
-    // discard them.
+    // setup step keeps them).
     if (_res_rebind_pending || _parsed.is_null()) {
         // The resource's parse of its current buffer, shared with every other
         // player of it (and the instance children that play from it); a buffer

@@ -334,7 +334,7 @@ void SpriteStudioButton::_show() {
     if (!same_pack) _reported.clear();
 
     // An animation the button did not set was chosen by the scene or a script,
-    // and is the one to read the states from from now on.
+    // and is the one to read the states from now on.
     const String base_before = _base_animation;
     if (_base_animation.is_empty() || current != _shown_animation || !res->find_animation(_base_animation)) {
         _base_animation = current;

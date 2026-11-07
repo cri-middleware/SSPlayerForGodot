@@ -1,5 +1,5 @@
 R"GLSL(
-// HSB <-> RGB helpers ported verbatim from SS6 SDK (ss-hsb.fs).
+// HSB <-> RGB helpers ported from the SS6 SDK shader of the same name.
 vec4 ss_rgb_to_hsb(vec4 color) {
     vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
     vec4 p = mix(vec4(color.bg, K.wz), vec4(color.gb, K.xy), step(color.b, color.g));
@@ -16,7 +16,7 @@ vec4 ss_hsb_to_rgb(vec4 hsb) {
 }
 
 void fragment() {
-    // ss-hsb: ported from SS6 SDK (Common/Drawer/GLSL/ss-hsb.fs).
+    // Ported from the SS6 SDK shader of the same name.
     // ss_param0/1/2 = Hue / Saturation / Brightness shift (signed).
     float fHue = ss_param0;
     float fSaturation = ss_param1;

@@ -1,6 +1,6 @@
 R"GLSL(
 void fragment() {
-    // ss-bmask: ported from SS6 SDK (Common/Drawer/GLSL/ss-bmask.fs).
+    // Ported from the SS6 SDK shader of the same name.
     // ss_param0 = fBrightness (signed). Pixels are discarded when their
     // max(rgb) lies on the wrong side of the threshold:
     //   fBrightness > 0 : keep pixels with max(rgb) >  fBrightness (mask dark)

@@ -18,7 +18,7 @@ uniform float ss_param5;
 uniform float ss_param6;
 uniform float ss_param7;
 
-// ---- CBP masking (P3) -----------------------------------------------------
+// ---- Mask test -------------------------------------------------------------
 // Coverage bitmap (offscreen RGBA8, 24 writer bits in RGB), per-frame writer
 // metadata, and this part's number on the tree sequence / its polarity.
 // Masking is off by default
@@ -45,12 +45,10 @@ varying vec2 ss_mask_uv;
 // is not registered -- the headless renderer, which is what the test suite runs
 // on -- `shader_compiler.cpp` fails `custom_samplers.has(tex_builtin)`, falls
 // back to the project default sampler and logs one error per material built.
-// That buried every headless run's own result under its noise. Real renderers
-// resolve it, so nothing about a shipped build changes here.
+// Real renderers resolve it, so nothing about a shipped build changes here.
 //
-// This is still the input-side extension point. Fold a conversion in by
-// wrapping the sample rather than the sampler -- `ss_input_unpremultiply(
-// texture(tex, uv))` takes a vec4, so it stays an ordinary function.
+// This is still the input-side extension point: fold a conversion in by
+// wrapping the sample, not the sampler.
 #define ss_input_texture(tex, uv) texture(tex, uv)
 
 vec3 ss_partcolor_blend(vec3 pixel_rgb, vec3 color_rgb, vec4 varg) {

@@ -1,6 +1,6 @@
 R"GLSL(
 void fragment() {
-    // ss-circle: ported from SS6 SDK (Common/Drawer/GLSL/ss-circle.fs).
+    // Ported from the SS6 SDK shader of the same name.
     // Unwraps the cell rectangle into a disc: radial coord becomes uu
     // (0 at the rim, 1 at the centre) and angular coord becomes vv
     // (0..1 around the circle, offset by fPhase, direction-flipped by

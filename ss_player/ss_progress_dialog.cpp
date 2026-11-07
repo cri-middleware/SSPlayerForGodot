@@ -44,7 +44,6 @@ SSProgressDialog::SSProgressDialog() {
     vbox = memnew(VBoxContainer);
     background->add_child(vbox);
     vbox->set_anchors_and_offsets_preset(Control::PRESET_FULL_RECT, Control::PRESET_MODE_KEEP_SIZE, 10);
-    // add_child(vbox);
 
     status_label = memnew(Label);
     status_label->set_text("Please wait...");
