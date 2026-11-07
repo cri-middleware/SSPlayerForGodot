@@ -215,8 +215,7 @@ func test_audio_fires_whether_or_not_the_node_plays_it() -> void:
 class RecordingBackend extends SpriteStudioAudioBackend:
 	var frames: Array = []
 
-	@warning_ignore("native_method_override")
-	func play_audio(payload, _ssab, _player) -> void:
+	func _play_audio(payload: Dictionary, _ssab: SSABResource, _player: Node) -> void:
 		frames.append(int(payload.get("frame_no", -1)))
 
 

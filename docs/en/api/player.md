@@ -245,12 +245,12 @@ Audio parts play through Godot out of the box — the node owns a pooled set of 
 
 A `Resource` subclass with a single overridable method. Assigning one to `audio_backend` **suppresses the built-in playback**, `audio_volume` and `audio_bus` included, so the backend owns voice lifecycle and play counts.
 
-* `play_audio(payload: Dictionary, ssab: SSABResource, player: Node) -> void`: Called once for each audio event the built-in playback would have sounded, with the same `payload` the `audio` signal carries. Like the built-in playback, it is not called while `play_audio` is off, while playback is not moving forward (`is_playing_forward()` is `false`), or for the frame a seek landed on; the `audio` signal is still sent in all three cases. The default implementation does nothing.
+* `_play_audio(payload: Dictionary, ssab: SSABResource, player: Node) -> void`: Called once for each audio event the built-in playback would have sounded, with the same `payload` the `audio` signal carries. Like the built-in playback, it is not called while `play_audio` is off, while playback is not moving forward (`is_playing_forward()` is `false`), or for the frame a seek landed on; the `audio` signal is still sent in all three cases. The default implementation does nothing.
 
 ```gdscript
 extends SpriteStudioAudioBackend
 
-func play_audio(payload: Dictionary, ssab: SSABResource, player: Node) -> void:
+func _play_audio(payload: Dictionary, ssab: SSABResource, player: Node) -> void:
     var info := ssab.get_sound_info(payload["sound_list_name_hash"], payload["sound_name_hash"])
     if not info.is_empty():
         MyMiddleware.play(info["path"], payload["loop_num"])

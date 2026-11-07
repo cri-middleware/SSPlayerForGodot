@@ -94,7 +94,7 @@ Seeking fires only the destination frame's events. This is a [shared runtime con
 Work down the list — each item silences audio on its own:
 
 1. **The playback direction is backward.** Reverse playback plays no sound at all, including the return leg of ping-pong (the `audio` signal still fires).
-2. **`play_audio` is off**, or an **`audio_backend` is assigned** and its `play_audio()` does not reach your audio stack. Assigning a backend always suppresses the built-in player.
+2. **`play_audio` is off**, or an **`audio_backend` is assigned** and its `_play_audio()` does not reach your audio stack. Assigning a backend always suppresses the built-in player.
 3. **The sound file did not load.** Godot logs the path. `.wav` / `.ogg` import as `AudioStream`; a format Godot does not import resolves to `null` and is silently skipped.
 4. **`audio_volume` is 0**, or the bus named in `audio_bus` is muted.
 
