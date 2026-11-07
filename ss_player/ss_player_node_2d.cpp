@@ -468,8 +468,8 @@ PackedStringArray SpriteStudioPlayer2D::get_animation_names() const {
     Ref<SSABResource> res = _internal->getSSABResource();
     return res.is_valid() ? res->get_animation_names() : PackedStringArray();
 }
-// Built-in audio is fired-and-forgotten: it is not
-// coupled to animation pause or stop. Sounds already playing run to completion.
+// Built-in audio is fired-and-forgotten: it is not coupled to animation pause or
+// stop. Sounds already playing run to completion.
 void SpriteStudioPlayer2D::pause() { _internal->pause(); }
 void SpriteStudioPlayer2D::resume() { _internal->resume(); }
 void SpriteStudioPlayer2D::stop() { _internal->stop(); }
