@@ -176,7 +176,7 @@
 			<param index="0" name="cellmap_name" type="String" />
 			<param index="1" name="texture" type="Texture2D" />
 			<description>
-				Overrides the texture used for the named cell map. Pass an invalid texture to clear the override.
+				Overrides the texture used for the named cell map. Pass an invalid texture to clear the override. It reaches the parts of this player's own animation only: an Instance part's sub-animation keeps drawing from its own textures.
 			</description>
 		</method>
 		<method name="get_cellmap_texture" qualifiers="const">

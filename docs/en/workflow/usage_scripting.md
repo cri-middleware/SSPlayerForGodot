@@ -124,7 +124,7 @@ func change_costume():
     ss_player.set_cellmap_texture("Clothes 1", new_costume_texture)
 ```
 
-This feature allows you to build an efficient avatar system without needing to prepare multiple animation variations for each part.
+This feature allows you to build an efficient avatar system without needing to prepare multiple animation variations for each part. The swap reaches the parts of this player's own animation only: an Instance part's sub-animation keeps drawing from its own textures.
 
 > [!TIP]
 > ![Before outfit change](../assets/7-cellmap_override_before.png)

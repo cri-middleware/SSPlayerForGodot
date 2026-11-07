@@ -348,6 +348,7 @@ String part_label(const ss::format::PartData* p_part, int p_index) {
 } // namespace
 
 void SsInternalPlayer::setSSABResource(const Ref<SSABResource>& ssabRes) {
+    if (ssabRes != _ssabRes) _texture_overrides.clear();
     _ssabRes = ssabRes;
     _strAnimationSelected = "";
     _animationSelectedHash = 0;
@@ -1086,9 +1087,13 @@ void SsInternalPlayer::setCanvasItemDefaults(int p_texture_filter, int p_texture
 
 void SsInternalPlayer::setCellMapOverrideTexture(uint32_t cellmap_name_hash, const Ref<Texture2D>& texture) {
     if (cellmap_name_hash == 0) return;
+    // A stopped player has to show this the way it shows a part override.
+    _overrides_dirty = true;
     if (texture.is_valid()) {
+        _texture_overrides[cellmap_name_hash] = texture;
         _textures[cellmap_name_hash] = texture;
     } else {
+        _texture_overrides.erase(cellmap_name_hash);
         if (_ssabRes.is_valid()) {
             auto a = _ssabRes->get_ss_anime_binary();
             if (a->cellmaps() != nullptr) {
@@ -1142,6 +1147,9 @@ void SsInternalPlayer::_loadTextures(const Ref<SSABResource>& ssabRes) {
             Ref<Texture2D> texture = SsResourceLoader::get_singleton()->load(strImage);
             _textures[etexture->name_hash()] = texture;
         }
+    }
+    for (const KeyValue<uint32_t, Ref<Texture2D>> &E : _texture_overrides) {
+        _textures[E.key] = E.value;
     }
 }
 

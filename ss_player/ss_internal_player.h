@@ -432,6 +432,8 @@ private:
 
     Ref<SSABResource> _ssabRes;
     HashMap<uint32_t, Ref<Texture2D>> _textures;
+    // Apart from _textures, which a reload rebuilds from the pack.
+    HashMap<uint32_t, Ref<Texture2D>> _texture_overrides;
     // Materials used by Shape and Effect batches; no PartColor mediation, the
     // CanvasItem blend_mode does the work.
     HashMap<int, Ref<CanvasItemMaterial>> _blend_materials;

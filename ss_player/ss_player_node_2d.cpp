@@ -110,14 +110,6 @@ void SpriteStudioPlayer2D::setSSABResource(const Ref<SSABResource>& ssabRes) {
 
 void SpriteStudioPlayer2D::_on_ssab_changed() {
     _internal->onSSABReloaded();
-    // Re-apply overrides after reload
-    Ref<SSABResource> res = getSSABResource();
-    if (res.is_valid()) {
-        for (const KeyValue<String, Ref<Texture2D>> &E : _cellmap_overrides) {
-            uint32_t hash = res->get_cellmap_hash(E.key);
-            _internal->setCellMapOverrideTexture(hash, E.value);
-        }
-    }
     notify_property_list_changed();
     update_configuration_warnings();
     _drawn_rect_changed();
