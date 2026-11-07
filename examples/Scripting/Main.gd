@@ -3,7 +3,7 @@ extends Node2D
 @onready var player: SpriteStudioPlayer2D = $Ringo
 @onready var label: Label = $Label
 
-var anims = ["attack1", "walk", "wait"]
+var anims = ["attack1", "walk", "wait1"]
 var current_anim_index = 0
 
 func _ready() -> void:
