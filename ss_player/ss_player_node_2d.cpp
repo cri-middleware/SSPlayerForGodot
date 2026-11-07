@@ -129,6 +129,11 @@ void SpriteStudioPlayer2D::set_cellmap_texture(const String &cellmap_name, const
     Ref<SSABResource> res = getSSABResource();
     if (res.is_valid()) {
         uint32_t hash = res->get_cellmap_hash(cellmap_name);
+        // Clearing a name the pack has lost is what a scene saved before a
+        // reconvert does on load, and leaves nothing to report.
+        if (hash == 0 && texture.is_valid()) {
+            _refused(false, vformat("set_cellmap_texture(\"%s\")", cellmap_name), "the SSAB has no such cell map");
+        }
         _internal->setCellMapOverrideTexture(hash, texture);
     }
 }

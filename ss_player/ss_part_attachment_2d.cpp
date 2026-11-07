@@ -253,6 +253,8 @@ PackedStringArray SpriteStudioPartAttachment2D::get_configuration_warnings() con
         warnings.push_back(tr("No SpriteStudioPlayer2D found. Set \"follow_path\" or place this node under a SpriteStudioPlayer2D."));
     } else if (_part_name.is_empty()) {
         warnings.push_back(tr("Set \"part_name\" to the SpriteStudio part this node should follow."));
+    } else if (player->getSSABResource().is_valid() && player->find_part_index(_part_name) < 0) {
+        warnings.push_back(tr("\"part_name\" is not a part of this player's SSAB, so the target stays hidden."));
     } else if (player->is_part_skinned_mesh(_part_name)) {
         // Non-blocking: following still runs, but a bone-skinned mesh draws its
         // vertices by skinning while its own transform stays near the setup pose
