@@ -345,6 +345,9 @@ String part_label(const ss::format::PartData* p_part, int p_index) {
     }
     return vformat("#%d", p_index);
 }
+void warn_mask_writers_dropped() {
+    WARN_PRINT_ONCE("SpriteStudio: an animation masks with more than 96 mask parts at once (instances count each time they are placed); the rest are ignored. Restructure the data to use fewer.");
+}
 } // namespace
 
 void SsInternalPlayer::setSSABResource(const Ref<SSABResource>& ssabRes) {
@@ -1479,9 +1482,12 @@ bool SsInternalPlayer::_build_mask_writers(const DrawFrame& f) {
         const auto* ps = (p_idx < (int)_parts_by_idx.size()) ? _parts_by_idx[p_idx] : nullptr;
         if (!ps || ps->mask() == 0.0f || ps->hide()) continue;
 
-        // Bitmap holds 24 writers; keep scanning past that so the pure masks that
-        // did not fit are still flagged above.
-        if ((int)_mask_writers.size() >= MAX_MASK_WRITERS) continue;
+        // The bitmap holds MAX_MASK_WRITERS writers; keep scanning past that so the
+        // pure masks that did not fit are still flagged above.
+        if ((int)_mask_writers.size() >= MAX_MASK_WRITERS) {
+            warn_mask_writers_dropped();
+            continue;
+        }
 
         MaskWriter w;
         w.part_index = p_idx;
@@ -1623,9 +1629,7 @@ void SsInternalPlayer::_render_mask_coverage(const DrawFrame& f) {
     // placed on was numbered by the caller.
     _mask_writers_dropped = false;
     _mask_collect_tree(this, f, Transform2D(), -1.0f, rs, have_bbox, bmin, bmax);
-    if (_mask_writers_dropped) {
-        WARN_PRINT_ONCE("SpriteStudio: an animation masks with more than 96 mask parts at once (instances count each time they are placed); the rest are ignored. Restructure the data to use fewer.");
-    }
+    if (_mask_writers_dropped) warn_mask_writers_dropped();
 
     if (!have_bbox) {
         _mask_tree_spans.clear();
