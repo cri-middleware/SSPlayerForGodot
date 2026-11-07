@@ -68,7 +68,7 @@ func _ready() -> void:
 | `stretch_mode` | `STRETCH_FIT` | `STRETCH_FIT` はキャンバス全体をボタンの中に収め、`STRETCH_COVER` はボタン全体をキャンバスで覆います。`STRETCH_KEEP` は作者が作った大きさのまま、プレイヤーの原点をボタンの中心に置きます |
 | `alignment_horizontal` / `alignment_vertical` | `ALIGNMENT_CENTER` | キャンバスとボタンの形が違うときの寄せ方。`ALIGNMENT_BEGIN`（左・上）、`ALIGNMENT_CENTER`、`ALIGNMENT_END`（右・下）。`STRETCH_KEEP` のときは無視されます |
 
-収めるのは、選んでいるアニメーションのキャンバスです（[オーサリング時のキャンバス](../api/player.md#オーサリング時のキャンバス) を参照）。そのため、`state_clips` でキャンバスの違うアニメーションを再生しても、収め方は変わりません。キャンバスの中で絵をずらすには、プレイヤーの `offset` を使います。はみ出した部分を切り取るには、ボタンの `clip_contents` をオンにします。
+収めるのは、選んでいるアニメーションのキャンバスです（[オーサリング時のキャンバス](../api/player.md#オーサリング時のキャンバス) を参照）。そのため、`state_clips` でキャンバスの違うアニメーションを再生しても、収め方は変わりません。`STRETCH_FIT` と `STRETCH_COVER` は、プレイヤーの `offset` を含めたキャンバスを収めるので、`offset` では絵は動きません。自分で配置するなら、`offset` で絵が動く `STRETCH_KEEP` を使います。はみ出した部分を切り取るには、ボタンの `clip_contents` をオンにします。
 
 ## 絵の上でだけクリックを受ける
 

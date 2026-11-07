@@ -44,7 +44,7 @@
 			A replacement also serves the states that fall back to it: with one for [code]hover[/code], a [code]pressed[/code] with no label plays it too. One that names an animation or a label the [SSABResource] does not have is reported once in the Output panel, and the state plays as if it had none. A key that is not a state, or a value that names nothing, is listed in the node's configuration warnings.
 		</member>
 		<member name="stretch_mode" type="int" setter="set_stretch_mode" getter="get_stretch_mode" enum="SpriteStudioButton.StretchMode" default="0">
-			How the player's canvas is fitted into the button's rectangle. The canvas is that of the animation the states are read from, so a [member state_clips] entry that plays an animation with another canvas does not change the fit. The button sets the player's [member Node2D.position] and [member Node2D.scale]; move the artwork inside the canvas with [member SpriteStudioPlayer2D.offset] instead.
+			How the player's canvas is fitted into the button's rectangle. The canvas is that of the animation the states are read from, so a [member state_clips] entry that plays an animation with another canvas does not change the fit. The button sets the player's [member Node2D.position] and [member Node2D.scale]. [constant STRETCH_FIT] and [constant STRETCH_COVER] fit the canvas with [member SpriteStudioPlayer2D.offset] applied, so the offset does not move the artwork; to place it yourself, use [constant STRETCH_KEEP], where the offset moves it.
 		</member>
 	</members>
 	<constants>
