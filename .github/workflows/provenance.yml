@@ -20,7 +20,7 @@ jobs:
           python-version: '3.13'
 
       - name: Install ScanCode
-        run: pip install scancode-toolkit==32.5.0
+        run: pip install scancode-toolkit==32.5.0 'pluggy<1.7'
 
       - name: Export the tracked files
         run: |
@@ -40,7 +40,7 @@ jobs:
             echo '| File | Copyright holders | License |'
             echo '| --- | --- | --- |'
             jq -r '.files[] | select(.type == "file")
-              | {path, holders: ([.holders[].holder] | unique | map(select(test("CRI Middleware") | not))), license: .detected_license_expression_spdx}
+              | {path, holders: ([.holders[].holder] | unique | map(select(. != "CRI Middleware Co., Ltd."))), license: .detected_license_expression_spdx}
               | select((.holders | length > 0) or (.license != null and .license != "BSD-3-Clause"))
               | "| `\(.path)` | \(.holders | join("; ")) | \(.license // "") |"' scancode.json
           } > summary.md
