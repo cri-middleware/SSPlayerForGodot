@@ -5,7 +5,7 @@
   Each locale is built from its own config, and the stock partial just emits `alt.link` as
   written, so this rebuilds the href from the current `page.url`.
 
-  Two config values feed it, both documented where they are set:
+  Two config values feed it:
 
     extra.alternate[].link   the locale's subpath under the site root -- "" for English,
                              "ja/" for Japanese. NOT a full URL, unlike stock Material.
@@ -17,7 +17,7 @@
   which makes it relative to the page being rendered. Everything stays relative, so the
   site works under any path prefix and on a plain `python -m http.server`.
 
-  Keep this file in sync with the copies in SpriteStudio-Docs and the sibling player repos.
+  Keep this file identical across the repositories that carry it.
 -#}
 <div class="md-header__option">
   <div class="md-select">

@@ -1,18 +1,17 @@
 {% extends "base.html" %}
 
 {#-
-  Identical in every repository that carries it: everything site-specific is read from the
-  mkdocs configs.
+  Identical in every repository that carries it.
 
   `page.is_homepage` is never set by Zensical - it is undefined on every page, including
   the home page. The theme's own base.html branches on it to decide whether to append the
   site name to the title, so without a workaround the landing page renders as
-  "<site name> - <site name>" in the browser tab and in every link preview.
+  "<page title> - <site name>" rather than the site name alone, in the browser tab and in
+  every link preview.
 
   `page.url` is populated, and is the empty string on the home page, so derive it from
-  there. `page.is_homepage` is still consulted first: it is correct under MkDocs, and this
-  picks the fix up automatically if Zensical starts setting it. `"."` covers MkDocs, which
-  spells the home page URL that way rather than as an empty string.
+  there. `page.is_homepage` is still consulted first: it is correct under MkDocs. `"."`
+  covers MkDocs, which spells the home page URL that way rather than as an empty string.
 -#}
 {%- set page_url = page.url | default("") -%}
 {%- set is_homepage = page.is_homepage or page_url == "" or page_url == "." -%}
