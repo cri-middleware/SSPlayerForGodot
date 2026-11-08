@@ -1,6 +1,5 @@
-# Zensical's INHERIT concatenates YAML sequences (nav, plugins, extra.social, ...) instead of
-# replacing them, so each sequence is defined in exactly one of mkdocs.base.yml, mkdocs.yml and
-# mkdocs.ja.yml.
+# INHERIT merges mappings, but a locale config's sequence (nav, plugins, extra.social, ...)
+# replaces the base's whole: define each sequence here or in the locale configs, never both.
 
 site_name: SpriteStudio Player for Godot
 site_author: "CRI Middleware Co., Ltd."
