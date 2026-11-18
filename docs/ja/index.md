@@ -1,10 +1,5 @@
 # 🕹️ SpriteStudio Player for Godot
 
-本developブランチは現在開発中のバージョンです。  
-安定版は [mainブランチ](https://github.com/cri-middleware/SSPlayerForGodot/tree/main) または、[Releases](https://github.com/cri-middleware/SSPlayerForGodot/releases)から取得してください。  
-本developブランチに関してはいかなる保証もサポートも提供しません。リクエストやバグ報告への返信もできません。  
-インターフェースは予告なく変更される可能性があります。
-
 [SpriteStudio](https://www.webtech.co.jp/spritestudio/) で作成したアニメーションを [Godot Engine](https://godotengine.org/) 上で再生するためのプラグインです。`.sspj` を **SS Importer** ドックにドラッグし、変換された `.ssab` を 2D ビューポートへドロップすれば、コードを書かずに再生できます。
 
 !!! tip "SpriteStudio のデータが手元に無くても始められます"
