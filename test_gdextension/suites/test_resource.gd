@@ -1,0 +1,328 @@
+## What a pack tells the node about itself, before anything plays.
+##
+## `SSABResource` is a Resource, so `load()` is the whole loading story — the
+## pack's textures and its instance sub-packs are resolved beside it. These are
+## the reads a host does to build a UI (an animation picker, a cell list), and
+## every one of them is a name scripts depend on, so they are
+## also where a rename shows up first.
+extends "res://test_base.gd"
+
+const BASIC := "res://ssab_generated/overall/Basic.ssab"
+const RINGO := "res://ssab_generated/Ringo/Ringo.ssab"
+const INSTANCE := "res://ssab_generated/overall/Instance.ssab"
+const SOUND := "res://ssab_generated/overall/Sound.ssab"
+const USER_DATA := "res://ssab_generated/overall/UserData.ssab"
+## A pack written by a case, for what only a file on disk can show.
+const SCRATCH := "user://test_resource_scratch.ssab"
+## Beside the fixtures, where a player finds the textures of the packs written to it.
+const GROWING := "res://ssab_generated/overall/test_resource_growing.ssab"
+
+var player: Node
+
+
+func setup() -> void:
+	player = make_player(BASIC)
+
+
+func teardown() -> void:
+	if FileAccess.file_exists(SCRATCH):
+		DirAccess.remove_absolute(SCRATCH)
+	if FileAccess.file_exists(GROWING):
+		DirAccess.remove_absolute(GROWING)
+
+
+func _write(path: String, bytes: PackedByteArray) -> void:
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	file.store_buffer(bytes)
+	file.close()
+
+
+func test_a_pack_loads_as_its_own_resource_type() -> void:
+	var res := load(BASIC)
+	ok(res != null, "load() returned something")
+	eq(res.get_class(), "SSABResource", "the pack's resource type")
+
+
+## The code says why a file did not load, and both build shapes say the same.
+func test_a_file_that_does_not_load_says_why() -> void:
+	eq(SSABResource.new().load_from_file("res://no_such.ssab"), ERR_FILE_NOT_FOUND,
+		"a missing pack")
+	eq(SSQBResource.new().load_from_file("res://no_such.ssqb"), ERR_FILE_NOT_FOUND,
+		"a missing sequence")
+	_write(SCRATCH, PackedByteArray([1, 2, 3, 4]))
+	var res := SSABResource.new()
+	eq(res.load_from_file(SCRATCH), ERR_INVALID_DATA, "bytes that are not a pack")
+	not_ok(res.is_valid(), "and none of them were kept")
+	eq(SSQBResource.new().load_from_file(SCRATCH), ERR_INVALID_DATA,
+		"bytes that are not a sequence")
+
+
+## A save that cannot open its file says why in the engine's words: the code
+## FileAccess gives for the same path. Which code that is depends on the
+## platform, so the case compares the two.
+func test_a_save_that_cannot_open_its_file_says_why() -> void:
+	const PATH := "user://no_such_folder/out.ssab"
+	FileAccess.open(PATH, FileAccess.WRITE)
+	var expected := FileAccess.get_open_error()
+	ne(expected, OK, "the folder is not there to write into")
+	eq(load(BASIC).save_to_file(PATH), expected, "a pack reports the engine's code")
+	eq(SSQBResource.new().save_to_file(PATH.get_basename() + ".ssqb"), expected,
+		"and so does a sequence")
+
+
+## Everything a pack resolves by name beside itself is a dependency: the atlas,
+## the sounds, the pack an Instance part plays. Reporting them is what lets a
+## dependency-based export mode ship them, and the FileSystem dock see them.
+func test_the_pack_reports_what_it_resolves_beside_itself() -> void:
+	eq(ResourceLoader.get_dependencies(RINGO), PackedStringArray(["res://ssab_generated/Ringo/Ringo.png"]),
+		"Ringo depends on its atlas")
+	has(ResourceLoader.get_dependencies(INSTANCE), "res://ssab_generated/overall/Instance_SourceAnime.ssab",
+		"an Instance part's pack")
+	has(ResourceLoader.get_dependencies(SOUND), "res://ssab_generated/overall/sound/test.mp3",
+		"a sound, in its subfolder")
+
+
+func test_the_pack_names_its_animations() -> void:
+	var names = player.get_animation_names()
+	gt(names.size(), 0, "Basic has at least one animation")
+	has(names, "anime_1", "Basic's animation")
+
+
+func test_the_pack_names_its_cellmaps_and_cells() -> void:
+	var cellmaps = player.get_cellmap_names()
+	has(cellmaps, "common", "Basic's first cellmap")
+	gt(player.get_cell_names("common").size(), 0, "cells in 'common'")
+	eq(player.get_cell_names("no such cellmap").size(), 0,
+		"an unknown cellmap has no cells")
+
+
+func test_the_pack_names_its_parts_root_first() -> void:
+	var parts = player.get_part_names()
+	gt(parts.size(), 1, "Basic has parts")
+	eq(parts[0], "root", "the part list starts at the root")
+
+
+## The index is the currency of the `*_by_index` half of the override API, so
+## the two ways of naming a part have to agree.
+func test_a_part_resolves_from_its_name_to_its_index() -> void:
+	var parts = player.get_part_names()
+	for i in mini(parts.size(), 8):
+		eq(player.find_part_index(parts[i]), i, "index of '%s'" % parts[i])
+	eq(player.find_part_index("no such part"), -1, "an unknown part has no index")
+
+
+func test_frame_metadata_describes_the_animation() -> void:
+	player.set_animation("anime_1")
+	eq(player.get_current_animation(), "anime_1", "the animation that is set up")
+	gt(player.get_frame_rate(), 0, "frame rate")
+	gt(player.get_total_frames(), 0, "total frames")
+	eq(player.get_start_frame(), 0, "the first frame")
+	eq(player.get_end_frame(), player.get_total_frames() - 1, "the last frame")
+
+
+## The section defaults to the whole animation.
+func test_the_section_starts_as_the_whole_animation() -> void:
+	player.set_animation("anime_1")
+	eq(player.get_animation_section_start(), player.get_start_frame(), "section start")
+	eq(player.get_animation_section_end(), player.get_end_frame(), "section end")
+
+
+## A second pack, so nothing above is an accident of the one file.
+func test_a_second_pack_reads_the_same_way() -> void:
+	var ringo := make_player(RINGO)
+	gt(ringo.get_animation_names().size(), 1, "Ringo has several animations")
+	gt(ringo.get_part_names().size(), 1, "Ringo has parts")
+	eq(ringo.get_part_names()[0], "root", "Ringo's part list starts at the root")
+
+
+## The authored canvas, and the one flip in it.
+##
+## `pivot` is normalised from the canvas centre in the editor's Y-up space, and
+## the box is reported in the node's Y-down local space. Ringo is authored with
+## `pivot (0, -0.5)` — the canvas's bottom edge, which is how a character
+## standing on the ground is drawn — so its box sits entirely above the origin.
+func test_the_canvas_places_itself_against_the_origin_by_its_pivot() -> void:
+	var ringo := make_player(RINGO)
+	ringo.set_animation("wait1")
+	eq(ringo.get_canvas_size(), Vector2(800, 600), "Ringo's authored canvas")
+	eq(ringo.get_canvas_rect(), Rect2(-400, -600, 800, 600),
+		"a bottom-edge pivot puts the whole box above the origin")
+
+	var basic := make_player(BASIC)
+	basic.set_animation("anime_1")
+	eq(basic.get_canvas_size(), Vector2(480, 480), "Basic's authored canvas")
+	eq(basic.get_canvas_rect(), Rect2(-240, -240, 480, 480),
+		"a centre pivot centres the box")
+
+
+## The canvas is authored per animation, not per pack. A host that caches the
+## box -- which is the whole point of handing it to a VisibleOnScreenEnabler2D
+## -- has to refresh it on `animation_changed`, so the suite states the fact
+## that makes that necessary.
+func test_the_canvas_is_per_animation() -> void:
+	var ringo := make_player(RINGO)
+	ringo.set_animation("wait1")
+	eq(ringo.get_canvas_size(), Vector2(800, 600), "wait1's canvas")
+	ringo.set_animation("dead")
+	eq(ringo.get_canvas_size(), Vector2(1300, 600), "dead's canvas is wider")
+	eq(ringo.get_canvas_rect(), Rect2(-650, -600, 1300, 600), "and so is its box")
+
+
+## `get_part_transform` composes flip and offset because they live on the
+## internal root canvas item rather than on the Node2D transform. The box is
+## read in the same space, so it has to compose them too -- otherwise the cull
+## rect of a flipped player describes somewhere the player is not.
+func test_the_box_follows_flip_and_offset() -> void:
+	var ringo := make_player(RINGO)
+	ringo.set_animation("wait1")
+
+	ringo.set_offset(Vector2(10, 20))
+	eq(ringo.get_canvas_rect(), Rect2(-390, -580, 800, 600), "offset moves the box")
+
+	ringo.set_offset(Vector2.ZERO)
+	ringo.set_flip_v(true)
+	eq(ringo.get_canvas_rect(), Rect2(-400, 0, 800, 600),
+		"flipping vertically puts the box below the origin")
+
+
+func test_an_unbound_player_has_no_canvas() -> void:
+	var empty := make_player()
+	eq(empty.get_canvas_size(), Vector2.ZERO, "no resource, no canvas")
+	eq(empty.get_canvas_rect(), Rect2(), "no resource, no box")
+	var res := load(RINGO)
+	eq(res.get_canvas_size("no such animation"), Vector2.ZERO, "an unknown animation")
+	eq(res.get_canvas_rect("no such animation"), Rect2(), "an unknown animation's box")
+
+
+## Players of one pack share the runtime's parse of it: the SSABResource holds
+## it, and each player's runtime binds it. What one player sets stays on its own
+## runtime, and the parse outlives every player still bound to it.
+func test_an_override_stays_on_the_player_that_set_it() -> void:
+	var a := make_player(RINGO)
+	var b := make_player(RINGO)
+	for p in [a, b]:
+		p.set_animation("walk")
+		p.play()
+	var dt := 1.0 / maxf(1.0, float(a.get_frame_rate()))
+	var part: String = a.get_part_names()[1]
+	ok(a.set_part_visibility_override(part, true), "the override was accepted")
+	a.advance(dt)
+	b.advance(dt)
+	ok(a.is_part_hidden(part), "hidden on the player that set it")
+	not_ok(b.is_part_hidden(part), "visible on another player of the same pack")
+
+
+func test_a_player_of_the_pack_plays_on_when_another_goes() -> void:
+	var kept := make_player(RINGO)
+	var gone := make_player(RINGO)
+	for p in [kept, gone]:
+		p.set_animation("walk")
+		p.play()
+	var dt := 1.0 / maxf(1.0, float(kept.get_frame_rate()))
+	kept.advance(dt)
+	gone.advance(dt)
+	root.remove_child(gone)
+	gone.free()
+	for i in 3:
+		kept.advance(dt)
+	near(kept.get_frame_no(), 4.0, "the one left keeps playing", 0.001)
+
+
+## A re-import replaces the pack's bytes in place. A player bound to the old
+## parse reads the old bytes until its next update re-binds it to the new one.
+func test_a_pack_reloaded_in_place_keeps_its_players_playing() -> void:
+	var res: Resource = load(RINGO)
+	var p := make_player(RINGO)
+	p.set_animation("walk")
+	p.loop_count = 3
+	p.play()
+	var dt := 1.0 / maxf(1.0, float(p.get_frame_rate()))
+	for i in 3:
+		p.advance(dt)
+	eq(res.load_from_file(RINGO), OK, "the pack reloaded in place")
+	p.advance(dt)
+	eq(p.get_current_animation(), "walk", "the player kept its animation")
+	ok(p.is_playing(), "kept playing")
+	eq(p.loop_count, 3, "kept its loop count")
+	near(p.get_frame_no(), 4.0, "and carried on from where it stood", 0.001)
+
+
+## What the importer does after a reconvert, on a player that is not playing.
+func test_a_reload_keeps_a_narrowed_section_and_a_held_frame() -> void:
+	var res: Resource = load(RINGO)
+	var p := make_player(RINGO)
+	p.set_animation("walk")
+	p.loop_count = 3
+	ok(p.set_animation_section(5, 15), "the section narrows")
+	p.frame_no = 8.0
+	res.emit_changed()
+	eq(p.loop_count, 3, "the loop count stays")
+	eq(p.get_animation_section_start(), 5, "the section's start stays")
+	eq(p.get_animation_section_end(), 15, "the section's end stays")
+	near(p.get_frame_no(), 8.0, "the held frame stays")
+	not_ok(p.is_playing(), "and it is still stopped")
+
+
+func test_a_reload_does_not_fire_the_frame_it_stands_on_again() -> void:
+	var res: Resource = load(USER_DATA)
+	var p := make_player(USER_DATA)
+	p.set_animation("anime_1")
+	var heard: Array = []
+	p.user_data.connect(func(d): heard.append(int(d.get("frame_no", -1))))
+	p.play(10.0)
+	p.advance(0.001)
+	eq(heard, [10], "the key fired once")
+	res.emit_changed()
+	p.advance(0.001)
+	eq(heard, [10], "and not again for the reload")
+	ok(p.is_playing(), "which carried on playing")
+
+
+## A cell map override belongs to the name, whatever the pack is doing around it.
+func test_a_cell_map_override_outlasts_a_reload() -> void:
+	var res: Resource = load(BASIC)
+	var p := make_player(BASIC)
+	p.set_animation("anime_1")
+	var texture := PlaceholderTexture2D.new()
+	p.set_cellmap_texture("common", texture)
+	res.emit_changed()
+	p.advance(0.001)
+	eq(p.get_cellmap_texture("common"), texture, "the override stays")
+	p.set_cellmap_texture("common", null)
+	p.advance(0.001)
+	eq(p.get_cellmap_texture("common"), null, "until it is cleared")
+
+
+## A reconvert that lengthened the animation: a section nobody narrowed follows it.
+func test_a_reload_lets_a_whole_section_grow() -> void:
+	_write(GROWING, load(BASIC).data)
+	var res: Resource = load(GROWING)
+	var p := make_player(GROWING)
+	p.set_animation("anime_1")
+	var short_end: int = p.get_animation_section_end()
+	_write(GROWING, load(SOUND).data)
+	eq(res.load_from_file(GROWING), OK, "the longer pack reloaded in place")
+	p.advance(0.0)
+	gt(p.get_animation_section_end(), short_end, "the section grew with the animation")
+
+
+## `data` is a storage property, so a copy of a pack carries its bytes. What a
+## copy cannot carry is the directory its textures resolve from.
+func test_a_copy_of_a_pack_carries_its_bytes() -> void:
+	var res: Resource = load(BASIC)
+	var copy: Resource = res.duplicate()
+	ok(copy.is_valid(), "the copy holds a usable pack")
+	eq(copy.get_animation_names(), res.get_animation_names(), "with the same animations")
+
+
+## The editor reloads a pack changed on disk into the object already loaded,
+## through its storage properties, and `CACHE_MODE_REPLACE` takes the same path:
+## whatever holds the pack sees the new bytes without being handed a new pack.
+func test_a_pack_changed_on_disk_reloads_into_the_loaded_object() -> void:
+	_write(SCRATCH, load(BASIC).data)
+	var res: Resource = load(SCRATCH)
+	eq(res.get_animation_names(), load(BASIC).get_animation_names(), "loaded as Basic")
+	_write(SCRATCH, load(RINGO).data)
+	var again: Resource = ResourceLoader.load(SCRATCH, "", ResourceLoader.CACHE_MODE_REPLACE)
+	ok(again == res, "the reload went into the object already loaded")
+	eq(res.get_animation_names(), load(RINGO).get_animation_names(), "which now holds Ringo")

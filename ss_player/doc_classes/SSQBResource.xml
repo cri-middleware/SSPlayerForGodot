@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="SSQBResource" inherits="Resource" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+		A SpriteStudio sequence binary ([code].ssqb[/code]).
+	</brief_description>
+	<description>
+		Holds the sequence binary produced from a SpriteStudio sequence ([code].ssqe[/code]) alongside the animations, either by dropping the project onto the editor (the [b]SS Importer[/b] dock) or by running [code]ssconverter-cli[/code].
+		A sequence is a playlist that chains animations together. The resource loads and saves, and no node plays it: loading a [code].ssqb[/code] has no effect on [SpriteStudioPlayer2D]. See [SSABResource] for the animation data that is playable.
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="load_from_file">
+			<return type="int" enum="Error" />
+			<param index="0" name="path" type="String" />
+			<description>
+				Replaces the contents of this resource with the [code].ssqb[/code] file at [param path]. Returns [constant OK] on success.
+			</description>
+		</method>
+		<method name="save_to_file">
+			<return type="int" enum="Error" />
+			<param index="0" name="path" type="String" />
+			<description>
+				Writes the held binary to [param path] unchanged. Returns [constant OK] on success.
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="data" type="PackedByteArray" setter="set_data" getter="get_data" default="PackedByteArray()">
+			The held binary. Setting it replaces the binary the way [method load_from_file] does. Bytes that are not a usable [code].ssqb[/code] are not kept, and an error is printed.
+			It is a storage property, not shown in the Inspector, so that reloading the resource in place replaces the binary: the editor does that when the file changes on disk, and so does [method ResourceLoader.load] with [constant ResourceLoader.CACHE_MODE_REPLACE]. Reading it does not copy the bytes.
+		</member>
+	</members>
+</class>

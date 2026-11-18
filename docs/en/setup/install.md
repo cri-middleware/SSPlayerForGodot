@@ -1,0 +1,34 @@
+# 📥 Installation
+
+Steps for getting started with SpriteStudio Player for Godot.
+
+## A. Use the SpriteStudio Player for Godot GDExtension (Recommended)
+
+The shortest path to using the plugin without any build work.
+
+1. Download Godot Engine 4.7 or later from the [official site](https://godotengine.org/download/).
+2. Open the [latest SSPlayerForGodot Release](https://github.com/cri-middleware/SSPlayerForGodot/releases/latest) and download `ssplayer-godot-extension-4.7.zip` from its **Assets**. The one ZIP carries the binaries for Windows, macOS, Linux, Android, iOS and Web ([details](../limitations.md#platforms--export)).
+3. Extract the ZIP and copy the `addons` folder it contains into your Godot project root directory.
+
+    ```
+    MyGame/                         ← the folder holding project.godot
+    ├── addons/
+    │   └── spritestudio/           ← from the ZIP's addons/
+    │       ├── spritestudio.gdextension
+    │       ├── bin/
+    │       └── …
+    └── project.godot
+    ```
+
+4. Restart the Godot editor and the `SpriteStudioPlayer2D` node and the SS Importer dock will become available.
+
+## B. Use a Godot Engine with the SpriteStudio Player for Godot Custom Module
+
+If you want to build and use the plugin as a custom module, refer to the [Build Guide](../development/build.md).
+
+## Next Steps
+
+Once installation is complete, continue to one of the following:
+
+- If you do **not** have an `.ssab` file yet → [Asset Import and Editor Integration](../workflow/usage_asset_pipeline.md) to generate `.ssab` from your SpriteStudio project (`.sspj`).
+- If you already have an `.ssab` file in your project → [Basic Usage](../workflow/usage_basic.md) to place and play it in a scene.

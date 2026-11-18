@@ -1,0 +1,74 @@
+# 🧩 プレイヤーの構成
+
+SpriteStudio Player for Godot を開発する人と、自分のプロジェクトのために改造する人に向けたページです。部品をその役割で説明します。ビルド、変更した版をプロジェクトで使う方法、Godot での確かめ方は[ビルドガイド](build.md)に、制約とテストスイートは [CONTRIBUTING](https://github.com/cri-middleware/SSPlayerForGodot/blob/HEAD/CONTRIBUTING.md) にあります。
+
+SpriteStudio の Player に共通すること（再生・モーションブレンド・サウンドキー・パーツトラッキングの振る舞い）は、SDK の [Player 移植ガイド](https://github.com/cri-middleware/SpriteStudio-SDK/blob/HEAD/libs/ssruntime/docs/README.ja.md) に一度だけ書いてあります。
+
+## 層
+
+プレイヤーはすべて `ss_player/` の下の C++ で、同じ 1 つのソースから 2 通りにビルドします。`godot-cpp` の上の **GDExtension** と、エンジンに組み込む **カスタムモジュール** です。`#ifdef SPRITESTUDIO_GODOT_EXTENSION` のブロックが持つのは、2 つで異なる include と型の変換だけです。矢印は呼び出しです。
+
+```mermaid
+---
+config:
+  flowchart:
+    wrappingWidth: 400
+---
+flowchart TD
+    subgraph pkg ["ss_player/"]
+        subgraph nodes ["ノード"]
+            btn["SpriteStudioButton<br/>BaseButton"]
+            att["SpriteStudioPartAttachment2D<br/>パーツに追従"]
+            node["SpriteStudioPlayer2D<br/>プロパティ · シグナル"]
+        end
+        core["再生コア<br/>ノードなし · Instance ごとに子"]
+        res["SSABResource · SSQBResource<br/>.ssab の解析を共有"]
+        sound["音のボイス<br/>または SpriteStudioAudioBackend"]
+        subgraph editor ["エディタのビルドだけ"]
+            dock["SS Importer ドック<br/>右クリックメニュー · Reconvert"]
+            panel["インスペクタ · 再生パネル<br/>ビューポートへのドロップ"]
+        end
+    end
+    rs["RenderingServer<br/>ルートのキャンバスアイテム 1 つ"]
+    Brain["Brain · libssruntime<br/>C API"]
+    conv["libssconverter"]
+    btn --> node
+    att --> node
+    panel --> node
+    node --> core
+    node --> sound
+    core --> res
+    core --> Brain
+    core --> rs
+    dock --> conv
+```
+
+**再生。** `SpriteStudioPlayer2D` がノードで、プロパティ・メソッド・シグナルと音を持ちます。音は、`SpriteStudioAudioBackend` が引き継がない限り、プールしたボイスでプレイヤーが鳴らします。その下のコアは各フレームの描画バッチをたどり、ルートのキャンバスアイテムに描きます。マスク・エフェクト・パーツごとのメッシュもそこにあり、キャンバスアイテムのシェーダーは、マテリアルを作るときに GLSL の部品から組み立てます。`.ssab` の解析結果は、それに結び付いたすべてのプレイヤーで共有します。ランタイムのライブラリは `ss_player/runtime/` に、`download-sdk` か `build-runtime` が置きます。
+
+**エディタ**（エディタのビルドにだけ入ります）: **SS Importer** ドック（ドロップ・最近使ったファイル・Reconvert）、ファイルシステムドックの右クリックメニュー、`SSABResource` のインスペクタ、プレイヤーを選んだときに出る再生パネル、`.ssab` を 2D ビューポートにドロップしてプレイヤーを作る機能です。インポーターは `libssconverter` で `.sspj` を変換し、出力フォルダごとの変換元を `res://.ssplayer_sources.cfg` に記録します。
+
+**周辺:** `misc/spritestudio.gdextension` は拡張のマニフェストで、どの `addons/spritestudio/` にもコピーされます。`test_gdextension/` はヘッドレスのスイートで、サンプルではありません。`examples/` はサンプルで、`dev_gdextension` と `dev_module` は開発用の作業プロジェクトです。`godot/` と `godot-cpp/` はサブモジュールではなく、リポジトリのルートに clone します（どちらも gitignore 対象です）。
+
+## この作りになっている理由
+
+ここに挙げる理由はどれも複数のファイルにまたがります。詳細は、関わるコードのコメントにあります。
+
+**再生コアはノードを持ちません。** コアはルートのキャンバスアイテムを持って `RenderingServer` で描き、`SpriteStudioPlayer2D` がそれを包みます。100 パーツのアニメもシーンツリーでは 1 つのノードで、コアはツリーに依存しません。要るのは親のキャンバスアイテムと、イベントの送り先だけです。`SpriteStudioPartAttachment2D` と `SpriteStudioButton` があるのは、パーツへの追従とポインタを受けることが、利用者が自分のノードを必要とする場面だからです。
+
+**ボタンはプレイヤーを描かず、プレイヤーを包みます。** ポインタが当たる範囲を絞れるのは、押されるノード自身だけです。ビューポートはそのノードの `has_point` に尋ね、子は親の矩形が受けたものを取り消せません。そのためボタンを `BaseButton` にし、その下の `SpriteStudioPlayer2D` が、プレイヤーがノードから受け取るもの（ビューポート・画面上のスケール・テクスチャの設定・`self_modulate`・音・シグナル）と、このクラスでしか動かないエディタの再生パネルをそのまま持ちます。`BaseButton` はホバーも無効もシグナルで知らせないので、ボタンは描画のときに `get_draw_mode()` から状態を読みます。また、描く範囲が動いたかもしれないとき（SSAB・アニメーション・反転・オフセット）にプレイヤーが送る `item_rect_changed` を受けます。再生を動かすのはゲームの実行中だけなので、保存したシーンにはインスペクターで設定したものが残ります。
+
+**マスクはステンシルではなくカバレッジのビットマップです。** Godot のキャンバスにはプラグインが使えるステンシルバッファが無いため、毎フレーム、マスクの書き手をオフスクリーンのビットマップに 1 つ 1 ビットで描き、マスクされる各パーツのシェーダーがそれを読み戻します。1 枚のビットマップがインスタンスツリー全体を受け持ち、その持ち主は最上位のプレイヤーです。ビットは RGB に詰め、1 タイルに 24、最大 4 タイルなので、1 フレームに書き手は 96 までです。それを超えた書き手は警告を 1 回出して捨て、それ以上が要るツリーは受け入れるのではなく組み直してもらいます。ビットマップはプロセス全体で 1 つのプールから借りるので、ビデオメモリは、これまでにマスクしたプレイヤーの数ではなく、同時にマスクしているプレイヤーの最大数で決まります。
+
+**音はプレイヤーが鳴らし、そのボイスはプールします。** ランタイムが伝えるのは、サウンドキーを通過したことだけです。このプレイヤーはそれを自分で鳴らします。Unity・Web・Ren'Py のプレイヤーもそれぞれのエンジンで同じことをし、Flutter・React Native・wgpu のプレイヤーは通知をアプリに渡します。音は 1 つごとに新しい `AudioStreamPlayer` で、必要になったときにプレイヤーの内部の子として作ります。シーンツリーには出ず、保存もされません。指定の回数を鳴らし終えたらプールに戻すので、忙しいアニメでもノードを作っては捨てることになりません。アニメを一時停止しても、音は最後まで鳴ります。それがすべての Player が守る規則である理由は、SDK の Player 移植ガイドにあります。`SpriteStudioAudioBackend` を割り当てると、組み込みの再生は完全に止まります。
+
+**名前では使えるのに、どこにも保存されないプロパティがあります。** `frame_rate`・`playback_direction`・`playback_style` は `_set` / `_get` で扱い、プロパティの一覧からは外しています。スクリプトからは設定できますが、インスペクタにも保存したシーンにも載りません。スクリプトで設定した値は、シーンを読み直すと消えます。
+
+**出力フォルダごとの変換元は、プロジェクトに記録します。** `res://.ssplayer_sources.cfg` が出力フォルダごとにその `.sspj` を記録していて、Reconvert とファイルシステムのメニューが出どころを尋ねずにパックを作り直せるのはこのためです。ドックの最近使ったファイルは別の置き場で、コミットしない `.godot/` の下にあるエディタのプロジェクトメタデータなので、マシンごとのものです。
+
+**モジュール版を守るのは、コンパイルが通ることだけです。** スイートが動かすのは GDExtension で、モジュール版を試すにはエンジンをビルドする必要があります。2 つのビルドが再生のロジックを 1 つ共有し、`#ifdef` のブロックが include と変換しか持たないのはこのためです（`run-tests.sh` のヘッダーにも同じことがあります）。
+
+**テキストパーツと 9 スライスパーツは描画しません。** テキストパーツについて、ランタイムは描画プラン上の位置を確保しますが、グリフは提供しません（レイアウトとラスタライズは Player の責務です）。本プラグインには Godot でのテキスト描画パスがありません。9 スライスパーツについて、ランタイムはグリッド全体を `Nines` バッファに組みますが、本プラグインはそれを読まないので、セルが引き伸ばされた状態ではなく何も描かれません。
+
+**合成モードは `CanvasItemMaterial` にあるものだけです。** 本プラグインは中間レンダーターゲットを介さず `RenderingServer` のキャンバスアイテムへ直接描くので、パーツの合成モードは `CanvasItemMaterial` に対応づくものに限られます。各モードがどう描かれるかは [制約と適用範囲](../limitations.md) にあります。
+
+**2D エディタで絵を選択できません。** 2D エディタはノードが申告する矩形でノードを選びますが、Godot には GDExtension のノードがその矩形を申告する手段がありません。カスタムモジュール版も同じ振る舞いです。

@@ -1,0 +1,84 @@
+# 🗂️ アセットのインポートとエディタ連携
+
+このページでは **`.sspj` を Godot プロジェクトへ取り込む（コンバートする）初回手順** と、その後 SpriteStudio と Godot を行き来しながら高速にイテレーションを回すためのワークフローを解説します。
+
+SpriteStudio Player for Godot では、アニメーションを再生するだけでなく、SpriteStudio と Godot を行き来しながら、アニメーションの修正からゲームでの確認までを繰り返せます。
+
+---
+
+## 1. 初回のインポート (SS Importer ドックを使ったコンバート)
+
+まだ Godot プロジェクト内に `.ssab` が存在しない場合は、まず SpriteStudio のプロジェクトファイル (`.sspj`) をインポート（コンバート）します。
+
+1. Godot エディタ右側の **「SS Importer」ドック** を開きます。
+2. 出力先（デフォルトは `res://ssab_generated`）を確認します。
+3. エクスプローラーや Finder から、目的の **`.sspj` ファイルを「SS Importer」ドックへドラッグ＆ドロップ** します。
+
+これだけでコンバート処理が走ります。`.ssab` と `.ssqb` は、テクスチャと一緒に、出力先の下の `.sspj` と同じ名前のフォルダに書き出されます（`Ringo.sspj` なら `res://ssab_generated/Ringo/`。[生成アセットの構成と配信](generated_assets.md) を参照）。生成された `.ssab` を 2D ビューポートへドラッグ＆ドロップして、あらかじめ `SpriteStudioPlayer2D` ノードを配置しておきましょう（詳細は [基本的な使い方](usage_basic.md) を参照）。
+
+> [!TIP]
+> 
+> <video autoplay loop muted playsinline width="100%">
+>   <source src="../assets/1-sspj_import.webm" type="video/webm">
+> </video>
+> <img src="../assets/1-sspj_import.webp" width="100%" style="display: none;" loading="lazy">
+
+> [!TIP]
+> 手元に `.sspj` がまだ無い状態で試したい場合は、[SpriteStudio 公式のサンプルデータ](https://www.webtech.co.jp/help/ja/spritestudio7/download/sample/)がそのまま使えます。キャラクターなら [Ringo](https://www.webtech.co.jp/help/ja/spritestudio7/download/sample/#ringo)、エフェクトを含むものなら [パーティクル](https://www.webtech.co.jp/help/ja/spritestudio7/download/sample/#Perticle_sample) が手頃です。ダウンロードした `.sspj` を、上と同じ手順で「SS Importer」ドックへドロップしてください。
+
+---
+
+## 2. Godot から SpriteStudio を直接開く
+
+Godot で作業中に「もう少しアニメーションを微調整したい」と思った場合、わざわざ SpriteStudio を別で立ち上げてプロジェクトを探す必要はありません。
+
+1. Godot エディタ上で、アニメーションを再生している **`SpriteStudioPlayer2D` ノードを選択**します。
+2. インスペクター上部に表示される **「Open SSPJ」ボタン** をクリックします。
+
+この操作により、SpriteStudio が起動して元となる `.sspj` ファイルが開き、すぐに編集作業に入ることができます。
+
+シーンに置いていない `.ssab` からも開けます。ファイルシステムドックで `.ssab` をダブルクリックすると、インスペクターに同じボタンが表示されます。`.ssab` を右クリックしたメニューにも「Open SSPJ」があります。
+
+> [!NOTE]
+> ![インスペクターからSSPJを開く画像](../assets/5-open_sspj_from_inspector.png)
+
+---
+
+## 3. SpriteStudio で保存したら再変換する
+
+SpriteStudio 側でアニメーションを修正して保存したら、Godot エディタに戻ります。以下の操作だけで、変更内容がゲーム（およびエディタ上のプレビュー）に一瞬で反映されます。
+
+1. 先ほどと同様に、ノードを選択してインスペクターを表示します（ファイルシステムドックで `.ssab` をダブルクリックしても同じです）。
+2. 「Open SSPJ」ボタンの横にある **「Reconvert」ボタン** をクリックします。ファイルシステムドックで `.ssab` を右クリックし、「Reconvert」を選んでも再変換できます。
+
+> [!IMPORTANT]
+> **「開く」→「保存」→「再コンバート」の最短ワークフロー** ノードを選択したままインスペクターから SpriteStudio を呼び出し、編集後すぐに Godot 上で再コンバートをかけられます。
+
+> [!TIP]
+> 
+> <video autoplay loop muted playsinline width="100%">
+>   <source src="../assets/2-fast_iteration_inspector.webm" type="video/webm">
+> </video>
+> <img src="../assets/2-fast_iteration_inspector.webp" width="100%" style="display: none;" loading="lazy">
+
+> [!TIP]
+> 出力フォルダに生成される各ファイルの役割と依存関係、SpriteStudio 側の編集の種類ごとにどのファイルを配信し直す必要があるか、エクスポートモードの選び方と `.pck` での追加配信は [生成アセットの構成と配信](generated_assets.md) にまとめています。
+
+---
+
+## 制限事項とチーム開発時の注意点
+
+`Open SSPJ` と `Reconvert` にはいくつかの制限があります。特にチーム開発では注意してください。
+
+> [!WARNING]
+> **SpriteStudio のインストールが必要です**
+> `Open SSPJ` ボタンを押すと SpriteStudio が起動します。そのため、操作する PC 自体に [SpriteStudio](https://www.webtech.co.jp/spritestudio/) がインストールされている必要があります。Linux 上の Godot エディタでは「Open SSPJ」ボタン（と同名のメニュー項目）は表示されません。SpriteStudio で `.sspj` を自分で開き、**Reconvert** を使ってください。
+
+> [!TIP]
+> **チーム開発時のファイルパス共有とスマート再リンク**
+> 
+> SS Importer ドック経由でインポートした際の連携情報（`.sspj` のファイルパス）は、Godot プロジェクト直下の `.ssplayer_sources.cfg` に **相対パス** で保存されます。
+> 
+> `.ssplayer_sources.cfg` を Git 等のバージョン管理システムで共有することで、チームの別メンバーがPCに `git clone` した場合でもパスの連携が維持され、そのまま `Open SSPJ` や `Reconvert` を利用できます。
+> 
+> 万が一、フォルダ構造の変更などにより `.sspj` へのリンクが切れてしまった場合でも簡単に修復できます。Godotのファイルシステムドックでリンク切れの `.ssab` を右クリックして「Reconvert」を選ぶと、新しい `.sspj` の場所を尋ねるダイアログが表示されます。ここで1つのファイルを再リンクするだけで、同じフォルダ内にある他の関連ファイルも**全自動でスマート再リンク**されるため、修復の手間がかかりません。

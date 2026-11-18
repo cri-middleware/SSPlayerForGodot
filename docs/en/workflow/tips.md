@@ -1,0 +1,143 @@
+# ⚡ Performance Tuning and Advanced Settings
+
+This section introduces settings and tips to extract maximum performance from SpriteStudio Player for Godot and perform advanced playback control.
+
+## Performance and Quality Settings
+
+### Frame Skip Enabled
+This setting is useful in environments with high rendering loads, such as mobile devices or scenes displaying a large number of characters.
+When the `Frame Skip Enabled` property of `SpriteStudioPlayer2D` is activated, if rendering processing is delayed, intermediate drawing is skipped to maintain the animation's playback speed (time progression within the game).
+
+### Sub Frame Enabled
+This is extremely effective when rendering on high-refresh-rate monitors (e.g., 144Hz) or when performing slow-motion effects within Godot.
+Normally, animations are played back frame-by-frame according to the set FPS (e.g., 30FPS or 60FPS). However, enabling `Sub Frame Enabled` automatically interpolates between keyframes based on the current time, resulting in incredibly smooth and fluid animation.
+
+### Driving Playback Yourself (Manual)
+
+Setting **Animation Process Mode** to `Manual` stops the node advancing itself; nothing moves until a script calls `advance(delta)`.
+
+```gdscript
+@onready var ss_player: SpriteStudioPlayer2D = $SpriteStudioPlayer2D
+
+func _ready() -> void:
+    ss_player.set_animation_process_mode(SpriteStudioPlayer2D.ANIMATION_PROCESS_MANUAL)
+
+func _process(delta: float) -> void:
+    # A slow-motion group of your own, independent of Engine.time_scale
+    # and of the node's own speed_scale.
+    ss_player.advance(delta * _bullet_time)
+```
+
+`advance()` does exactly what an automatic tick does — including emitting `frame_updated`, so `SpriteStudioPartAttachment2D` children and anything else driven by that signal stay in step. Use it for custom pause groups, deterministic stepping (replays, tests, frame captures), or a time scale the engine's own must not touch.
+
+> [!NOTE]
+> **The editor preview does not animate under `Manual`.** The SpriteStudio bottom panel drives transport, not time — with the node not ticking itself, its play button starts a playback that nothing advances. Leave the mode on `Idle` while authoring and switch to `Manual` from a script.
+
+> [!NOTE]
+> `Manual` stops the *animation*; it does not freeze sounds already playing. Audio is fire-and-forget and keeps ticking, exactly as it does while the animation is paused. See [Audio Playback](audio.md).
+
+> [!TIP]
+> Prefer `speed_scale` for a simple slow-motion effect and the `frame_no` property for seeking. `Manual` is for when the *source of time itself* has to be yours.
+
+---
+
+### Skipping Players That Are Off Screen
+
+A player that is off screen still evaluates every part of every frame. Only the *drawing* is culled by the renderer; the CPU-side evaluation is not, so a crowd scene pays for the characters nobody can see.
+
+Godot already has the node for this — [`VisibleOnScreenEnabler2D`](https://docs.godotengine.org/en/stable/classes/class_visibleonscreenenabler2d.html), which sets its target's `process_mode` to `DISABLED` while its rect is off screen. What it cannot know on its own is how big the animation is, and that is what `get_canvas_rect()` answers.
+
+Add a `VisibleOnScreenEnabler2D` as a child of the player (its default `enable_node_path` of `..` already points at the parent), and give it the box:
+
+```gdscript
+extends SpriteStudioPlayer2D
+
+@onready var _enabler: VisibleOnScreenEnabler2D = $VisibleOnScreenEnabler2D
+
+func _ready() -> void:
+    animation_changed.connect(func(_name: String) -> void: _refresh_cull_rect())
+    _refresh_cull_rect()
+
+func _refresh_cull_rect() -> void:
+    _enabler.rect = get_canvas_rect()
+```
+
+The enabler keeps working while its target is disabled: visibility is reported by the rendering server, not by a `_process` tick, so the player comes back the moment its box re-enters the view.
+
+> [!IMPORTANT]
+> **Re-read the box on `animation_changed`.** The canvas is authored per animation, so a pack whose animations differ in size — `Ringo`'s `dead` is `1300 x 600` where most of the others are `800 x 600` — will pop in late on the wider one if the rect is set once and left.
+>
+> The signal reports a change, so do not count on it for the first animation: the one the scene loads with is set up before any connection is made, and assigning or swapping `ssab` selects its first animation without sending it. That is why `_ready()` above reads the box once itself; after swapping `ssab` from a script, call `_refresh_cull_rect()` again the same way.
+
+> [!NOTE]
+> The canvas is the box the artist composed in, not a measured outline. Parts are free to draw outside it, so grow the rect if an animation throws something well past its canvas. `Rect2.grow()` on the value above is the whole fix.
+
+> [!NOTE]
+> A disabled player stops advancing rather than playing on silently: it resumes from the frame it froze on. That is the right behaviour for an idle loop and the wrong one for anything that has to stay in step with the rest of the scene. Sounds already playing are unaffected — audio is fire-and-forget.
+
+---
+
+## Part Add-On Shaders (Per-Part Effects)
+
+The **add-on shaders** you can assign to a part in SpriteStudio are reproduced natively — no setup, no material to assign. The shader id is carried in the `.ssab`, and the plugin compiles a Godot shader for it on first use and caches it per `(shader, blend mode)` pair.
+
+Thirteen effects are ported from the SS6 reference implementation:
+
+| Id | Effect | Parameters |
+| --- | --- | --- |
+| `ss-sepia` | Sepia / grayscale tone | strength (signed) |
+| `ss-hsb` | Hue / saturation / brightness shift | hue, saturation, brightness |
+| `ss-step` | Brightness-driven posterise | threshold (signed), stages, mono↔tint mix |
+| `ss-outline` | 4-neighbour alpha-edge outline | threshold (signed) |
+| `ss-bmask` | Brightness-threshold mask (discards above or below) | threshold (signed) |
+| `ss-blur` | 9-tap box blur | focus shift |
+| `ss-move` | Directional smear / motion blur | distance, direction, power |
+| `ss-wave` | Sine-warp horizontal displacement | width, height, phase |
+| `ss-noise` | Per-texel pseudo-random noise overlay | power, color, phase |
+| `ss-pix` | UV-quantise pixelation | block size |
+| `ss-scatter` | Per-cell directional UV scatter | power, ratio, phase |
+| `ss-circle` | Cell rect → polar unwrap | — |
+| `ss-spot` | Radial spotlight gradient | — |
+
+A part whose shader id is not in this list falls back to the default shader rather than failing to draw, so an unrecognized add-on shows the part untouched.
+
+> [!IMPORTANT]
+> **An add-on part costs a draw call.** Ordinary parts are merged into batches; a part carrying an add-on shader needs its own uniforms, so it is drawn on its own canvas item with its own material (both pooled and reused across frames, so this costs draw calls rather than allocations). Effects are therefore cheap to use in a few places and expensive to use everywhere — the same trade-off as any per-object material.
+
+> [!NOTE]
+> `ss-circle` needs the part's source rectangle to unwrap. Part types that do not bind one — Shape parts, for instance — draw nothing under it.
+
+## A Shader Over the Whole Animation
+
+The node's own **Material** (`material`) has no effect, and the node shows a configuration warning while one is assigned. The node draws nothing itself: every part draws on a canvas item of its own, with the plugin's shader.
+
+To run a shader over the whole character — a hit flash, a dissolve, an outline — make the player a child of a [`CanvasGroup`](https://docs.godotengine.org/en/stable/classes/class_canvasgroup.html) and give the material to the `CanvasGroup`. The group draws its children into one image first and then draws that image through its material, so the shader works on the finished character rather than on each part. Its shader reads that image through the screen texture, with the colour premultiplied by alpha:
+
+```glsl
+shader_type canvas_item;
+
+uniform sampler2D screen_texture : hint_screen_texture, repeat_disable, filter_nearest;
+uniform float flash : hint_range(0.0, 1.0) = 0.0;
+
+void fragment() {
+    vec4 c = textureLod(screen_texture, SCREEN_UV, 0.0);
+    if (c.a > 0.0001) {
+        c.rgb /= c.a;
+    }
+    COLOR = vec4(mix(c.rgb, vec3(1.0), flash), c.a);
+}
+```
+
+Drive `flash` from a script or from an `AnimationPlayer` track on the group's material. Each `CanvasGroup` is an extra off-screen pass, so give one to each character that needs the effect rather than wrapping a whole scene in one.
+
+---
+
+## Choosing Between SSAB and SSQB
+
+There are two types of animation binaries imported into Godot:
+
+- **SSAB (Animation Binary)**
+  - This is standard animation data. Generally, you will use this format.
+- **SSQB (Sequence Binary)**
+  - This is a "sequence" of multiple animations (e.g., `Walk` -> `Run` -> `Jump`) linked together on the timeline within SpriteStudio.
+  - **Note:** Loading into `SSQBResource` is supported, but **sequence playback is not** — no node plays one (see the [ROADMAP](https://github.com/cri-middleware/SSPlayerForGodot/blob/HEAD/ROADMAP.md)). To play animations back to back, chain them in GDScript via the `animation_finished` signal.

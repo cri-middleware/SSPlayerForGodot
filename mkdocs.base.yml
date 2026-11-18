@@ -1,0 +1,106 @@
+# INHERIT merges mappings, but a locale config's sequence (nav, plugins, extra.social, ...)
+# replaces the base's whole: define each sequence here or in the locale configs, never both.
+
+site_name: SpriteStudio Player for Godot
+site_author: "CRI Middleware Co., Ltd."
+repo_name: "cri-middleware/SSPlayerForGodot"
+repo_url: "https://github.com/cri-middleware/SSPlayerForGodot"
+copyright: "Copyright &copy; CRI Middleware Co., Ltd."
+strict: true
+
+theme:
+  name: material
+  custom_dir: overrides
+  font: false
+  favicon: assets/favicon.svg
+  icon:
+    logo: simple/godotengine
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: blue grey
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: blue grey
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - navigation.tracking
+    - navigation.footer
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.action.copy
+    - content.tabs.link
+
+plugins:
+  - search
+  - redirects
+  - llmstxt:
+      full_output: llms-full.txt
+      markdown_description: |
+        Godot player, editor-first: `setup/install` and `workflow/usage_basic` get a first
+        animation on screen. The class reference is `api/player` (the `SpriteStudioPlayer2D`
+        node) and `api/resource`; `workflow/usage_scripting` is the GDScript guide to playback
+        control and signals. `workflow/verify_playback` checks from the command line, without the
+        editor, that an animation loads and plays, and can write a PNG of a frame.
+        `troubleshooting` is organised by cause rather than symptom, and `limitations` lists
+        what is not supported.
+      sections:
+        Docs:
+          - "*.md"
+
+markdown_extensions:
+  - toc:
+      permalink: true
+      slugify: !!python/object/apply:pymdownx.slugs.slugify
+        kwds:
+          case: lower
+  - admonition
+  - attr_list
+  - md_in_html
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+      slugify: !!python/object/apply:pymdownx.slugs.slugify
+        kwds:
+          case: lower
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets:
+      base_path:
+        - .
+      check_paths: true
+  - pymdownx.quotes:
+      callouts: true
+
+extra:
+  alternate:
+    - name: English
+      link: ""
+      lang: en
+    - name: 日本語
+      link: ja/
+      lang: ja

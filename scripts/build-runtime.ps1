@@ -1,0 +1,213 @@
+#!/usr/bin/env pwsh
+
+$baseDirectory = Split-Path -Parent $PSCommandPath
+$rootDirectory = Split-Path -Parent $baseDirectory
+$rawArch = (Get-Item Env:PROCESSOR_ARCHITECTURE).Value
+if ($rawArch -match "ARM64") {
+    $HOST_ARCH = "arm64"
+} else {
+    $HOST_ARCH = "x86_64"
+}
+$HOST_PLATFORM = "windows"
+
+# Godot options
+$default_opts = @{
+    arch = $HOST_ARCH
+    platform = $HOST_PLATFORM
+    build = "debug"
+    ios_simulator = "no"
+}
+
+$opts = @{}
+foreach ($key in $default_opts.Keys) { $opts[$key] = $default_opts[$key] }
+
+$APP = Split-Path -Leaf $PSCommandPath
+function usage() {
+    echo "Usage: $APP [options]"
+    echo "Options:"
+    echo "  platform=<platform>    Target platform (windows, macos, linux, android, ios, web)"
+    echo "  arch=<arch>            Target architecture (x86_64, arm64, universal, etc.)"
+    echo "  build=<build>          Build mode (debug, release)"
+    echo "  ios_simulator=<yes|no> Build for iOS simulator (default: no)"
+}
+
+foreach ($item in $Args) {
+    if ($item -match "=") {
+        $kv = $item -split "="
+        $opts[$kv[0]] = $kv[1].ToLower()
+    } elseif ($item -match "help" -or $item -eq "-h" -or $item -eq "--help") {
+        usage
+        exit 0
+    }
+}
+
+$PLATFORM = $opts.platform
+$ARCH = $opts.arch
+$BUILD_MODE = $opts.build
+$IOS_SIMULATOR = $opts.ios_simulator
+
+$IS_HOST_BUILD = $false
+if ($PLATFORM -eq $HOST_PLATFORM -and $ARCH -eq $HOST_ARCH) {
+    $IS_HOST_BUILD = $true
+}
+
+echo "Building for $PLATFORM ($ARCH) in $BUILD_MODE mode (iOS Sim: $IOS_SIMULATOR, Host Build: $IS_HOST_BUILD)..."
+echo ""
+
+$SDK_DIR = "$rootDirectory/ss_player/SpriteStudio-SDK"
+
+pushd $SDK_DIR
+
+$CARGO_FLAGS = @()
+if ($BUILD_MODE -eq "release") { $CARGO_FLAGS = @("--release") }
+
+if ($IS_HOST_BUILD) {
+    # Windows host: invoke cargo directly so artifacts land in target/$BUILD_MODE/
+    & cargo build @CARGO_FLAGS
+    & cargo build @CARGO_FLAGS -p ssruntime-ffi --features libc_alloc,panic-handler
+} else {
+    # Cross-compilation: dispatch to SDK release scripts
+    if ($PLATFORM -eq "windows") {
+        # cargo itself, as the host build does: the SDK's release-windows*.ps1
+        # always build --release, so build=debug copied from a directory
+        # nothing had written. The two crates and features are those scripts'.
+        $TARGET_TRIPLE = "x86_64-pc-windows-msvc"
+        if ($ARCH -eq "arm64") { $TARGET_TRIPLE = "aarch64-pc-windows-msvc" }
+        & cargo build --target $TARGET_TRIPLE @CARGO_FLAGS
+        & cargo build --target $TARGET_TRIPLE @CARGO_FLAGS -p ssruntime-ffi --features libc_alloc,panic-handler
+    } elseif ($PLATFORM -eq "ios") {
+        & sh ./scripts/release-ios-xcframework.sh $BUILD_MODE
+    } elseif ($PLATFORM -eq "web") {
+        & sh ./scripts/release-emscripten.sh $BUILD_MODE
+    } else {
+        & sh "./scripts/release-$PLATFORM.sh" $BUILD_MODE
+    }
+}
+popd
+
+# runtime/VERSION names the SDK release download-sdk installed, and everything
+# below replaces files with this local build. Stamp it "local" first, so a later
+# download-sdk sees a mismatch and reinstalls instead of skipping as up to date.
+New-Item -ItemType Directory -Path "$rootDirectory/ss_player/runtime" -Force | Out-Null
+Set-Content -Path "$rootDirectory/ss_player/runtime/VERSION" -Value "local"
+
+# 1. Collect Headers. The plain-C headers carry `extern "C"` guards (cbindgen
+# cpp_compat), so they are what this C++ code includes; the .hpp variants are unused.
+#
+# The generating build scripts live in the *-ffi crates and write beside
+# themselves, so these paths are `libs/<crate>-ffi/target/`.
+$INCLUDE_OUTPUT = "$rootDirectory/ss_player/runtime/include"
+New-Item -ItemType Directory -Path $INCLUDE_OUTPUT -Force | Out-Null
+Copy-Item "$SDK_DIR/libs/ssconverter-ffi/target/ssconverter.h" "$INCLUDE_OUTPUT/" -Force
+Copy-Item "$SDK_DIR/libs/ssruntime-ffi/target/ssruntime.h" "$INCLUDE_OUTPUT/" -Force
+
+# 1.5. Collect Licenses
+$RUNTIME_OUTPUT = "$rootDirectory/ss_player/runtime"
+if (Test-Path "$SDK_DIR/LICENSE.md") {
+    Copy-Item "$SDK_DIR/LICENSE.md" "$RUNTIME_OUTPUT/" -Force
+}
+if (Test-Path "$SDK_DIR/target/licenses/THIRD-PARTY-LICENSES.ssruntime.md") {
+    Copy-Item "$SDK_DIR/target/licenses/THIRD-PARTY-LICENSES.ssruntime.md" "$RUNTIME_OUTPUT/" -Force
+}
+
+if ($PLATFORM -eq "macos" -or $PLATFORM -eq "windows" -or $PLATFORM -eq "linux") {
+    if (Test-Path "$SDK_DIR/target/licenses/THIRD-PARTY-LICENSES.ssconverter.md") {
+        Copy-Item "$SDK_DIR/target/licenses/THIRD-PARTY-LICENSES.ssconverter.md" "$RUNTIME_OUTPUT/" -Force
+    }
+}
+
+# 2. Collect Libraries
+if ($PLATFORM -eq "macos" -or $PLATFORM -eq "ios" -or $PLATFORM -eq "web") {
+    $LIB_OUTPUT = "$rootDirectory/ss_player/runtime/libs/$PLATFORM"
+} else {
+    $LIB_OUTPUT = "$rootDirectory/ss_player/runtime/libs/$PLATFORM/$ARCH"
+}
+New-Item -ItemType Directory -Path $LIB_OUTPUT -Force | Out-Null
+
+# The names the link asks for: SConstruct and SCsub link "ssruntime", which
+# MSVC resolves as ssruntime.lib and every other toolchain as libssruntime.a.
+$LIB_EXT = ".a"
+$LIB_PREFIX = "lib"
+if ($PLATFORM -eq "windows") { $LIB_EXT = ".lib"; $LIB_PREFIX = "" }
+
+# Determine source directory: where the build above left the libraries, the
+# same per-platform choice as build-runtime.sh.
+if ($IS_HOST_BUILD) {
+    $SRC_DIR = "$SDK_DIR/target/$BUILD_MODE"
+} elseif ($PLATFORM -eq "ios") {
+    # iOS: pick the matching static slice from the SDK XCFramework
+    # (release-ios-xcframework.sh already lipo'd the simulator archs).
+    if ($IOS_SIMULATOR -eq "yes") {
+        $SRC_DIR = "$SDK_DIR/target/xcframework/static/libssruntime.xcframework/ios-arm64_x86_64-simulator"
+    } else {
+        $SRC_DIR = "$SDK_DIR/target/xcframework/static/libssruntime.xcframework/ios-arm64"
+    }
+} elseif ($PLATFORM -eq "android") {
+    # One directory per ABI; the collection below walks them.
+    $SRC_DIR = "$SDK_DIR/target/*-linux-android*/$BUILD_MODE"
+} elseif ($PLATFORM -eq "macos") {
+    $SRC_DIR = "$SDK_DIR/target/universal-apple-darwin/$BUILD_MODE"
+} elseif ($PLATFORM -eq "web") {
+    $SRC_DIR = "$SDK_DIR/target/wasm32-unknown-unknown/$BUILD_MODE"
+} elseif ($PLATFORM -eq "windows") {
+    $TARGET_TRIPLE = "x86_64-pc-windows-msvc"
+    if ($ARCH -eq "arm64") { $TARGET_TRIPLE = "aarch64-pc-windows-msvc" }
+    $SRC_DIR = "$SDK_DIR/target/$TARGET_TRIPLE/$BUILD_MODE"
+} else {
+    $SRC_DIR = "$SDK_DIR/target/$BUILD_MODE"
+}
+
+echo "Copying libraries from $SRC_DIR..."
+
+if ($PLATFORM -eq "android") {
+    $android_archs = @{
+        "arm64-v8a" = "aarch64-linux-android"
+        "armeabi-v7a" = "armv7-linux-androideabi"
+        "x86_64" = "x86_64-linux-android"
+        "x86" = "i686-linux-android"
+    }
+    
+    foreach ($a in $android_archs.Keys) {
+        $target = $android_archs[$a]
+        $arch_src_dir = "$SDK_DIR/target/$target/$BUILD_MODE"
+        $arch_lib_out = "$rootDirectory/ss_player/runtime/libs/$PLATFORM/$a"
+        
+        if (Test-Path "$arch_src_dir/libssruntime.a") {
+            New-Item -ItemType Directory -Path $arch_lib_out -Force | Out-Null
+            Copy-Item "$arch_src_dir/libssruntime.a" "$arch_lib_out/libssruntime.a" -Force
+        }
+    }
+} else {
+    if ($PLATFORM -eq "ios") {
+        $xcframework_src = "$SDK_DIR/target/xcframework/static/libssruntime.xcframework"
+        if (Test-Path $xcframework_src) {
+            Copy-Item -Recurse $xcframework_src "$LIB_OUTPUT/" -Force
+        }
+    } else {
+        echo "Copying libraries from $SRC_DIR to $LIB_OUTPUT..."
+        if (Test-Path "$SRC_DIR/libssruntime$LIB_EXT") {
+            Copy-Item "$SRC_DIR/libssruntime$LIB_EXT" "$LIB_OUTPUT/${LIB_PREFIX}ssruntime$LIB_EXT" -Force
+        } elseif (Test-Path "$SRC_DIR/ssruntime$LIB_EXT") {
+            Copy-Item "$SRC_DIR/ssruntime$LIB_EXT" "$LIB_OUTPUT/${LIB_PREFIX}ssruntime$LIB_EXT" -Force
+        }
+
+        if (Test-Path "$SRC_DIR/libssconverter$LIB_EXT") {
+            Copy-Item "$SRC_DIR/libssconverter$LIB_EXT" "$LIB_OUTPUT/${LIB_PREFIX}ssconverter$LIB_EXT" -Force
+        } elseif (Test-Path "$SRC_DIR/ssconverter$LIB_EXT") {
+            Copy-Item "$SRC_DIR/ssconverter$LIB_EXT" "$LIB_OUTPUT/${LIB_PREFIX}ssconverter$LIB_EXT" -Force
+        }
+
+        # Godot Custom Module compatibility, as download-sdk makes them: Godot's
+        # SCons asks MSVC for "ssruntime" under the engine's own suffix, so
+        # without these a custom-module build links stale copies.
+        if ($PLATFORM -eq "windows") {
+            foreach ($target in "editor", "template_release", "template_debug") {
+                foreach ($lib in "ssruntime", "ssconverter") {
+                    if (Test-Path "$LIB_OUTPUT/$lib.lib") {
+                        Copy-Item "$LIB_OUTPUT/$lib.lib" "$LIB_OUTPUT/$lib.windows.$target.$ARCH.lib" -Force
+                    }
+                }
+            }
+        }
+    }
+}

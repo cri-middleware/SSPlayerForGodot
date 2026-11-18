@@ -1,0 +1,385 @@
+name: release gdextension
+# workflow_dispatch only; the ref decides the role.
+# From a branch the run only builds (QA on a release/X.Y branch).
+# From a v* tag it also drafts the GitHub Release (upload_release, default true).
+# A tag that already has a Release, draft or published, is left untouched.
+on:
+  workflow_dispatch:
+    inputs:
+      upload_release:
+        description: 'Draft the GitHub Release, to publish by hand. Only from a v* tag that has no Release yet; from a branch the run is a build.'
+        required: false
+        default: true
+        type: boolean
+
+env:
+  LANG: en_US.UTF-8
+  LC_ALL: en_US.UTF-8
+  PYTHONIOENCODING: utf8
+  KEYCHAIN_PATH: app-signing.keychain-db
+  SCONS_CACHE: ~/.scons_cache
+
+# Least-privilege default token; the package job below elevates to
+# contents: write only to draft the GitHub Release.
+permissions:
+  contents: read
+
+# One run per ref at a time. A second dispatch of the same tag waits for the
+# first rather than cancelling it, so a half-built release is never abandoned.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  gdextension:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: 🐧 Linux (GCC)
+          # A Linux binary runs only on a glibc at least as new as the one it was
+          # built against, and ubuntu-latest may move to a newer one. 24.04 keeps the
+          # floor where the SDK's Linux builds are.
+            os: ubuntu-24.04
+            platform: linux
+
+          - name: 🏁 Windows (x86_64, MSVC)
+            os: windows-latest
+            platform: windows
+
+          - name: 🍎 macOS (universal)
+            os: macos-latest
+            platform: macos
+
+          - name: 🤖 Android (arm64)
+            os: ubuntu-latest
+            platform: android
+
+          - name: 🍏 iOS (arm64)
+            os: macos-latest
+            platform: ios
+
+          - name: 🌐 Web (wasm32)
+            os: ubuntu-latest
+            platform: web
+
+    defaults:
+      run:
+        shell: zsh {0}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Require the signing secrets
+        if: (matrix.platform == 'macos' || matrix.platform == 'ios') && (startsWith(github.ref, 'refs/tags/v') || startsWith(github.ref, 'refs/heads/release/'))
+        shell: bash
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          APPLE_DEV_ID_APP_CERT: ${{ secrets.APPLE_DEV_ID_APP_CERT }}
+          APPLE_DEV_ID_APP_CERT_PASS: ${{ secrets.APPLE_DEV_ID_APP_CERT_PASS }}
+          APPLE_DEV_ID_APP_NAME: ${{ secrets.APPLE_DEV_ID_APP_NAME }}
+          ASC_API_KEY_PASS: ${{ secrets.ASC_API_KEY_PASS }}
+          ASC_API_ISSUER_ID: ${{ secrets.ASC_API_ISSUER_ID }}
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+        run: |
+          required="APPLE_DEV_ID_APP_CERT APPLE_DEV_ID_APP_CERT_PASS APPLE_DEV_ID_APP_NAME"
+          if [ "$PLATFORM" = macos ]; then
+            required="$required ASC_API_KEY_PASS ASC_API_ISSUER_ID ASC_API_KEY_ID"
+          fi
+          missing=""
+          for name in $required; do
+            [ -n "${!name}" ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::a run from $GITHUB_REF_NAME ships signed, and these secrets are not set:$missing"
+            exit 1
+          fi
+
+      # The API every platform builds against is the floor the descriptor names.
+      - name: Read the Godot API the extension targets
+        shell: bash
+        run: echo "GODOT_API=$(./scripts/godot-api-version.sh)" >> "$GITHUB_ENV"
+
+      - name: clone Godot Cpp repository
+        uses: GuillaumeFalourd/clone-github-repo-action@19817562c346ff60f9935158dede6c5ece8fd0ac # v2.3
+        with:
+          depth: 1
+          branch: master
+          owner: 'godotengine'
+          repository: 'godot-cpp'
+
+      - name: setup for gdextension
+        uses: ./.github/actions/setup-extension
+        with:
+          platform: ${{ matrix.platform }}
+          os: ${{ matrix.os }}
+
+      # Fetch the prebuilt SDK runtime (headers + static libs) that the
+      # GDExtension build links against. Requires the SpriteStudio-SDK release
+      # assets to be downloadable from GitHub Releases.
+      - name: Download Prebuilt SDK (ssruntime)
+        if: matrix.platform != 'windows'
+        run: ./scripts/download-sdk.sh
+
+      - name: Download Prebuilt SDK (ssruntime, Windows)
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: ./scripts/download-sdk.ps1
+
+      # Restores what ci.yml's weekly run saved on develop, and saves nothing: a
+      # cache saved from a release branch or a tag is visible to that ref alone.
+      # Not on Linux: ci.yml builds that on ubuntu-latest, and SCons does not
+      # track the system headers or the compiler, so its objects would bring
+      # that image's glibc and libstdc++ into this 24.04 build.
+      - name: Restore the SCons cache
+        if: matrix.platform != 'linux'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.scons_cache
+          key: ${{ runner.os }}-${{ matrix.platform }}-scons-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.platform }}-scons-
+
+      # Import the Developer ID Application certificate into an ephemeral keychain
+      # so codesign (run inside the release scripts) can resolve the signing
+      # identity. No-ops when the certificate secret is absent, leaving the
+      # artifacts unsigned.
+      - name: Set up signing keychain
+        if: matrix.platform == 'macos' || matrix.platform == 'ios'
+        env:
+          APPLE_DEV_ID_APP_CERT: ${{ secrets.APPLE_DEV_ID_APP_CERT }}
+          APPLE_DEV_ID_APP_CERT_PASS: ${{ secrets.APPLE_DEV_ID_APP_CERT_PASS }}
+        run: |
+          # The job's shell is zsh without -e: stop at the first failing
+          # command, so its error is the last thing in this step's log.
+          set -e
+          if [ -z "$APPLE_DEV_ID_APP_CERT" ]; then
+            echo "APPLE_DEV_ID_APP_CERT not set — skipping keychain setup (artifacts will be unsigned)."
+            exit 0
+          fi
+
+          CERTIFICATE_PATH="$RUNNER_TEMP/build_certificate.p12"
+          # Random per-run password for the throwaway keychain; never persisted.
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 24)"
+
+          echo -n "$APPLE_DEV_ID_APP_CERT" | base64 --decode > "$CERTIFICATE_PATH"
+
+          # Create, harden and unlock a temporary keychain.
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Import the cert and authorize codesign to use its private key.
+          security import "$CERTIFICATE_PATH" -P "$APPLE_DEV_ID_APP_CERT_PASS" -f pkcs12 -k "$KEYCHAIN_PATH" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Put the keychain on the search list so codesign resolves the identity
+          # (keep login.keychain-db so other tooling still works).
+          security list-keychain -d user -s "$KEYCHAIN_PATH" login.keychain-db
+          # What codesign can sign with. GitHub masks secret values, so the part
+          # of a name that matches APPLE_DEV_ID_APP_NAME prints as ***.
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+
+          rm -f "$CERTIFICATE_PATH"
+
+      # Decode the App Store Connect API key (.p8) used to notarize the macOS
+      # frameworks and expose its path to the macOS build step. No-ops when the
+      # secret is absent. macOS only (iOS is not notarized).
+      - name: Prepare Apple API key
+        if: matrix.platform == 'macos'
+        env:
+          ASC_API_KEY_PASS: ${{ secrets.ASC_API_KEY_PASS }}
+        run: |
+          set -e
+          if [ -z "$ASC_API_KEY_PASS" ]; then
+            echo "ASC_API_KEY_PASS not set — skipping API key setup (frameworks will not be notarized)."
+            exit 0
+          fi
+          echo "$ASC_API_KEY_PASS" | base64 --decode > "$RUNNER_TEMP/apple_api_key.p8"
+          echo "APPLE_API_KEY_PATH=$RUNNER_TEMP/apple_api_key.p8" >> "$GITHUB_ENV"
+
+      - name: build Linux
+        if: matrix.platform == 'linux'
+        run: |
+          ./scripts/release-gdextension-linux.sh api_version=${{ env.GODOT_API }}
+
+      # release-gdextension-macos.sh signs the frameworks (hardened runtime +
+      # timestamp) when APPLE_SIGNING_IDENTITY is present, and notarizes them
+      # when the APPLE_API_* App Store Connect credentials are also present.
+      # APPLE_API_KEY_PATH is set by the "Prepare Apple API key" step above.
+      - name: build macOS
+        if: matrix.platform == 'macos'
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_DEV_ID_APP_NAME }}
+          APPLE_API_ISSUER: ${{ secrets.ASC_API_ISSUER_ID }}
+          APPLE_API_KEY: ${{ secrets.ASC_API_KEY_ID }}
+        run: |
+          ./scripts/release-gdextension-macos.sh api_version=${{ env.GODOT_API }}
+
+      # release-gdextension-ios.sh signs the XCFrameworks inside-out (no hardened
+      # runtime; iOS is not notarized) when APPLE_SIGNING_IDENTITY is present.
+      - name: build iOS
+        if: matrix.platform == 'ios'
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_DEV_ID_APP_NAME }}
+        run: |
+          ./scripts/release-gdextension-ios.sh api_version=${{ env.GODOT_API }}
+
+      - name: build Android
+        if: matrix.platform == 'android'
+        run: |
+          ./scripts/release-gdextension-android.sh api_version=${{ env.GODOT_API }}
+
+      - name: build Windows
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        # The script drops the .exp / .lib link residue itself, so a local run
+        # leaves bin/windows looking exactly like a release.
+        run: ./scripts/release-gdextension-windows.ps1 api_version=${{ env.GODOT_API }}
+
+      - name: build Web
+        if: matrix.platform == 'web'
+        run: |
+          ./scripts/release-gdextension-web.sh api_version=${{ env.GODOT_API }}
+
+      # Stage the runtime third-party license files (produced by the SDK
+      # download step) into the uploaded artifact so the packaging job can
+      # bundle them into the release zip, as required by the licenses of the
+      # statically-linked Rust crates. shell: bash so the Windows runner works.
+      - name: Stage third-party license files
+        shell: bash
+        run: |
+          mkdir -p bin/licenses
+          cp ss_player/runtime/THIRD-PARTY-LICENSES.ssruntime.md bin/licenses/
+          cp ss_player/runtime/THIRD-PARTY-LICENSES.ssconverter.md bin/licenses/
+          cp ss_player/runtime/LICENSE.md bin/licenses/runtime-LICENSE.md
+
+      # No commit hash in the name: these are consumed by the package job in the
+      # same run, where the platform already makes them unique, and a name the
+      # packaging step has to be told the hash of is a name it cannot resolve on
+      # its own. scripts/build-release.sh reads them by platform.
+      - name: Upload artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: extension-${{ env.GODOT_API }}-${{ matrix.platform }}
+          path: bin/
+          if-no-files-found: error
+          # A week, not the 90-day default: this is the matrix's handoff to the
+          # package job, not something to keep. See the same setting there.
+          retention-days: 7
+
+  package:
+    needs: gdextension
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Needs write access to draft the GitHub Release (softprops/action-gh-release).
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-tags: true
+          persist-credentials: false
+
+      - name: Read the Godot API the extension targets
+        run: echo "GODOT_API=$(./scripts/godot-api-version.sh)" >> "$GITHUB_ENV"
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: artifacts
+
+      # scripts/build-release.sh IS the release package: the addons/spritestudio
+      # folder a user drops into a project — the descriptor, the icons it points
+      # at, every licence the shipped binaries carry, the documentation of this
+      # commit, and bin/<platform>/ for all six — then the zip and SHA256SUMS.
+      # Every option is spelled out so a release cannot change because a default
+      # did, and so this is the command a human runs locally, after `gh run
+      # download <this run> -D artifacts`, to reproduce this exact archive
+      # without rebuilding six platforms.
+      #
+      # Its check is the one nothing else does: spritestudio.gdextension names a
+      # file per platform and build target, Godot resolves them at load time, and
+      # a name that does not match what shipped fails silently on that platform.
+      # Every path in it is looked up inside the finished zip.
+      - name: Build the release
+        run: ./scripts/build-release.sh in=artifacts out=release-dist api_version=${{ env.GODOT_API }} verify=yes clean=yes
+
+      - name: Upload final release package
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ssplayer-godot-release-dist-${{ env.GODOT_API }}
+          path: release-dist
+          if-no-files-found: error
+          # A week, not the 90-day default. What is meant to last is attached to
+          # the GitHub Release, which never expires; this is a copy for a run
+          # that uploaded nothing. Artifact storage is an org-wide quota, and a
+          # full one does not degrade — `upload-artifact` fails, so the release
+          # build fails, in a step that has nothing to do with the release.
+          retention-days: 7
+
+      # The ref decides what the run is: a v* tag is a release, anything else is
+      # a build, kept on the run and drafting nothing. A tag that already has a
+      # Release, draft or published, keeps it as it is, so a run from an old tag
+      # rebuilds without touching the files people have downloaded and checked
+      # against its SHA256SUMS. To have a Release made again, delete it first.
+      - name: Decide on the GitHub Release
+        id: release
+        if: inputs.upload_release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          case "$GITHUB_REF" in
+            refs/tags/v*) ;;
+            *) echo "::notice::${GITHUB_REF_NAME} is not a v* tag — a build, no Release."; exit 0 ;;
+          esac
+          if out="$(gh release view "$GITHUB_REF_NAME" --json isDraft 2>&1)"; then
+            echo "::notice::${GITHUB_REF_NAME} already has a Release — left as it is. Delete it to have it made again."
+          elif [ "$out" = "release not found" ]; then
+            echo "draft=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "$out"
+            exit 1
+          fi
+
+      # The pre-release mark the draft carries: one once a full release is
+      # tagged, none before (scripts/release-channel.sh).
+      # A patch to an earlier line also names the full release before it in that
+      # line, which the generated notes start from instead of the newest release.
+      - name: Read the Release's channel
+        id: channel
+        if: steps.release.outputs.draft == 'true'
+        run: |
+          channel="$(./scripts/release-channel.sh "$GITHUB_REF_NAME")"
+          echo "::notice::${GITHUB_REF_NAME} is a ${channel} release"
+          echo "channel=${channel}" >> "$GITHUB_OUTPUT"
+          if [ "$channel" = old ]; then
+            previous="$(git tag --list "${GITHUB_REF_NAME%.*}.*" --sort=v:refname |
+              awk -v tag="$GITHUB_REF_NAME" '$0 == tag { print previous; exit } $0 !~ /-|[0-9](a|b|rc)[0-9]+$/ { previous = $0 }')"
+            echo "previous=${previous}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create GitHub Release
+        if: steps.release.outputs.draft == 'true'
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        with:
+          files: |
+            release-dist/*.zip
+            release-dist/SHA256SUMS
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          previous_tag: ${{ steps.channel.outputs.previous }}
+          # Always a draft: a person checks the assets and the generated notes,
+          # then publishes it from the GitHub UI as it is marked. A draft cannot
+          # be made Latest; publishing one that is not a pre-release makes it so.
+          draft: true
+          prerelease: ${{ steps.channel.outputs.channel == 'prerelease' }}

@@ -1,0 +1,34 @@
+# 📥 インストール
+
+SpriteStudio Player for Godot を使い始めるための手順です。
+
+## A. SpriteStudio Player for Godot の GDExtension を利用する (推奨)
+
+ビルド作業なしでプラグインを利用できる最短の手順です。
+
+1. [公式サイト](https://godotengine.org/download/) より 4.7 以降の Godot Engine をダウンロードします。
+2. [SSPlayerForGodot の最新の Release](https://github.com/cri-middleware/SSPlayerForGodot/releases/latest) を開き、**Assets** から `ssplayer-godot-extension-4.7.zip` をダウンロードします。Windows・macOS・Linux・Android・iOS・Web 向けのバイナリが 1 つの ZIP に入っています（[詳細](../limitations.md#プラットフォームとエクスポート)）。
+3. ダウンロードした ZIP を解凍し、中にある `addons` フォルダをそのまま Godot プロジェクトのルートディレクトリにコピーします。
+
+    ```
+    MyGame/                         ← project.godot のあるフォルダ
+    ├── addons/
+    │   └── spritestudio/           ← ZIP の addons/ から
+    │       ├── spritestudio.gdextension
+    │       ├── bin/
+    │       └── …
+    └── project.godot
+    ```
+
+4. Godot エディタを再起動すると `SpriteStudioPlayer2D` ノードや SS Importer ドックが利用可能になります。
+
+## B. SpriteStudio Player for Godot のカスタムモジュールを組み込んだ Godot Engine を利用する
+
+カスタムモジュールとしてビルドして利用する場合は、[ビルドガイド](../development/build.md) を参照してください。
+
+## 次のステップ
+
+インストールが完了したら、以下のいずれかへ進んでください。
+
+- まだ `.ssab` を持っていない場合 → [アセットのインポートとエディタ連携](../workflow/usage_asset_pipeline.md) で SpriteStudio プロジェクト（`.sspj`）から `.ssab` を生成します。
+- すでに `.ssab` がプロジェクト内にある場合 → [基本的な使い方](../workflow/usage_basic.md) でシーンへの配置と再生を行います。

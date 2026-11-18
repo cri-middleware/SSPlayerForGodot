@@ -1,0 +1,48 @@
+name: ✨ Feature request / 要望
+description: Suggest a new capability or an improvement. / 新機能や改善のご提案。
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please check [ROADMAP.md](https://github.com/cri-middleware/SSPlayerForGodot/blob/develop/ROADMAP.md)
+        first — it lists what is planned, and which items are waiting on the shared SpriteStudio SDK.
+
+        まず [ROADMAP.md](https://github.com/cri-middleware/SSPlayerForGodot/blob/develop/ROADMAP.md) をご確認ください。予定済みの項目と、共通 SDK 側の対応待ちの項目が記載されています。
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve? / 解決したい課題
+      description: |
+        Describe the situation you are stuck in, not just the feature you have in mind — it often
+        leads to a better answer.
+        ご要望の機能そのものより、お困りの状況をお書きください。より良い解決策が見つかることがあります。
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like it to do? / ご提案の内容
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What are you doing today instead? / 現在の回避方法
+      description: Workarounds you have tried, and why they fall short. / 試した回避策と、不十分な点。
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Where does this belong? / 対象範囲
+      description: |
+        Playback behaviour is usually the shared SpriteStudio runtime; this repository owns
+        the nodes, the GDExtension and the import pipeline. Unsure is fine.
+        再生の挙動は共通ランタイム側です。わからない場合はそのままで構いません。
+      options:
+        - Godot side (nodes, GDExtension, import pipeline)
+        - Shared SpriteStudio runtime (playback behaviour)
+        - Not sure / わからない

@@ -1,0 +1,627 @@
+
+#include "ssab_resource.h"
+#include "ssruntime.h"
+#ifdef SPRITESTUDIO_GODOT_EXTENSION
+#include <godot_cpp/classes/file_access.hpp>
+#include <godot_cpp/core/error_macros.hpp>
+#else
+#include "core/core_bind.h"
+#include "core/error/error_list.h"
+#include "core/error/error_macros.h"
+#include "core/io/file_access.h"
+#endif
+
+void SSABResource::_bind_methods() {
+  ClassDB::bind_method(D_METHOD("load_from_file", "path"), &SSABResource::load_from_file);
+  ClassDB::bind_method(D_METHOD("save_to_file", "path"), &SSABResource::save_to_file);
+  ClassDB::bind_method(D_METHOD("is_valid"), &SSABResource::is_valid);
+  ClassDB::bind_method(D_METHOD("get_animation_count"), &SSABResource::get_animation_count);
+  ClassDB::bind_method(D_METHOD("get_animation_names"), &SSABResource::get_animation_names);
+  ClassDB::bind_method(D_METHOD("get_cellmap_names"), &SSABResource::get_cellmap_names);
+  ClassDB::bind_method(D_METHOD("get_cell_names", "cellmap_name"), &SSABResource::get_cell_names);
+  ClassDB::bind_method(D_METHOD("get_canvas_size", "anim_name"), &SSABResource::get_canvas_size);
+  ClassDB::bind_method(D_METHOD("get_canvas_rect", "anim_name"), &SSABResource::get_canvas_rect);
+  ClassDB::bind_method(D_METHOD("get_sound_stream", "sound_list_name_hash", "sound_name_hash"), &SSABResource::get_sound_stream);
+  ClassDB::bind_method(D_METHOD("get_sound_info", "sound_list_name_hash", "sound_name_hash"), &SSABResource::get_sound_info);
+  ClassDB::bind_method(D_METHOD("set_data", "data"), &SSABResource::set_data);
+  ClassDB::bind_method(D_METHOD("get_data"), &SSABResource::get_data);
+
+  ADD_PROPERTY(PropertyInfo(Variant::PACKED_BYTE_ARRAY, "data", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE), "set_data", "get_data");
+  }
+bool SSABResource::is_valid() const {
+  // Verification walks the whole buffer, and nearly every accessor below gates
+  // on it (selecting a player in the editor alone triggers several, and each
+  // Instance child does one per animation lookup), so a multi-megabyte SSAB
+  // would be re-verified many times per operation. The buffer is immutable
+  // between replacements, and _take_binary resets the cache on each.
+  if (_valid_cache < 0) {
+    _valid_cache = _verify_binary() ? 1 : 0;
+  }
+  return _valid_cache != 0;
+}
+
+bool SSABResource::_verify_binary() const {
+  if (binary.size() == 0) {
+    return false;
+  }
+
+  ::flatbuffers::Verifier verifier(binary.ptr(), binary.size());
+  if (!ss::format::VerifySsAnimeBinaryBuffer(verifier)) {
+    return false;
+  }
+
+  const ss::format::SsAnimeBinary *ssab = ss::format::GetSsAnimeBinary(binary.ptr());
+  if (ssab->parts() == nullptr || ssab->parts()->size() == 0) {
+    return false;
+  }
+
+  if (ssab->animations() == nullptr || ssab->animations()->size() == 0) {
+    return false;
+  }
+
+  // The runtime indexes parts() positionally over each animation's
+  // parts_animation_data; parsing unchecked under panic=abort, a list longer
+  // than parts() aborts the process at resource-create time. Reject that here
+  // (a shorter list never indexes out of range, so only '>').
+  const uint32_t parts_size = ssab->parts()->size();
+  const auto *animations = ssab->animations();
+  for (uint32_t a = 0; a < animations->size(); a++) {
+    const auto *pad = animations->Get(a)->parts_animation_data();
+    if (pad && pad->size() > parts_size) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+bool SSABResource::_take_binary(const PackedByteArray &p_bytes) {
+  // New buffer: whatever was derived from the old one goes with it. The
+  // generation is bumped whether or not the new bytes verify, so a borrower of
+  // the old ones re-binds even when nothing usable replaced them -- and it is
+  // the only signal a borrower gets from copy_from, which emits no "changed".
+  _valid_cache = -1;
+  _generation++;
+  _parsed.unref();
+  _sound_cache.clear();
+  binary = p_bytes;
+  if (is_valid()) {
+    return true;
+  }
+  binary.clear();
+  _valid_cache = -1;
+  return false;
+}
+
+Error SSABResource::load_from_file(const String &path) {
+  Error error = OK;
+  _parent_dir = path.get_base_dir();
+#ifdef SPRITESTUDIO_GODOT_EXTENSION
+  PackedByteArray bytes = FileAccess::get_file_as_bytes(path);
+  error = FileAccess::get_open_error();
+#else
+  PackedByteArray bytes = FileAccess::get_file_as_bytes(path, &error);
+#endif
+  // A file that cannot be read still replaces the bytes -- with none.
+  const bool valid = _take_binary(bytes);
+  if (error != OK) {
+    return error;
+  }
+  return valid ? OK : ERR_INVALID_DATA;
+}
+
+void SSABResource::set_data(const PackedByteArray &p_data) {
+  // Empty is a resource that was never loaded, which is not worth a message.
+  if (!_take_binary(p_data) && !p_data.is_empty()) {
+    ERR_PRINT(vformat("[SS] SSABResource.data: these %d bytes are not a usable SSAB, so none were kept.", p_data.size()));
+  }
+}
+
+Error SSABResource::save_to_file(const String &path) {
+  Error error = OK;
+#ifdef SPRITESTUDIO_GODOT_EXTENSION
+  Ref<FileAccess> file = FileAccess::open(path, FileAccess::WRITE);
+  error = FileAccess::get_open_error();
+#else
+  Ref<FileAccess> file = FileAccess::open(path, FileAccess::WRITE, &error);
+#endif
+  if (error != OK)
+    return error;
+  file->store_buffer(binary.ptr(), binary.size());
+  file->flush();
+  return OK;
+}
+
+int SSABResource::get_animation_count() {
+  if (!is_valid()) {
+    return 0;
+  }
+  auto ss_anime_binary = this->get_ss_anime_binary();
+  return ss_anime_binary->animations()->size();
+}
+
+PackedStringArray SSABResource::get_animation_names() {
+    PackedStringArray vec;
+    if (!is_valid()) {
+        return vec;
+    }
+    auto ss_anime_binary = this->get_ss_anime_binary();
+    auto num  = ss_anime_binary->animations()->size();
+    for (int i=0; i < num; i++) {
+      auto animation = ss_anime_binary->animations()->Get(i);
+      auto name = animation->name();
+      vec.push_back(String::utf8(name->c_str()));
+    }
+    return vec;
+}
+
+PackedStringArray SSABResource::get_cellmap_names() {
+    PackedStringArray vec;
+    if (!is_valid()) {
+        return vec;
+    }
+    auto a = get_ss_anime_binary();
+    if (a->cellmaps() != nullptr) {
+        for (int i = 0; i < a->cellmaps()->size(); i++) {
+            auto cellmap = a->cellmaps()->Get(i);
+            vec.push_back(String::utf8(cellmap->name()->c_str()));
+        }
+    }
+    if (a->external_textures() != nullptr) {
+        for (int i = 0; i < a->external_textures()->size(); i++) {
+            auto etexture = a->external_textures()->Get(i);
+            vec.push_back(String::utf8(etexture->name()->c_str()));
+        }
+    }
+    return vec;
+}
+
+PackedStringArray SSABResource::get_cell_names(const String &cellmap_name) {
+    PackedStringArray vec;
+    if (!is_valid()) {
+        return vec;
+    }
+    auto a = get_ss_anime_binary();
+    if (a->cellmaps() != nullptr) {
+        for (int i = 0; i < a->cellmaps()->size(); i++) {
+            auto cellmap = a->cellmaps()->Get(i);
+            if (cellmap_name != String::utf8(cellmap->name()->c_str())) {
+                continue;
+            }
+            if (cellmap->cells() != nullptr) {
+                for (int j = 0; j < cellmap->cells()->size(); j++) {
+                    auto cell = cellmap->cells()->Get(j);
+                    vec.push_back(String::utf8(cell->name()->c_str()));
+                }
+            }
+            break;
+        }
+    }
+    return vec;
+}
+
+uint32_t SSABResource::get_cellmap_hash(const String &cellmap_name) {
+    if (!is_valid()) {
+        return 0;
+    }
+    auto a = get_ss_anime_binary();
+    if (a->cellmaps() != nullptr) {
+        for (int i = 0; i < a->cellmaps()->size(); i++) {
+            auto cellmap = a->cellmaps()->Get(i);
+            if (cellmap_name == String::utf8(cellmap->name()->c_str())) {
+                return cellmap->name_hash();
+            }
+        }
+    }
+    if (a->external_textures() != nullptr) {
+        for (int i = 0; i < a->external_textures()->size(); i++) {
+            auto etexture = a->external_textures()->Get(i);
+            if (cellmap_name == String::utf8(etexture->name()->c_str())) {
+                return etexture->name_hash();
+            }
+        }
+    }
+    return 0;
+}
+
+const ss::format::SsAnimeBinary *SSABResource::get_ss_anime_binary() {
+    if (binary.size() == 0) {
+        return nullptr;
+    }
+    return ss::format::GetSsAnimeBinary(this->binary.ptr());
+}
+
+SsParsedSsab::~SsParsedSsab() {
+  // Every player lets go of its reference only after its runtime and effect
+  // slots have let go of the resource, so this handle is the last one: the
+  // resource goes here, and the bytes it borrowed go after it.
+  if (_handle) {
+    ss_resource_destroy(_handle);
+  }
+}
+
+Ref<SsParsedSsab> SSABResource::get_parsed() {
+  if (_parsed.is_null()) {
+    Ref<SsParsedSsab> parsed;
+    parsed.instantiate();
+    // Borrow (do not copy) to keep loading zero-copy. The holder's own
+    // reference to the buffer keeps it valid and unmodified for as long as the
+    // parse lives: `binary` is only ever replaced, never written in place.
+    parsed->_bytes = binary;
+    parsed->_handle = ss_resource_create_borrow(parsed->_bytes.ptr(), parsed->_bytes.size());
+    if (!parsed->_handle) {
+      return Ref<SsParsedSsab>();
+    }
+    _parsed = parsed;
+  }
+  return _parsed;
+}
+
+const uint8_t *SSABResource::get_data_ptr() {
+    return this->binary.ptr();
+}
+
+int64_t SSABResource::get_data_size() {
+    return this->binary.size();
+}
+
+ss::format::AnimationData *SSABResource::find_animation(const String &name) {
+    if (!is_valid()) {
+        return nullptr;
+    }
+    auto ss_anime_binary = this->get_ss_anime_binary();
+    auto num  = ss_anime_binary->animations()->size();
+    for (int i=0; i < num; i++) {
+        auto animation = ss_anime_binary->animations()->Get(i);
+        auto anim_name = animation->name();
+        if (name == String::utf8(anim_name->c_str())) {
+            return (ss::format::AnimationData *)animation;
+        }
+    }
+    return nullptr;
+}
+
+ss::format::AnimationData *SSABResource::find_animation_by_hash(uint32_t name_hash) {
+    if (!is_valid()) {
+        return nullptr;
+    }
+    auto ss_anime_binary = this->get_ss_anime_binary();
+    auto num  = ss_anime_binary->animations()->size();
+    for (int i=0; i < num; i++) {
+        auto animation = ss_anime_binary->animations()->Get(i);
+        if (animation && animation->name_hash() == name_hash) {
+            return (ss::format::AnimationData *)animation;
+        }
+    }
+    return nullptr;
+}
+
+Vector2 SSABResource::get_canvas_size(const String &anim_name) {
+    const ss::format::AnimationData *animation = find_animation(anim_name);
+    if (!animation || !animation->canvas_size()) {
+        return Vector2();
+    }
+    return Vector2(animation->canvas_size()->v1(), animation->canvas_size()->v2());
+}
+
+Rect2 SSABResource::get_canvas_rect(const String &anim_name) {
+    const ss::format::AnimationData *animation = find_animation(anim_name);
+    if (!animation || !animation->canvas_size() || !animation->pivot()) {
+        return Rect2();
+    }
+    const real_t w = animation->canvas_size()->v1();
+    const real_t h = animation->canvas_size()->v2();
+    // The pivot says where the origin sits inside the canvas, normalised from
+    // the canvas centre and in the editor's Y-up space; the box is reported
+    // Y-down, which is the one flip in this arithmetic. A pivot of (0, -0.5) —
+    // the editor's bottom edge, how a character standing on the ground is
+    // authored — therefore yields a box entirely above the origin.
+    return Rect2(-animation->pivot()->v1() * w - w * 0.5f,
+                 animation->pivot()->v2() * h - h * 0.5f,
+                 w, h);
+}
+
+String SSABResource::get_parent_dir() const {
+    return this->_parent_dir;
+}
+
+namespace {
+// Every name a pack resolves beside itself, in one walk: `p_fn(name, type)`,
+// with the name relative to the pack's directory.
+template <typename F>
+void for_each_dependency(const ss::format::SsAnimeBinary *p_binary, F &&p_fn) {
+    if (auto cellmaps = p_binary->cellmaps()) {
+        for (uint32_t i = 0; i < cellmaps->size(); i++) {
+            auto cellmap = cellmaps->Get(i);
+            if (cellmap && cellmap->image_path()) {
+                p_fn(String::utf8(cellmap->image_path()->c_str()), "Texture2D");
+            }
+        }
+    }
+    if (auto textures = p_binary->external_textures()) {
+        for (uint32_t i = 0; i < textures->size(); i++) {
+            auto texture = textures->Get(i);
+            if (texture && texture->name()) {
+                p_fn(String::utf8(texture->name()->c_str()), "Texture2D");
+            }
+        }
+    }
+    if (auto sound_lists = p_binary->sound_lists()) {
+        for (uint32_t i = 0; i < sound_lists->size(); i++) {
+            auto sound_list = sound_lists->Get(i);
+            auto files = sound_list ? sound_list->table_data() : nullptr;
+            if (files == nullptr) {
+                continue;
+            }
+            for (uint32_t j = 0; j < files->size(); j++) {
+                auto file = files->Get(j);
+                if (file && file->file_path()) {
+                    p_fn(String::utf8(file->file_path()->c_str()), "AudioStream");
+                }
+            }
+        }
+    }
+    // The player looks an Instance part's pack up as `<anime pack>.ssab` beside
+    // this one, so that is the file it depends on.
+    if (auto instances = p_binary->external_instances()) {
+        for (uint32_t i = 0; i < instances->size(); i++) {
+            auto entry = instances->Get(i);
+            if (entry && entry->anime_pack_name() && entry->anime_pack_name()->size() > 0) {
+                p_fn(String::utf8(entry->anime_pack_name()->c_str()) + String(".ssab"), "SSABResource");
+            }
+        }
+    }
+}
+// The names inside a .ssab are written at conversion and resolved beside the
+// file, so a move cannot be followed by renaming anything. What the FileSystem
+// dock can be told is whether the move kept every dependency where the pack
+// looks for it. `p_path` is where the pack is now; `p_renames` maps each moved
+// file's old path to its new one, the pack itself included when it moved. A move
+// of the whole output folder keeps the layout and passes.
+Error check_dependencies_after_move(const String &p_path, const HashMap<String, String> &p_renames) {
+    Ref<SSABResource> ssab_file = memnew(SSABResource);
+    if (ssab_file->load_from_file(p_path) != OK) {
+        return OK; // Not a pack this can read; nothing to say about it.
+    }
+    String old_path = p_path;
+    for (const KeyValue<String, String> &E : p_renames) {
+        if (E.value == p_path) {
+            old_path = E.key;
+            break;
+        }
+    }
+    const String old_dir = old_path.get_base_dir();
+    const String new_dir = p_path.get_base_dir();
+    Error result = OK;
+    for_each_dependency(ssab_file->get_ss_anime_binary(), [&](const String &p_name, const char *) {
+        const String was = old_dir.path_join(p_name).simplify_path();
+        const String *moved_to = p_renames.getptr(was);
+        const String now = moved_to ? *moved_to : was;
+        const String expected = new_dir.path_join(p_name).simplify_path();
+        if (now != expected) {
+            WARN_PRINT(vformat("[SS] %s looks for \"%s\" beside itself, at %s, but it is now at %s. Move them together, or move it back.",
+                               p_path, p_name, expected, now));
+            result = ERR_CANT_RESOLVE;
+        }
+    });
+    return result;
+}
+} // namespace
+
+PackedStringArray SSABResource::get_dependency_paths(bool p_add_types) {
+    PackedStringArray paths;
+    if (!is_valid()) {
+        return paths;
+    }
+    PackedStringArray seen;
+    for_each_dependency(get_ss_anime_binary(), [&](const String &p_name, const char *p_type) {
+        const String path = _parent_dir.path_join(p_name).simplify_path();
+        if (seen.has(path)) {
+            return;
+        }
+        seen.push_back(path);
+        paths.push_back(p_add_types ? path + String("::") + String(p_type) : path);
+    });
+    return paths;
+}
+
+const ss::format::SoundFile *SSABResource::_find_sound_file(uint32_t sound_list_name_hash,
+                                                           uint32_t sound_name_hash) {
+    if (!is_valid()) {
+        return nullptr;
+    }
+    auto a = get_ss_anime_binary();
+    auto sound_lists = a->sound_lists();
+    if (sound_lists == nullptr) {
+        return nullptr;
+    }
+    for (uint32_t i = 0; i < sound_lists->size(); i++) {
+        auto sound_list = sound_lists->Get(i);
+        if (!sound_list || sound_list->name_hash() != sound_list_name_hash) {
+            continue;
+        }
+        auto files = sound_list->table_data();
+        if (files == nullptr) {
+            return nullptr;
+        }
+        for (uint32_t j = 0; j < files->size(); j++) {
+            auto file = files->Get(j);
+            if (file && file->name_hash() == sound_name_hash) {
+                return file;
+            }
+        }
+        return nullptr;
+    }
+    return nullptr;
+}
+
+Ref<AudioStream> SSABResource::get_sound_stream(uint32_t sound_list_name_hash, uint32_t sound_name_hash) {
+    uint64_t key = ((uint64_t)sound_list_name_hash << 32) | (uint64_t)sound_name_hash;
+    if (_sound_cache.has(key)) {
+        return _sound_cache[key];
+    }
+
+    Ref<AudioStream> stream;
+    const ss::format::SoundFile *file = _find_sound_file(sound_list_name_hash, sound_name_hash);
+    if (file != nullptr && file->file_path() != nullptr) {
+        String path = _parent_dir.path_join(String::utf8(file->file_path()->c_str()));
+        Ref<Resource> res = SsResourceLoader::get_singleton()->load(path, "AudioStream");
+        stream = Ref<AudioStream>(res);
+    }
+
+    // Cache even a null result so a missing/unsupported file is not re-loaded on
+    // every event; the identity cannot change for a given binary.
+    _sound_cache[key] = stream;
+    return stream;
+}
+
+Dictionary SSABResource::get_sound_info(uint32_t sound_list_name_hash, uint32_t sound_name_hash) {
+    Dictionary info;
+    const ss::format::SoundFile *file = _find_sound_file(sound_list_name_hash, sound_name_hash);
+    if (file == nullptr) {
+        return info;
+    }
+    if (file->name()) {
+        info["alias"] = String::utf8(file->name()->c_str());
+    }
+    if (file->file_path()) {
+        String rel = String::utf8(file->file_path()->c_str());
+        info["file_path"] = rel;
+        info["path"] = _parent_dir.path_join(rel);
+    }
+    info["file_path_hash"] = (int64_t)file->file_path_hash();
+    info["time_total"] = (int64_t)file->time_total();
+    return info;
+}
+
+
+#ifdef SPRITESTUDIO_GODOT_EXTENSION
+Variant SSABResourceFormatLoader::_load(const String &path,
+                                                 const String &original_path,
+                                                 bool use_sub_threads,
+                                                 int32_t cache_mode) const {
+#else
+Ref<Resource> SSABResourceFormatLoader::load(const String &path,
+                                                       const String &original_path,
+                                                       Error *error, bool use_sub_threads,
+                                                       float *progress,
+                                                       CacheMode cache_mode) {
+#endif
+  Ref<SSABResource> ssab_file = memnew(SSABResource);
+  Error err = ssab_file->load_from_file(path);
+  if (err != OK) {
+#ifdef SPRITESTUDIO_GODOT_EXTENSION
+    // _load reports a failure by returning the code: a null resource is taken
+    // for a success, and the caller gets OK with nothing loaded.
+    return err;
+#else
+    if (error)
+      *error = err;
+    return Ref<Resource>();
+#endif
+  }
+
+#ifndef SPRITESTUDIO_GODOT_EXTENSION
+  if (error)
+    *error = OK;
+#endif
+  return ssab_file;
+}
+
+#ifdef SPRITESTUDIO_GODOT_EXTENSION
+Error SSABResourceFormatLoader::_rename_dependencies(const String &path, const Dictionary &renames) const {
+  HashMap<String, String> map;
+  const Array keys = renames.keys();
+  for (int i = 0; i < keys.size(); i++) {
+    map[keys[i]] = renames[keys[i]];
+  }
+  return check_dependencies_after_move(path, map);
+}
+#else
+Error SSABResourceFormatLoader::rename_dependencies(const String &path, const HashMap<String, String> &renames) {
+  return check_dependencies_after_move(path, renames);
+}
+#endif
+
+#ifdef SPRITESTUDIO_GODOT_EXTENSION
+PackedStringArray SSABResourceFormatLoader::_get_dependencies(const String &path, bool add_types) const {
+#else
+void SSABResourceFormatLoader::get_dependencies(const String &path, List<String> *dependencies, bool add_types) {
+#endif
+  // A throwaway resource, read and verified but never cached: the editor asks
+  // this of every .ssab on every filesystem scan.
+  Ref<SSABResource> ssab_file = memnew(SSABResource);
+  PackedStringArray paths;
+  if (ssab_file->load_from_file(path) == OK) {
+    paths = ssab_file->get_dependency_paths(add_types);
+  }
+#ifdef SPRITESTUDIO_GODOT_EXTENSION
+  return paths;
+#else
+  for (const String &dependency : paths) {
+    dependencies->push_back(dependency);
+  }
+#endif
+}
+
+#ifdef SPRITESTUDIO_GODOT_EXTENSION
+PackedStringArray SSABResourceFormatLoader::_get_recognized_extensions() const {
+  PackedStringArray extensions;
+  extensions.push_back("ssab");
+  return extensions;
+}
+#else
+void SSABResourceFormatLoader::get_recognized_extensions(List<String> *extensions) const {
+  extensions->push_back("ssab");
+}
+#endif
+
+#ifdef SPRITESTUDIO_GODOT_EXTENSION
+String SSABResourceFormatLoader::_get_resource_type(const String &path) const {
+#else
+String SSABResourceFormatLoader::get_resource_type(const String &path) const {
+#endif
+  return path.ends_with(".ssab") ? "SSABResource" : "";
+}
+
+#ifdef SPRITESTUDIO_GODOT_EXTENSION
+bool SSABResourceFormatLoader::_handles_type(const StringName &type) const {
+#else
+bool SSABResourceFormatLoader::handles_type(const String &type) const {
+#endif
+  return type == StringName("SSABResource") || ClassDB::is_parent_class(type, "SSABResource");
+}
+
+#ifdef SPRITESTUDIO_GODOT_EXTENSION
+Error SSABResourceFormatSaver::_save(const Ref<Resource> &resource, const String &path, uint32_t flags) {
+#else
+Error SSABResourceFormatSaver::save(const Ref<Resource> &resource, const String &path, uint32_t flags) {
+#endif
+  Ref<SSABResource> res = resource;
+  Error error = res->save_to_file(path);
+  return error;
+}
+
+#ifdef SPRITESTUDIO_GODOT_EXTENSION
+PackedStringArray SSABResourceFormatSaver::_get_recognized_extensions(const Ref<Resource> &resource) const {
+  PackedStringArray extensions;
+  if (Object::cast_to<SSABResource>(*resource)) {
+    extensions.push_back("ssab");
+  }
+  return extensions;
+}
+#else
+void SSABResourceFormatSaver::get_recognized_extensions(const Ref<Resource> &resource, List<String> *p_extensions) const {
+  if (Object::cast_to<SSABResource>(*resource)) {
+    p_extensions->push_back("ssab");
+  }
+}
+#endif
+
+#ifdef SPRITESTUDIO_GODOT_EXTENSION
+bool SSABResourceFormatSaver::_recognize(const Ref<Resource> &resource) const {
+#else
+bool SSABResourceFormatSaver::recognize(const Ref<Resource> &resource) const {
+#endif
+  return Object::cast_to<SSABResource>(*resource) != nullptr;
+}

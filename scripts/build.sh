@@ -30,15 +30,16 @@ declare -A scons_default_opts=(
     [platform]=${PLATFORM}
     [target]="editor"
     [compiledb]="yes"
-    [custom_modules]="../gd_spritestudio"
+    [custom_modules]="../ss_player"
 )
 
 # build default options
 declare -A build_default_opts=(
     [cpus]=${CPUS}
     [ccache]="no"
-    [version]="4.4"
+    [version]="$(cut -d. -f1,2 < "${BASEDIR}/GODOT_VERSION.txt" | tr -d '[:space:]')"
     [strip]="no"
+    [deps]="yes"
 )
 
 declare -A opts=(
@@ -57,6 +58,7 @@ func usage() {
     echo "  ccache=<yes|no>     Enable ccache (default: ${build_default_opts[ccache]})"
     echo "  version=<version>   Godot version. $APP uses this version at can not getting Godot version from git branch or tag. (default: ${build_default_opts[version]})"
     echo "  strip=<yes|no>      Execute strip command to the app binary (default: ${build_default_opts[strip]})"
+    echo "  deps=<yes|no>       Install the missing Godot third-party build dependencies (AccessKit / ANGLE) before building (default: ${build_default_opts[deps]})"
     echo "Godot scons options: "
     pushd $ROOTDIR/godot > /dev/null
     scons --help
@@ -113,21 +115,9 @@ declare -A internal_opts=(
     [app_template]=""
     [app_bin]=""
 )
-if [[ ${VERSION} =~ ^3\..* ]]; then
-    # 3.x
-    if [[ "${PLATFORM}" == "macos" ]]; then
-        internal_opts[platform]="osx"
-    else
-        internal_opts[platform]=${PLATFORM}
-    fi
-    internal_opts[app_target]="tools"
-    internal_opts[app_template]="osx_tools.app"
-else
-    # 4.x
-    internal_opts[platform]=${PLATFORM}
-    internal_opts[app_target]="editor"
-    internal_opts[app_template]="macos_tools.app"
-fi
+internal_opts[platform]=${PLATFORM}
+internal_opts[app_target]="editor"
+internal_opts[app_template]="macos_tools.app"
 if [[ -n ${opts[target]} ]]; then
     internal_opts[app_target]=${opts[target]}
 fi
@@ -145,9 +135,56 @@ for key value in ${(kv)opts}; do
     fi
     scons_command_opts="$scons_command_opts $key=$value"
 done
-scons_command_opts="$scons_command_opts -j $build_default_opts[cpus]"
+scons_command_opts="$scons_command_opts -j ${opts[cpus]}"
 
 echo "scons command options: $scons_command_opts"
+
+# Godot 4.6+ links two prebuilt third-party SDKs that are not part of the engine
+# source tree: AccessKit (screen reader support) and ANGLE (OpenGL ES driver).
+# Without them scons silently disables those drivers, so the produced editor and
+# templates would lack features the official builds ship with. The installers
+# come from the Godot checkout itself, which keeps the dependency versions in
+# sync with the engine revision being built.
+func install_godot_deps() {
+    # Mirrors the destination logic of godot/misc/scripts/install_*.py.
+    local deps_dir
+    if [[ -n ${LOCALAPPDATA} && -z ${MSYSTEM} ]]; then
+        deps_dir="${LOCALAPPDATA}/Godot/build_deps"
+    else
+        deps_dir="${ROOTDIR}/godot/bin/build_deps"
+    fi
+
+    # install_angle.py unpacks one directory per arch (angle-<arch>-<abi>).
+    local angle_dirs=(${deps_dir}/angle*(N))
+
+    local python_bin="python3"
+    if ! type python3 > /dev/null 2>&1; then
+        python_bin="python"
+    fi
+
+    # The installers resolve their destination relative to the working directory.
+    pushd ${ROOTDIR}/godot > /dev/null
+    if [[ ! -d ${deps_dir}/accesskit ]]; then
+        echo "Installing AccessKit into ${deps_dir} ..."
+        ${python_bin} misc/scripts/install_accesskit.py
+    fi
+    if [[ $1 != "linux" && ${#angle_dirs} -eq 0 ]]; then
+        echo "Installing ANGLE into ${deps_dir} ..."
+        ${python_bin} misc/scripts/install_angle.py
+    fi
+    popd > /dev/null
+}
+
+# AccessKit and ANGLE only apply to the desktop platforms; the mobile and web
+# platforms have no such dependency, so skip the download there. ANGLE is
+# additionally macOS/Windows only.
+if [[ ${opts[deps]} == "yes" ]]; then
+    case ${opts[platform]} in
+        macos)               install_godot_deps macos ;;
+        win | windows)       install_godot_deps windows ;;
+        linux | linuxbsd)    install_godot_deps linux ;;
+    esac
+fi
 
 pushd $ROOTDIR/godot
 
@@ -186,7 +223,7 @@ if [[ "$PLATFORM" == "macos" ]]; then
             lipo -create bin/${internal_opts[app_bin]}.arm64 bin/${internal_opts[app_bin]}.x86_64 -output bin/${internal_opts[app_bin]}.${opts[arch]}
         fi
         /bin/cp bin/${internal_opts[app_bin]}.${opts[arch]} Godot.app/Contents/MacOS/Godot
-        /bin/chmod +x Godot.app/Contents/MacOS/Godot 
+        /bin/chmod +x Godot.app/Contents/MacOS/Godot
         codesign --force --timestamp --options=runtime --entitlements misc/dist/${internal_opts[platform]}/editor.entitlements -s - Godot.app
     fi
 

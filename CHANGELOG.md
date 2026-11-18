@@ -1,0 +1,77 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [7.0.0-beta.1] - 2026-11-18
+
+First 7.x release of the plugin, and a rewrite of the 1.x player.
+Playback is now driven by `libssruntime` from
+[SpriteStudio-SDK](https://github.com/cri-middleware/SpriteStudio-SDK) and consumes
+converted binaries (`.ssab`) instead of parsing `.sspj` at runtime. See the
+[Migration Guide](./docs/en/migration_from_v1.md) for moving a 1.x project across.
+
+### Added
+- **`SpriteStudioPlayer2D` node**: plays an `.ssab` animation as an ordinary `Node2D`.
+  Transport (`play` / `pause` / `resume` / `stop`), frame seeking, playback sections,
+  direction, speed scale, loop count, frame skipping and sub-frame interpolation.
+- **Asset pipeline**: the **SS Importer** dock converts a SpriteStudio project (`.sspj`) to
+  `.ssab` by drag & drop and reconverts from the Inspector. `ssconverter-cli` performs the
+  same conversion for CI/CD.
+- **Resource classes**: `SSABResource` (animation binary) and `SSQBResource` (sequence
+  binary). `.ssab` is loaded zero-copy, so playback starts without a parse step.
+- **Per-part Override Layer API**: override a part's color (single or per-corner gradient),
+  cell and visibility at runtime, addressed by part name or part index, each with a matching
+  `clear_*` call.
+- **CellMap overrides**: swap an animation's textures at runtime for equipment changes and
+  color variants. Cell map / cell names are enumerable from the player and the resource.
+- **`SpriteStudioPartAttachment2D` node**: mirrors one part's pose onto a `Node2D` so Godot
+  content can be pinned to a part. Modeled on `RemoteTransform2D`.
+- **`SpriteStudioButton` node**: a `BaseButton` drawn by the `SpriteStudioPlayer2D` placed under
+  it. It fits the animation's canvas into the button, plays the label section of the state it is
+  in (`normal` / `hover` / `pressed` / `disabled` / `focused`, with `selected_` labels for a toggle
+  that is on, and `state_clips` to play other sections), can take the pointer only on the parts it
+  names, and holds each state's first frame under `reduced_motion`.
+- **Signals**: timeline `user_data` and `signal_emitted` events, audio events, animation
+  lifecycle (`animation_started` / `_changed` / `_finished` / `_looped`), and `frame_updated`.
+  Every timeline event carries where it came from — `part_index`, `part_name` and `frame_no` —
+  in its payload, or as `signal_emitted`'s separate `info` argument.
+- **Motion blending**: play several animations of one `.ssab` at once, stacked on tracks over
+  the one `set_animation()` selects — overlays laid by alpha, additive tracks, crossfades and
+  track fades timed in seconds, and several weighted sources on one track. Each timeline event
+  also carries the `source` that fired it.
+- **AnimationPlayer integration**: drive playback from Godot's own animation tooling.
+- **Authored canvas queries**: `get_canvas_size()` and `get_canvas_rect()` report the box the
+  animation was composed in, placed against the node's origin by its pivot. Hand the rect to a
+  `VisibleOnScreenEnabler2D` to stop evaluating a player that is off screen.
+- **Label sections and part outlines**: `set_animation_section_by_label()` sets the playback
+  section between two labels, with offsets, and `get_label_table()` lists an animation's labels in
+  frame order. `get_part_quad()` reports the outline a part is drawn with, and `hit_test_part()`
+  the front-most part under a point.
+- **Manual playback**: `ANIMATION_PROCESS_MANUAL` plus `advance(delta)`, for custom pause groups,
+  a time scale of your own, or deterministic stepping.
+- **Audio playback**: audio parts play through Godot with no setup, in the editor preview as
+  well, with volume control and a `SpriteStudioAudioBackend` resource for routing every sound to
+  a custom audio stack.
+- **Part add-on shaders**: the thirteen SpriteStudio add-on effects (sepia, outline, bmask, HSB,
+  step, move, wave, noise, blur, pixelate, scatter, circle, spot) render natively, assigned in
+  SpriteStudio with nothing to wire up in Godot.
+- **Builds**: GDExtension and custom module, for Windows, macOS, Linux, Android, iOS and
+  Web, targeting Godot 4.7. The macOS frameworks are signed and notarized, and the iOS frameworks
+  signed.
+- **Documentation**: bilingual (EN/JA) documentation site, in-editor class reference and
+  contribution guidelines.
+
+### Known Limitations
+- Text parts and 9-slice parts are not drawn; they keep their place in the draw order, so an
+  animation that uses them plays with those parts missing.
+- Six of the twelve part blend modes (Screen, Exclusion, Invert, Div2, Screen2, Overlay2)
+  composite as Mix.
+- Sequence playback is not implemented. `SSQBResource` loads `.ssqb` files, but no node
+  consumes them yet.
+- Web builds are single-threaded only and require WebAssembly SIMD, plus an engine template
+  built with `dlink_enabled=yes`.
+- For the playback constraints inherited from the shared runtime, see
+  [Limitations & Scope](./docs/en/limitations.md).

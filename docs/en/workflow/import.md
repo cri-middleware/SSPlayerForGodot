@@ -1,0 +1,44 @@
+# 🤖 CLI Conversion and Automation
+
+For the intuitive import method using the Godot editor's "SS Importer" dock, please refer to [Asset Import and Editor Integration](usage_asset_pipeline.md).
+
+This document explains how to perform conversion from the command line without launching the Godot editor.
+This is highly useful when you want to integrate the conversion process into your CI/CD (Continuous Integration/Continuous Deployment) pipeline, build systems, or when you need to batch convert a large number of assets.
+
+## Using SpriteStudio-SDK's `ssconverter-cli`
+
+The conversion from a SpriteStudio project (`.sspj`) to the SpriteStudio runtime binaries (`.ssab` / `.ssqb`) is handled by a standalone command-line tool called `ssconverter-cli`, which is included in the SDK (the editor importer runs the same conversion through `libssconverter`).
+
+### 1. Obtaining the Tool
+
+Download the `ssconverter-cli` binary for your platform (Windows / macOS / Linux) from the [SpriteStudio-SDK Releases](https://github.com/cri-middleware/SpriteStudio-SDK/releases), from the release that matches the **converter:** line at the bottom of the SS Importer dock. A `.ssab` written by a different schema version does not load.
+
+### 2. Running from the Command Line
+
+Open your terminal or command prompt, and execute the tool by passing the path to your `.sspj` file as an argument.
+
+**Windows:**
+```powershell
+.\ssconverter-cli.exe path\to\your.sspj
+```
+
+**macOS / Linux:**
+```bash
+./ssconverter-cli path/to/your.sspj
+```
+
+### 3. Placing the Artifacts
+
+The conversion results will be output into a new folder named `<sspj name>/` created in the same directory as the original `.sspj`. Inside, you will find the `.ssab` (animation packs) and `.ssqb` (sequences) files, along with the referenced textures and audio.
+
+By copying these generated files into any directory under your Godot project's `res://`, they will be recognized and loadable as `SSABResource` / `SSQBResource` in Godot.
+
+> [!IMPORTANT]
+> Copy the **whole `<sspj name>/` folder**. A `.ssab` resolves its textures, its audio and its Instance part targets through paths relative to its own directory, so splitting the contents apart breaks resolution. See [Generated Assets and Packs](generated_assets.md#dependencies) for the details.
+
+---
+
+## Advanced Options
+
+`ssconverter-cli` provides various options to control the conversion behavior.
+For a detailed list of options and specifications, please refer to [cli/README.md](https://github.com/cri-middleware/SpriteStudio-SDK/blob/HEAD/cli/README.md) in the SDK repository.

@@ -1,0 +1,56 @@
+INHERIT: ./mkdocs.base.yml
+
+docs_dir: docs/en
+site_dir: site
+site_url: "https://cri-middleware.github.io/SSPlayerForGodot/"
+site_description: "A Godot Engine integration for SpriteStudio"
+
+theme:
+  language: en
+
+extra:
+  site_root_prefix: ""
+  social:
+    - icon: material/motion-play
+      link: https://cri-middleware.github.io/SpriteStudio-Docs/
+      name: SpriteStudio Docs
+    - icon: fontawesome/brands/github
+      link: https://github.com/cri-middleware
+      name: cri-middleware on GitHub
+    - icon: material/web
+      link: https://www.webtech.co.jp/spritestudio/
+      name: SpriteStudio
+    - icon: fontawesome/brands/x-twitter
+      link: https://x.com/spritestudio
+      name: SpriteStudio on X
+
+nav:
+  - 🏠 Home: index.md
+  - 🚀 Setup:
+      - Installation: setup/install.md
+  - 🎬 Workflow:
+      - Basic Usage: workflow/usage_basic.md
+      - Asset Import & Editor Integration: workflow/usage_asset_pipeline.md
+      - Scripting & Events: workflow/usage_scripting.md
+      - Motion Blending: workflow/motion_blending.md
+      - UI Buttons: workflow/ui_buttons.md
+      - Audio Playback: workflow/audio.md
+      - AnimationPlayer Integration: workflow/animation_player.md
+      - Exporting Your Project: workflow/export.md
+      - Generated Assets and Packs: workflow/generated_assets.md
+  - ⚙️ Advanced Topics:
+      - CLI Conversion & CI/CD: workflow/import.md
+      - Verifying Playback from the Command Line: workflow/verify_playback.md
+      - Performance Tuning & Advanced Settings: workflow/tips.md
+  - 📖 API Reference:
+      - SpriteStudioPlayer2D: api/player.md
+      - Resource Classes: api/resource.md
+  - 🩺 Troubleshooting: troubleshooting.md
+  - ⚠️ Limitations & Scope: limitations.md
+  - 🔄 Migration Guide: migration_from_v1.md
+  - 🛠️ For Player & SDK Developers:
+      - Build Guide: development/build.md
+      - How the Player Is Put Together: development/architecture.md
+  - ⚖️ License:
+      - License: license.md
+      - Third-Party Notices: third_party_notices.md

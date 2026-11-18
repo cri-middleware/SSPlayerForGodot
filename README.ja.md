@@ -1,85 +1,75 @@
-[**日本語**](./README.ja.md) | [**English**](./README.md)
+[**English**](./README.md) | [**日本語**](./README.ja.md)
 
-# SpriteStudioPlayer for Godot
+# SpriteStudio Player for Godot
 
-# はじめに
+**Godot のゲームに、プロフェッショナルな2Dアニメーションを。直感的な使いやすさと、極限のパフォーマンスを両立するプラグイン。**
 
-本プラグインは [OPTPiX SpriteStudio](https://www.webtech.co.jp/spritestudio/index.html) で作成したアニメーションを [Godot Engine](https://godotengine.org/) 上で再生するためのプラグインです。  
+**[SpriteStudio](https://www.webtech.co.jp/spritestudio/)** のアニメーション (`.ssab`) を [Godot Engine](https://godotengine.org/) 上で再生するためのハイパフォーマンスな拡張プラグイン（GDExtension / カスタムモジュール）です。Godot の強力な機能と、専用アニメーションツールの表現力を組み合わせることで、リッチな2Dゲーム開発をサポートします。
 
-実行時パフォーマンスを優先するため C++ モジュールの形態になっています。
-SpriteStudioPlayer for Godot を利用する場合、SpriteStudioPlayer の[カスタムモジュール](https://docs.godotengine.org/en/stable/contributing/development/core_and_modules/custom_modules_in_cpp.html) を組み込んだ Godot Engine の Editor を手元でビルドするか、 SpriteStudioPlayer の [GDExtension](https://docs.godotengine.org/en/stable/tutorials/scripting/gdextension/what_is_gdextension.html) をプロジェクトへ入れる必要があります。
+## ✨ SpriteStudio を Godot で使うメリット
 
-## 対応する [OPTPiX SpriteStudio](https://www.webtech.co.jp/spritestudio/index.html) のバージョン
+- **キャラクターが“生きる”。** 呼吸・まばたき、なびく髪や衣装、斬撃・魔法のエフェクトまで——動きは専用エディタ（SpriteStudio）でボーン・メッシュ変形・パーティクルを使ってビジュアルに作り込み、Godot はそれを再生するだけ。再生中のアニメーションはトラックに重ねたりクロスフェードしたりでき、歩きから走りへも飛ばずになめらかにつながります。`AnimationPlayer` で組み直す必要はありません。
+- **キャラクターだけでなく、エフェクトや UI、シーン全体も。** キャラクター・背景・エフェクト・UI を組み合わせたカットシーンや画面全体の演出をエディタで作り、Godot では 1 つのアニメーションとして再生できます。`SpriteStudioButton` を使えば、ホバー・押下・無効・フォーカスごとに別の区間を再生する Godot のボタンにもなります。
+- **いつものノードとして使える。** `SpriteStudioPlayer2D` は他のノードと同じようにシーンに置き、GDScript から操作できます（タイムラインのキーからのシグナル通知や、実行時のパーツ単位の上書きにも対応）。アニメーションはシーンの外の専用ファイルに入るので、チーム開発でシーンの Git コンフリクトが起きにくくなります。
+- **SpriteStudio と Godot をシームレスに往復。** `.sspj` を SS Importer ドックにドロップすれば、エディタ内で変換されます。直したくなったらインスペクターの **Open SSPJ** で SpriteStudio を開いて保存し、**Reconvert** を押すだけ。書き出しの手作業は要りません。
+- **パース不要の読み込みと SIMD で、軽く滑らかに。** `.ssab` は FlatBuffers のバイナリをそのまま読むので、読み込み時のパースがありません。ポーズ計算は SIMD で最適化した Rust コアが担い、モバイルや大量のキャラクターを出すゲームでも滑らかに動きます。**サブフレーム補間**をオンにすれば、高リフレッシュレートのディスプレイにも追従します。
 
-Ver.6 と Ver.7 に対応しています。  
-ただし、Ver.7.1 で追加された新機能(テキスト、サウンド等)には未対応です。  
+## 📚 ドキュメント
 
-## 対応する [Godot Engine](https://github.com/godotengine/godot) のバージョン
+詳細な使い方は `docs/` フォルダ内のドキュメントにあります。データフロー図・主な機能・対応バージョンもそちらです。
 
-- [4.5 ブランチ](https://github.com/godotengine/godot/tree/4.5)で Windows / macOS でビルド、および実行を確認しています。
-- [3.x ブランチ](https://github.com/godotengine/godot/tree/3.x)で Windows / macOS でビルド、および実行を確認しています。
+- [**ドキュメントサイト (ホスト版)**](https://cri-middleware.github.io/SSPlayerForGodot/ja/)
+- [**ドキュメント (日本語)**](./docs/ja/index.md)
+- [**Documentation (English)**](./docs/en/index.md)
+- [**AI アシスタント向け**](https://cri-middleware.github.io/SSPlayerForGodot/ja/llms.txt) — このドキュメントを Markdown で提供します。`llms.txt` はページの目次、`llms-full.txt` は全ページを 1 ファイルにまとめたものです
+- [**SpriteStudio Docs（ポータル）**](https://cri-middleware.github.io/SpriteStudio-Docs/ja/) — SDK と全公式 Player の入口
 
-# ビルド
+### クイックリンク (日本語)
+- [インストール](./docs/ja/setup/install.md)
+- [基本的な使い方](./docs/ja/workflow/usage_basic.md)
+- [制約と適用範囲](./docs/ja/limitations.md)
+- [トラブルシューティング](./docs/ja/troubleshooting.md)
+- [v1.x からのマイグレーション](./docs/ja/migration_from_v1.md)
 
-[BUILD.md](BUILD.md) を参照してください。
+## 🚀 GDExtension を用いたクイックスタート
 
-# 使い方
+**ゲームで使う場合**はこのまま下へ。アドオンを入れる → `.sspj` をエディタに D&D → ノードを置く。その先（スクリプト制御、シグナル、パーツ単位の上書き）も同じ道の続きで、[ドキュメント](./docs/ja/index.md)にあります。
+**Player 自体や、その下の Rust ランタイムを変更する場合**は [CONTRIBUTING.md](./CONTRIBUTING.md) と[ビルドガイド](./docs/ja/development/build.md)へ。変更した版の使い方と Godot での確かめ方もビルドガイドに、層とファイルをまたぐ設計の理由は[プレイヤーの構成](./docs/ja/development/architecture.md)にあります。
 
-[USAGE.md](USAGE.md) を参照してください。
+[公式サイト](https://godotengine.org/download/) から 4.7 以降の Godot エディタを用意してください。対応するのは **SpriteStudio 7.6 以上**で作成されたプロジェクトです。
 
-# サンプル
+1. **配置**: [最新の Release](https://github.com/cri-middleware/SSPlayerForGodot/releases/latest) を開き、**Assets** から `ssplayer-godot-extension-4.7.zip` をダウンロードします（タグが `v1` で始まる Release は 1.x 系のプラグインで、`SSABResource` も `SpriteStudioPlayer2D` もありません）。展開して `addons` フォルダをご自身の Godot プロジェクトのルートにコピーし、エディタを再起動します。
+2. **インポート**: `.sspj` をファイルマネージャーから **SS Importer** ドックへドラッグ＆ドロップします。ドックの既定の出力先 `res://ssab_generated/` の下に、`.sspj` と同じ名前のフォルダで変換されます（[アセットのインポートとエディタ連携](./docs/ja/workflow/usage_asset_pipeline.md) を参照）。
 
-[examples フォルダ](./examples/)にサンプルプロジェクトがあります。
+   ```
+   MyGame/                         ← project.godot のあるフォルダ
+   ├── addons/
+   │   └── spritestudio/           ← ZIP の addons/ から
+   │       ├── spritestudio.gdextension
+   │       ├── bin/
+   │       └── …
+   ├── ssab_generated/
+   │   └── Ringo/                  ← Ringo.sspj から変換される
+   │       ├── Ringo.ssab
+   │       ├── Ringo.png
+   │       └── …
+   └── project.godot
+   ```
 
-**サンプルプロジェクトは 3.x 向けに作っているため、4.4 で利用する際は "Convert Full Project" を実行してから利用してください。**
+3. **再生**: ファイルシステムドックから `res://ssab_generated/Ringo/Ringo.ssab` を 2D ビューポートへドラッグ＆ドロップします。`Ssab` プロパティにそのパックが入り、先頭のアニメーションが選ばれた `SpriteStudioPlayer2D` ノードが置かれるので、シーンを実行すると再生されます。
 
-## [feature_test](./examples/feature_test)
+SpriteStudio のデータが手元に無くても始められます。[公式のサンプルデータ](https://www.webtech.co.jp/help/ja/spritestudio7/download/sample/)がそのまま使えます。キャラクターなら [Ringo](https://www.webtech.co.jp/help/ja/spritestudio7/download/sample/#ringo)、エフェクトを含むものなら [パーティクル](https://www.webtech.co.jp/help/ja/spritestudio7/download/sample/#Perticle_sample) が手頃です。
 
-基本機能のテストプロジェクトです。  
-以下のシーンがあります。  
+**次に読む:** [インストール](./docs/ja/setup/install.md) · [基本的な使い方](./docs/ja/workflow/usage_basic.md) · [制約と適用範囲](./docs/ja/limitations.md)
 
-- [v6_feature.tscn](./examples/feature_test/v6_feature.tscn)
-  - SpriteStudio v6.0~v7.0 までの各機能の再生状態を確認できます。
-  - 確認したい機能ノードの可視性を有効にしてください。
-  - Signal、UserData はそれぞれシグナル、ユーザーデータのキーに到達したタイミングでGodotのシグナルを発行するようになっています。
-  - シーンを実行するとコンソールに受信したパラメータが出力されます。
-  - ssdata サブフォルダにインポート元のプロジェクトファイル(v6_all.sspj)があります。
-- [sspj_load.tscn](./examples/feature_test/sspj_load.tscn)
-  - GDスクリプトからSSプロジェクトをロードしアニメーションを指定して再生するサンプルです。
-  - アニメーション終了時に別のSSプロジェクトに読み替えるようになっています。
-- [texture_change.tscn](./examples/feature_test/texture_change.tscn)
-  - 再生中にセルマップリソースのテクスチャを変更するサンプルです。
-  - インスペクタにある Change のチェックをOn/Offすると切り替わります。
+## 🔗 関連リポジトリ
 
-## [mesh_bone](./examples/mesh_bone)
+- [SpriteStudio Docs](https://cri-middleware.github.io/SpriteStudio-Docs/ja/) — SDK と公式 Player のドキュメントポータル
+- [SpriteStudio-SDK](https://github.com/cri-middleware/SpriteStudio-SDK) — `libssruntime` / `libssconverter` を提供する SDK 本体
+- [SSConverterGUI](https://github.com/cri-middleware/SSConverterGUI) — Player なしで `.sspj` を変換できるデスクトップ GUI
 
-メッシュ、ボーン、エフェクトなどを利用したキャラクターアニメのサンプルです。
+## 📄 ライセンス
 
-## [particle_effect](./examples/particle_effect)
+[LICENSE.md](./LICENSE.md)（正文）を参照してください。参考訳は [LICENSE.ja.md](./LICENSE.ja.md) にあります。
 
-エフェクト機能を利用したサンプルです。  
-シーンに表示されるアニメーションは40種類のうちの一部になります。  
-インスペクタの Anime Pack からその他のアニメーションも確認できます。
-
-## [feature_test_gdextension](./examples/feature_test_gdextension)
-
-gdextension の動作確認用プロジェクトです。
-
-確認できるサンプルは [feature_test](./examples/feature_test) と同じものになります。
-
-# お問い合わせ
-
-ご質問、ご要望、不具合のご報告は [Issues](../../issues) に投稿してください。  
-非公開でのお問い合わせを希望される場合は、[ヘルプセンター](https://www.webtech.co.jp/help/ja/spritestudio7/inquiries/ssplayer_tool/) よりお寄せください。  
-再現データなどの送付が必要な場合も、上記ヘルプセンター経由でファイルを送信してください。  
-
-=========================================================  
-
-株式会社ＣＲＩ・ミドルウェア  
-​https://www.cri-mw.co.jp/  
-Copyright © CRI Middleware Co., Ltd.  
-
-=========================================================  
-
-* SpriteStudio, Web Technologyは、株式会社ウェブテクノロジの登録商標です。
-* その他の商品名は各社の登録商標または商標です。  
+サードパーティライブラリ（FlatBuffers, SpriteStudio-SDK の依存クレートなど）のライセンスについては、[THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md) を参照してください。

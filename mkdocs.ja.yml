@@ -1,0 +1,56 @@
+INHERIT: ./mkdocs.base.yml
+
+docs_dir: docs/ja
+site_dir: site/ja
+site_url: "https://cri-middleware.github.io/SSPlayerForGodot/ja/"
+site_description: "SpriteStudio のアニメーションを Godot Engine で再生するプラグイン"
+
+theme:
+  language: ja
+
+extra:
+  site_root_prefix: "../"
+  social:
+    - icon: material/motion-play
+      link: https://cri-middleware.github.io/SpriteStudio-Docs/ja/
+      name: SpriteStudio Docs（ポータル）
+    - icon: fontawesome/brands/github
+      link: https://github.com/cri-middleware
+      name: GitHub の cri-middleware
+    - icon: material/web
+      link: https://www.webtech.co.jp/spritestudio/
+      name: SpriteStudio
+    - icon: fontawesome/brands/x-twitter
+      link: https://x.com/spritestudio
+      name: X の SpriteStudio
+
+nav:
+  - 🏠 ホーム: index.md
+  - 🚀 セットアップ:
+      - インストール: setup/install.md
+  - 🎬 ワークフロー:
+      - 基本的な使い方: workflow/usage_basic.md
+      - アセットのインポートとエディタ連携: workflow/usage_asset_pipeline.md
+      - スクリプト制御とイベント: workflow/usage_scripting.md
+      - モーションブレンド: workflow/motion_blending.md
+      - UI ボタン: workflow/ui_buttons.md
+      - サウンド再生: workflow/audio.md
+      - AnimationPlayer 連携: workflow/animation_player.md
+      - プロジェクトのエクスポート: workflow/export.md
+      - 生成アセットの構成と配信: workflow/generated_assets.md
+  - ⚙️ 高度なトピック:
+      - CLI コンバートと CI/CD: workflow/import.md
+      - コマンドラインで再生を検証する: workflow/verify_playback.md
+      - パフォーマンスチューニングと高度な設定: workflow/tips.md
+  - 📖 API リファレンス:
+      - SpriteStudioPlayer2D: api/player.md
+      - リソース管理クラス: api/resource.md
+  - 🩺 トラブルシューティング: troubleshooting.md
+  - ⚠️ 制約と適用範囲: limitations.md
+  - 🔄 マイグレーションガイド: migration_from_v1.md
+  - 🛠️ Player・SDK 開発者向けガイド:
+      - ビルドガイド: development/build.md
+      - プレイヤーの構成: development/architecture.md
+  - ⚖️ ライセンス:
+      - ライセンス: license.md
+      - サードパーティライセンス: third_party_notices.md

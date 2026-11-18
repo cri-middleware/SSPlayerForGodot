@@ -1,0 +1,223 @@
+## Play, pause, resume, stop — and what each one leaves behind.
+##
+## Everything here steps with `advance()` under `ANIMATION_PROCESS_MANUAL`, so
+## the assertions are about the transport rather than about how long a frame
+## took on this machine. That is also the only way these can mean the same thing
+## on three platforms.
+extends "res://test_base.gd"
+
+const BASIC := "res://ssab_generated/overall/Basic.ssab"
+
+var player: Node
+var dt := 1.0 / 30.0
+
+
+func setup() -> void:
+	player = make_player(BASIC)
+	player.set_animation("anime_1")
+	dt = 1.0 / maxf(1.0, float(player.get_frame_rate()))
+
+
+func test_a_player_starts_stopped() -> void:
+	not_ok(player.is_playing(), "not playing before play()")
+	not_ok(player.is_pausing(), "not pausing before play()")
+	near(player.get_frame_no(), 0.0, "the head starts at the first frame")
+
+
+func _saved_properties() -> Array:
+	var scene := PackedScene.new()
+	eq(scene.pack(player), OK, "the player packs")
+	var state := scene.get_state()
+	var names := []
+	for i in state.get_node_property_count(0):
+		names.append(state.get_node_property_name(0, i))
+	return names
+
+
+## An end saved untouched would cut off the frames a later reconvert adds.
+func test_only_a_narrowed_section_is_saved() -> void:
+	var names := _saved_properties()
+	not_ok(names.has("animation_section_start"), "an untouched start is not saved")
+	not_ok(names.has("animation_section_end"), "an untouched end is not saved")
+	ok(player.set_animation_section(2, 5), "the section narrows")
+	names = _saved_properties()
+	ok(names.has("animation_section_start"), "a moved start is saved")
+	ok(names.has("animation_section_end"), "a moved end is saved")
+
+
+func test_naming_the_current_animation_changes_nothing() -> void:
+	player.loop_count = 2
+	var finished: Array = []
+	player.animation_finished.connect(func(anim): finished.append(anim))
+	player.play()
+	for i in 100:
+		player.set_animation("anime_1")
+		player.advance(dt)
+	eq(finished.size(), 1, "a finite loop still finishes")
+	not_ok(player.is_playing(), "and stops")
+
+
+func test_an_emptied_player_keeps_its_playback_settings() -> void:
+	player.speed_scale = 2.0
+	player.set_frame_rate(12)
+	player.frame_skip_enabled = false
+	player.set_playback_direction(1, 0)
+	var pack: Resource = player.ssab
+	player.ssab = null
+	player.ssab = pack
+	near(player.speed_scale, 2.0, "the speed stays")
+	eq(player.get_frame_rate(), 12, "the frame rate stays")
+	not_ok(player.frame_skip_enabled, "frame skipping stays off")
+	eq(player.get_playback_direction(), 1, "the direction stays")
+
+
+func test_play_starts_it_and_advance_moves_the_head() -> void:
+	player.play()
+	ok(player.is_playing(), "playing after play()")
+	near(player.get_frame_no(), 0.0, "play() alone does not advance")
+	for i in 5:
+		player.advance(dt)
+	near(player.get_frame_no(), 5.0, "five steps of one frame each", 0.001)
+
+
+## The property that makes every other case here reproducible.
+func test_manual_mode_advances_only_when_asked() -> void:
+	eq(player.get_animation_process_mode(), 2, "MANUAL")
+	player.play()
+	var before: float = player.get_frame_no()
+	# No advance() between these two reads: nothing else may move the head.
+	near(player.get_frame_no(), before, "the head does not move on its own")
+
+
+## `pause()` is not `stop()`: the head stays where it is and the player still
+## reports itself playing, which is what lets a host resume without re-deciding
+## what was playing.
+func test_pause_holds_the_head_and_resume_gives_it_back() -> void:
+	player.play()
+	for i in 3:
+		player.advance(dt)
+	var held: float = player.get_frame_no()
+
+	player.pause()
+	ok(player.is_pausing(), "pausing after pause()")
+	ok(player.is_playing(), "still reports playing while paused")
+	player.advance(dt)
+	near(player.get_frame_no(), held, "a paused player does not advance")
+
+	player.resume()
+	not_ok(player.is_pausing(), "not pausing after resume()")
+	player.advance(dt)
+	near(player.get_frame_no(), held + 1.0, "the head moves again after resume", 0.001)
+
+
+## `stop()` leaves the head where it was rather than rewinding, so a host that
+## wants the first frame back asks for it.
+func test_stop_ends_playback_without_rewinding() -> void:
+	player.play()
+	for i in 4:
+		player.advance(dt)
+	var reached: float = player.get_frame_no()
+	player.stop()
+	not_ok(player.is_playing(), "not playing after stop()")
+	near(player.get_frame_no(), reached, "stop() does not rewind")
+
+
+func test_the_head_can_be_placed_by_hand() -> void:
+	player.set_frame_no(7.0)
+	near(player.get_frame_no(), 7.0, "set_frame_no")
+
+
+func test_speed_scales_the_step() -> void:
+	eq(player.get_speed_scale(), 1.0, "the default speed")
+	player.set_speed_scale(2.0)
+	eq(player.get_speed_scale(), 2.0, "the speed that took effect")
+	player.play()
+	player.advance(dt)
+	near(player.get_frame_no(), 2.0, "one step at double speed", 0.001)
+
+
+func test_the_head_runs_forward_by_default() -> void:
+	player.play()
+	player.advance(dt)
+	ok(player.is_playing_forward(), "forward by default")
+	eq(player.get_playback_direction(), 0, "the configured direction")
+
+
+## Reverse does not mean "the same run, mirrored": `play()` puts the head on the
+## LAST frame, because that is where a backwards pass begins. A seek before
+## `play()` is therefore not a way to choose where reverse starts — it is
+## overwritten — and a host that wants to start part-way seeks afterwards.
+func test_reverse_starts_at_the_end_and_walks_back() -> void:
+	player.set_playback_direction(1, 0)
+	eq(player.get_playback_direction(), 1, "the configured direction")
+	player.play()
+	near(player.get_frame_no(), float(player.get_end_frame()),
+		"reverse play() starts at the last frame")
+	not_ok(player.is_playing_forward(), "the head is heading backwards")
+
+	var from: float = player.get_frame_no()
+	player.advance(dt)
+	near(player.get_frame_no(), from - 1.0, "one step backwards", 0.001)
+
+
+func test_a_seek_after_play_is_where_reverse_carries_on_from() -> void:
+	player.set_playback_direction(1, 0)
+	player.play()
+	player.set_frame_no(10.0)
+	near(player.get_frame_no(), 10.0, "the seek took")
+	player.advance(dt)
+	near(player.get_frame_no(), 9.0, "and the next step goes backwards from there", 0.001)
+
+
+func test_a_section_can_start_on_the_last_frame() -> void:
+	var last: int = player.get_end_frame()
+	ok(player.set_animation_section(last, last), "a one-frame section on the last frame")
+	eq([player.get_start_frame(), player.get_end_frame()], [last, last], "the section is that frame")
+	ok(player.set_animation_section(last, -1), "an end of -1 is the animation's edge")
+	eq([player.get_start_frame(), player.get_end_frame()], [last, last], "which is that frame too")
+	player.set_loop_count(1)
+	player.play()
+	player.advance(dt)
+	near(player.get_frame_no(), float(last), "playback holds it")
+
+
+func _hint(property: String) -> String:
+	for info in player.get_property_list():
+		if info["name"] == property:
+			return info["hint_string"]
+	return ""
+
+
+## The Inspector's ranges: the playhead's is the section, and the section ends'
+## is the whole animation, however narrow the section is.
+func test_the_inspector_ranges_follow_the_section_and_the_animation() -> void:
+	var last: int = player.get_end_frame()
+	ok(player.set_animation_section(2, 5), "a narrow section")
+	eq(_hint("frame_no"), "2,5,0.01", "the playhead's range is the section")
+	eq(_hint("animation_section_start"), "0,%d,1" % last, "a section end ranges over the animation")
+	eq(_hint("animation_section_end"), "0,%d,1" % last, "both ends do")
+
+
+## Engine messages are off around the refused calls: the warning is the API
+## working, and the run has to stay silent.
+func test_a_section_that_ends_before_it_starts_is_refused() -> void:
+	ok(player.set_animation_section(2, 5), "a forward section")
+	player.set_frame_no(4.0)
+	Engine.print_error_messages = false
+	var taken: bool = player.set_animation_section(5, 2)
+	player.animation_section_start = 6
+	Engine.print_error_messages = true
+	not_ok(taken, "an end before the start")
+	eq([player.get_start_frame(), player.get_end_frame()], [2, 5], "the section stays")
+	near(player.get_frame_no(), 4.0, "the playhead stays")
+	ok(player.set_animation_section(5, -1), "an end out of range is the animation's edge")
+	eq(player.get_start_frame(), 5, "and the start is taken")
+
+
+func test_flip_is_reported_back() -> void:
+	not_ok(player.is_flipped_h(), "not flipped to start with")
+	not_ok(player.is_flipped_v(), "not flipped to start with")
+	player.set_flip_h(true)
+	player.set_flip_v(true)
+	ok(player.is_flipped_h(), "flip_h")
+	ok(player.is_flipped_v(), "flip_v")

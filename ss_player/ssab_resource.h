@@ -1,0 +1,224 @@
+#pragma once
+
+#include "ss_macros.h"
+
+#ifdef SPRITESTUDIO_GODOT_EXTENSION
+#include <godot_cpp/classes/audio_stream.hpp>
+#include <godot_cpp/classes/resource.hpp>
+#include <godot_cpp/classes/resource_format_loader.hpp>
+#include <godot_cpp/classes/resource_format_saver.hpp>
+#include <godot_cpp/classes/resource_loader.hpp>
+#include <godot_cpp/classes/resource_saver.hpp>
+#include <godot_cpp/templates/hash_map.hpp>
+#include <godot_cpp/templates/vector.hpp>
+#include <godot_cpp/variant/dictionary.hpp>
+#include <godot_cpp/variant/rect2.hpp>
+#include <godot_cpp/variant/vector2.hpp>
+using namespace godot;
+#else
+#include "core/io/resource_loader.h"
+#include "core/io/resource_saver.h"
+#include "core/math/rect2.h"
+#include "core/math/vector2.h"
+#include "core/templates/hash_map.h"
+#include "core/variant/dictionary.h"
+#if GODOT_VERSION_HEX >= 0x040800
+#include "scene/resources/audio/audio_stream.h"
+#else
+#include "servers/audio/audio_stream.h"
+#endif
+#endif
+
+#include "format/ssab.h"
+
+// The runtime's parse of one SSABResource buffer, shared by every player bound
+// to that buffer: the parse builds every played animation's caches, and a
+// player's runtime only reads it. It holds the bytes it borrowed, so a player
+// still bound to it after the resource takes new bytes (a re-import) keeps
+// reading the old ones until it re-binds, and they go with the last such player.
+class SsParsedSsab : public RefCounted {
+  GDCLASS(SsParsedSsab, RefCounted);
+
+protected:
+  static void _bind_methods() {}
+
+public:
+  ~SsParsedSsab();
+  // The runtime resource handle, for binding and for creating effect slots.
+  void *get_handle() const { return _handle; }
+
+private:
+  friend class SSABResource;
+  PackedByteArray _bytes;
+  void *_handle = nullptr;
+};
+
+class SSABResource : public Resource {
+  GDCLASS(SSABResource, Resource);
+
+protected:
+  static void _bind_methods();
+
+  PackedByteArray binary;
+
+public:
+  Error load_from_file(const String &path);
+  Error save_to_file(const String &path);
+  // The bytes as a storage property. Resource::copy_from carries a resource's
+  // storage properties and nothing else, so this is what lets an in-place
+  // reload -- the editor's after the file changed on disk, or a load with
+  // CACHE_MODE_REPLACE -- replace the bytes in both builds. Bytes that do not
+  // verify are dropped, as load_from_file drops them.
+  void set_data(const PackedByteArray &p_data);
+  PackedByteArray get_data() const { return binary; }
+  bool is_valid() const;
+  int get_animation_count();
+  PackedStringArray get_animation_names();
+  PackedStringArray get_cellmap_names();
+  // Cell names inside a cellmap (for the per-part cell override API).
+  PackedStringArray get_cell_names(const String &cellmap_name);
+
+  uint32_t get_cellmap_hash(const String &cellmap_name);
+
+  // ---- Authored canvas ---------------------------------------------------
+  // The box the animation was composed in — `canvas_size` with `pivot` placing
+  // the origin inside it. Both are required fields, so every valid SSAB has
+  // them, and neither costs more than a table read.
+  //
+  // It is not a measured bounding box of the drawing: parts are free to leave
+  // the canvas. What it is instead is free to read and it is where the author
+  // decided the empty space belongs.
+  //
+  // It is authored **per animation**, not per pack — a death clip can sit on a
+  // wider canvas than the rest — so a caller that caches one
+  // has to refresh it when the animation changes.
+  Vector2 get_canvas_size(const String &anim_name);
+  // That canvas as a box in player-local (Y-down) space. The pivot is
+  // normalised from the canvas centre in the editor's Y-up space, so this is
+  // the one place it is turned into a rectangle. An empty Rect2 when the
+  // animation is unknown.
+  Rect2 get_canvas_rect(const String &anim_name);
+
+  const ss::format::SsAnimeBinary *get_ss_anime_binary();
+  const uint8_t *get_data_ptr();
+  int64_t get_data_size();
+  // Bumped every time `binary` is replaced. Holders of a zero-copy borrow of
+  // get_data_ptr() compare it to spot an in-place reload; the pointer alone
+  // won't do, since a same-sized buffer often re-allocates at the same address.
+  uint32_t get_generation() const { return _generation; }
+  // The runtime's parse of the current buffer, made on first use and shared by
+  // every player bound to it; a new buffer gets a new one. Invalid when the
+  // runtime cannot read the bytes.
+  Ref<SsParsedSsab> get_parsed();
+  ss::format::AnimationData *find_animation(const String &name);
+  ss::format::AnimationData *find_animation_by_hash(uint32_t name_hash);
+  String get_parent_dir() const;
+
+  // ---- Dependencies ------------------------------------------------------
+  // Everything the pack resolves by name beside itself: the cell map atlases,
+  // the texture-change targets, the sounds, and the packs its Instance parts
+  // play. As deduplicated res:// paths, each followed by "::<type>" when
+  // `p_add_types` is set — the form ResourceLoader.get_dependencies() returns,
+  // which the editor's dependency cache and the dependency-based export modes
+  // read. Nothing is loaded; the player still loads each one when it first
+  // needs it. Empty when no valid binary is held.
+  PackedStringArray get_dependency_paths(bool p_add_types);
+
+  // ---- Audio (sound) resolution -----------------------------------------
+  // The SSAB embeds a table of SoundLists (each a table of SoundFiles). An
+  // audio event carries the (sound_list_name_hash, sound_name_hash) pair; these
+  // helpers resolve that pair against the binary. The actual sound files are
+  // copied next to the .ssab at convert time (under e.g. "sound/"), so file_path
+  // is relative to get_parent_dir(), mirroring how cellmap textures are loaded.
+
+  // Loads (and caches) the AudioStream for the given sound identity. Returns an
+  // invalid Ref when the identity is unknown or the file cannot be loaded.
+  Ref<AudioStream> get_sound_stream(uint32_t sound_list_name_hash, uint32_t sound_name_hash);
+  // SSAB sound metadata for the given identity (alias / file_path / file_path_hash
+  // / time_total, plus the resolved res:// path). Empty Dictionary when unknown.
+  // Intended for custom audio backends that bypass AudioStream playback.
+  Dictionary get_sound_info(uint32_t sound_list_name_hash, uint32_t sound_name_hash);
+
+private:
+    String _parent_dir;
+    // Every replacement of `binary` goes through here; false when the new
+    // bytes do not verify, in which case none are kept.
+    bool _take_binary(const PackedByteArray &p_bytes);
+    // Cached result of the whole-buffer FlatBuffers verification run by
+    // is_valid(): -1 = not verified yet, 0 = invalid, 1 = valid. Reset to -1
+    // wherever `binary` is replaced (_take_binary).
+    mutable int8_t _valid_cache = -1;
+    // Bumped alongside `_valid_cache`; see get_generation().
+    uint32_t _generation = 0;
+    // See get_parsed(). Dropped wherever `binary` is replaced.
+    Ref<SsParsedSsab> _parsed;
+    // The actual verification; is_valid() is the cached front-end.
+    bool _verify_binary() const;
+    // (sound_list_name_hash << 32 | sound_name_hash) -> loaded AudioStream.
+    // Populated lazily by get_sound_stream so repeated events share one stream.
+    HashMap<uint64_t, Ref<AudioStream>> _sound_cache;
+
+    // Locate the SoundFile for a (list, name) hash pair; nullptr when unknown.
+    const ss::format::SoundFile *_find_sound_file(uint32_t sound_list_name_hash,
+                                                  uint32_t sound_name_hash);
+};
+
+class SSABResourceFormatLoader : public ResourceFormatLoader {
+  GDCLASS(SSABResourceFormatLoader, ResourceFormatLoader);
+
+public:
+#ifdef SPRITESTUDIO_GODOT_EXTENSION
+  static void _bind_methods() {};
+
+  PackedStringArray _get_recognized_extensions() const override;
+
+  bool _handles_type(const StringName &type) const override;
+
+  String _get_resource_type(const String &path) const override;
+
+  Variant _load(const String &path, const String &original_path,
+                bool use_sub_threads, int32_t cache_mode) const override;
+
+  PackedStringArray _get_dependencies(const String &path, bool add_types) const override;
+
+  Error _rename_dependencies(const String &path, const Dictionary &renames) const override;
+#else
+  Ref<Resource> load(const String &path, const String &original_path,
+                     Error *error, bool use_sub_threads, float *progress,
+                     CacheMode cache_mode) override;
+
+  void get_dependencies(const String &path, List<String> *dependencies, bool add_types = false) override;
+
+  Error rename_dependencies(const String &path, const HashMap<String, String> &renames) override;
+
+  void get_recognized_extensions(List<String> *extensions) const override;
+
+  bool handles_type(const String &type) const override;
+
+  String get_resource_type(const String &path) const override;
+#endif
+};
+
+class SSABResourceFormatSaver : public ResourceFormatSaver {
+  GDCLASS(SSABResourceFormatSaver, ResourceFormatSaver);
+
+public:
+#ifdef SPRITESTUDIO_GODOT_EXTENSION
+  static void _bind_methods() {};
+
+  Error _save(const Ref<Resource> &resource, const String &path,
+              uint32_t flags) override;
+
+  bool _recognize(const Ref<Resource> &resource) const override;
+
+  PackedStringArray _get_recognized_extensions(const Ref<Resource> &resource) const override;
+#else
+  Error save(const Ref<Resource> &resource, const String &path,
+             uint32_t flags) override;
+
+  void get_recognized_extensions(const Ref<Resource> &resource,
+                                 List<String> *p_extensions) const override;
+
+  bool recognize(const Ref<Resource> &p_resource) const override;
+#endif
+};

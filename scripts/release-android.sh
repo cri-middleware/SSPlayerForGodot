@@ -8,11 +8,16 @@ ROOTDIR=$(cd $ROOTDIR && pwd -P)
 
 pushd ${ROOTDIR} > /dev/null
 
-targets=("editor" "template_release" "template_debug")
+targets=("template_release" "template_debug")
 for target in ${targets[@]}; do
     scripts/build.sh platform=android arch=arm32 compiledb=no strip=yes target=${target}
     scripts/build.sh platform=android arch=arm64 compiledb=no strip=yes target=${target}
     scripts/build.sh platform=android arch=x86_64 compiledb=no strip=yes target=${target}
 done
+
+# After building the shared libraries for all architectures, generate the APKs and source zip
+pushd godot/platform/android/java > /dev/null
+./gradlew generateGodotTemplates
+popd > /dev/null
 
 popd > /dev/null # ${ROOTDIR}

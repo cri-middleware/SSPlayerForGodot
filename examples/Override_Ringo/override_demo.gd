@@ -1,0 +1,91 @@
+extends SpriteStudioPlayer2D
+## Override Layer API demo — runs on the Ringo sample.
+##
+## Open this project and press Play. The Ringo animation keeps playing while the
+## demo cycles through the three per-part runtime overrides and shows the current
+## step on screen. Each override wins over the keyframed animation underneath.
+##
+## API used (all on SpriteStudioPlayer2D):
+##   set_part_color_override(part, color, blend_op=0, priority=1)
+##   set_part_color_override_corners(part, PackedColorArray([lt, rt, lb, rb]), blend_op=0, priority=1)
+##   set_part_visibility_override(part, force_hidden, cascade=false)
+##   set_part_cell_override(part, cellmap, cell, priority=1)
+##   clear_all_part_overrides()
+## Cell names can be discovered from the player (or from the resource):
+##   get_cellmap_names() / get_cell_names(cellmap)
+
+var _label: Label
+
+func _ready() -> void:
+	# Ensure the animation is playing: cell/frame overrides only become visible
+	# while the player advances frames. `autoplay` is on by default and this scene
+	# leaves it there, so this is belt and braces — it also re-heads-out, which is
+	# what makes the demo restart cleanly if the scene is reloaded.
+	play()
+	# Auto-place Ringo at a visible spot ONLY if the scene left it at the origin
+	# (0,0) — which sits at the top-left corner at runtime. If you move it in the
+	# editor (Transform), that position wins and the runtime won't override it.
+	if position == Vector2.ZERO:
+		position = get_viewport_rect().size * 0.5 + Vector2(0, 250)
+	_make_label()
+	_run_demo()
+
+func _make_label() -> void:
+	var layer := CanvasLayer.new()
+	add_child(layer)
+	_label = Label.new()
+	_label.position = Vector2(16, 16)
+	_label.add_theme_font_size_override("font_size", 22)
+	_label.add_theme_color_override("font_color", Color.WHITE)
+	_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	_label.add_theme_constant_override("outline_size", 6)
+	layer.add_child(_label)
+
+func _step(text: String, secs: float) -> void:
+	_label.text = text
+	print(text)
+	await get_tree().create_timer(secs).timeout
+
+func _run_demo() -> void:
+	# Discover what the loaded SSAB offers (also handy as a reference in Output).
+	var cellmap: String = get_cellmap_names()[0] # "Ringo"
+
+	# Since the same part is accessed repeatedly, identify it by part-ID
+	# rather than its name (accessing by ID is slightly faster).
+	var part_id := find_part_index("apple")
+
+	while true:
+		clear_all_part_overrides()
+		await _step("Ringo Override Demo — no overrides", 1.5)
+
+		# 1) Color — tint the body blue (Normal-only; priority 1 = until next animation,
+		#    so it survives animation loops).
+
+#		set_part_color_override("apple", Color(0.0, 0.2, 1.0, 0.75))			# Access by name.
+		set_part_color_override_by_index(part_id, Color(0.0, 0.2, 1.0, 0.75))	# Access by id.
+		await _step("1) Color override:  body -> blue", 2.0)
+
+		# 2) Color (4 corners) — one colour per vertex gives a gradient across the part.
+		#    Corner order is left-top, right-top, left-bottom, right-bottom. This shares
+		#    the single colour-override slot, so it replaces step 1's flat tint.
+		set_part_color_override_corners_by_index(part_id, PackedColorArray([
+			Color(1.0, 0.1, 0.1, 1.0), Color(1.0, 0.1, 0.1, 1.0),
+			Color(0.1, 0.3, 1.0, 1.0), Color(0.1, 0.3, 1.0, 1.0)]))
+		await _step("2) Corner colour override:  body -> red-to-blue gradient", 2.0)
+
+		# 3) Visibility — force-hide 'apple', and 'heta' by its own call.
+		clear_all_part_overrides()
+#		set_part_visibility_override("apple", true, true)			# Access by name.
+		set_part_visibility_override_by_index(part_id, true, false)	# Access by id.
+		set_part_visibility_override("heta", true, false)
+		await _step("3) Visibility override:  hide 'apple', and 'heta' by its own call", 2.0)
+
+		# 4) Cell — swap the 'apple' sprite to the 'effect3' cell in the Ringo cellmap.
+		clear_all_part_overrides()
+#		set_part_cell_override("apple", cellmap, "effect3")				# Access by name.
+		set_part_cell_override_by_index(part_id, cellmap, "effect3")	# Access by id.
+		set_part_visibility_override("heta", true, false)
+		await _step("4) Cell override:  body sprite -> 'effect3' cell", 2.0)
+
+		clear_all_part_overrides()
+		await _step("5) No override (Restored)", 2.0)

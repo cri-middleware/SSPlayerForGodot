@@ -1,0 +1,388 @@
+name: CI
+
+# Two tiers, as in SpriteStudio-SDK. Every pull request builds the GDExtension for
+# Linux and Web, on a runtime built from the SDK submodule, or restored from the
+# weekly run's build when that run last built the same submodule commit (see the
+# extension job). The weekly run, a dispatch and the release PR (release/X.Y into
+# main) also build it for Windows, macOS, iOS and Android, build the custom-module
+# engine on all six (Godot itself with ss_player compiled in, one target each),
+# and build the documentation site.
+# The site goes through docs.yml, which a pull request that touches the docs
+# runs on its own.
+on:
+  pull_request:
+    paths-ignore:
+      - '**/*.md'
+      - '.gitignore'
+      - 'LICENSE*'
+  # The weekly run also writes the develop caches that PRs restore from, since
+  # PRs do not save. Weekly is enough for Rust: when Cargo.lock differs,
+  # rust-cache still restores the newest cache built by the same toolchain, so a
+  # PR that changes dependencies rebuilds only what changed.
+  schedule:
+    # Each repository of the family takes its own hour on Sunday, so their
+    # weekly runs do not queue for the organization's runners; :17 keeps clear
+    # of the top of the hour, when GitHub delays scheduled runs.
+    - cron: '17 1 * * 0'
+  workflow_dispatch:
+
+env:
+  LANG: en_US.UTF-8
+  LC_ALL: en_US.UTF-8
+  PYTHONIOENCODING: utf8
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.actor }}-${{ github.head_ref || github.run_number }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  extension:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    # A cold custom-module build, which this job runs off pull requests, takes
+    # most of this.
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: 🐧 Linux (GCC)
+            platform: linux
+            pr-target: editor
+            pr-options: ''
+            module-target: editor
+            # On this runner the engine's embree compiles with __AVX__ defined,
+            # which leaves out the BVH4 kernels its factory links against
+            # (godotengine/godot#106938). -mno-avx keeps it on SSE, as the
+            # engine's own flags intend; build.sh cuts a value at its first =,
+            # so -march=... cannot be passed.
+            module-options: ccflags=-mno-avx
+
+          - name: 🌐 Web (wasm32)
+            platform: web
+            pr-target: template_debug
+            pr-options: arch=wasm32 threads=no
+            module-target: template_release
+            module-options: arch=wasm32 threads=no
+
+    defaults:
+      run:
+        shell: zsh {0}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+          persist-credentials: false
+
+      - name: clone Godot Cpp repository
+        uses: GuillaumeFalourd/clone-github-repo-action@19817562c346ff60f9935158dede6c5ece8fd0ac # v2.3
+        with:
+          depth: 1
+          branch: master
+          owner: 'godotengine'
+          repository: 'godot-cpp'
+
+      - name: setup for gdextension
+        uses: ./.github/actions/setup-extension
+        with:
+          platform: ${{ matrix.platform }}
+          os: ubuntu-latest
+
+      # The runtime build depends on nothing but the submodule commit, the script
+      # that drives it, this workflow and the runner image, so its key is made
+      # of those, and only an exact match counts. The weekly run always builds,
+      # which keeps proving the submodule builds with the current toolchain and
+      # keeps the Rust cache seeded, and saves ss_player/runtime/ when no build
+      # is saved under that key yet. A pull request whose key matches restores
+      # it and skips Rust altogether; one that bumps the submodule, or changes
+      # any of the rest, misses and builds as before.
+      - name: Name the runtime build
+        id: runtime
+        run: echo "key=runtime-${ImageOS}-${{ matrix.platform }}-debug-$(git rev-parse HEAD:ss_player/SpriteStudio-SDK)-${{ hashFiles('scripts/build-runtime.sh', '.github/workflows/ci.yml') }}" >> "$GITHUB_OUTPUT"
+
+      # ss_player/runtime/ is gitignored, and SCons reads the runtime from it
+      # alone.
+      - name: Restore the runtime build
+        id: runtime-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ss_player/runtime
+          key: ${{ steps.runtime.outputs.key }}
+          # The weekly run builds regardless; it only asks whether a build is saved.
+          lookup-only: ${{ github.event_name != 'pull_request' }}
+
+      - name: Setup Rust (Stable)
+        if: github.event_name != 'pull_request' || steps.runtime-cache.outputs.cache-hit != 'true'
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: stable
+
+      - name: Setup Rust Cache
+        if: github.event_name != 'pull_request' || steps.runtime-cache.outputs.cache-hit != 'true'
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: "ss_player/SpriteStudio-SDK"
+          # The key is the job id and the runner OS, which linux and web share.
+          # Without the platform they would share one cache: only the first to
+          # finish could save it, and the other would restore its target dir.
+          key: ${{ matrix.platform }}
+          # Only develop writes caches. A PR's cache is visible to that PR alone,
+          # so saving one per PR would only fill the 10 GB quota and evict the
+          # develop caches every PR restores from.
+          save-if: ${{ github.ref == 'refs/heads/develop' }}
+
+      - name: Install Nightly Rust (Web only)
+        if: matrix.platform == 'web' && (github.event_name != 'pull_request' || steps.runtime-cache.outputs.cache-hit != 'true')
+        run: |
+          rustup target add wasm32-unknown-unknown
+          rustup toolchain install nightly
+          rustup target add wasm32-unknown-unknown --toolchain nightly
+          rustup component add rust-src --toolchain nightly
+
+      - name: Build Runtime (SDK)
+        if: github.event_name != 'pull_request' || steps.runtime-cache.outputs.cache-hit != 'true'
+        run: ./scripts/build-runtime.sh platform=${{ matrix.platform }} build=debug
+
+      # Straight after the build, so a later step that fails, the SCons build or
+      # the custom module, does not keep a runtime that built from being saved.
+      - name: Save the runtime build
+        if: github.ref == 'refs/heads/develop' && steps.runtime-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ss_player/runtime
+          key: ${{ steps.runtime.outputs.key }}
+
+      # Keyed on what the objects are compiled from, godot-cpp's commit and this
+      # repository's sources, so a week in which neither moved restores the exact
+      # entry and saves nothing. The month is part of the key so that the cache
+      # starts over once a month: godot-cpp is cloned from master, and objects
+      # compiled against the godot-cpp of earlier weeks would otherwise pile up in
+      # it for good.
+      - name: Name the SCons cache
+        id: scons
+        shell: bash
+        run: |
+          echo "month=$(date -u +%Y-%m)" >> "$GITHUB_OUTPUT"
+          echo "godot-cpp=$(git -C godot-cpp rev-parse --short=12 HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the SCons cache
+        id: scons-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.scons_cache
+          key: ${{ runner.os }}-${{ matrix.platform }}-scons-${{ steps.scons.outputs.month }}-${{ steps.scons.outputs.godot-cpp }}-${{ hashFiles('SConstruct', 'ss_player/SCsub', 'ss_player/*.py', 'ss_player/*.cpp', 'ss_player/*.h', 'ss_player/*.in', 'ss_player/VERSION.txt', 'ss_player/format/**', 'ss_player/shaders/**', 'ss_player/doc_classes/**', 'ss_player/icons/**') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.platform }}-scons-${{ steps.scons.outputs.month }}-
+
+      # A pull request builds one target, the one that compiles the most of
+      # ss_player: the editor on Linux, template_debug on the Web, which has no
+      # editor. The weekly tier builds every target the release scripts ship;
+      # the SCons cache it saves holds them all, so a PR's target restores from
+      # it, and a cold PR (godot-cpp moved, or a new month) compiles godot-cpp
+      # once instead of two or three times.
+      - name: Build
+        env:
+          SCONS_CACHE: ~/.scons_cache
+          ALL_TARGETS: ${{ github.event_name != 'pull_request' || github.base_ref == 'main' }}
+        run: |
+          mkdir -p ~/.scons_cache
+          if [ "$ALL_TARGETS" = true ]; then
+            ./scripts/release-gdextension-${{ matrix.platform }}.sh
+          else
+            ./scripts/build-extension.sh platform=${{ matrix.platform }} compiledb=no target=${{ matrix.pr-target }} ${{ matrix.pr-options }}
+          fi
+
+      - name: Save the SCons cache
+        if: github.ref == 'refs/heads/develop' && steps.scons-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.scons_cache
+          key: ${{ steps.scons-cache.outputs.cache-primary-key }}
+
+      # The weekly tier. `github.base_ref == 'main'` is the release PR: under
+      # git-flow only release/X.Y is merged into main.
+      - name: Build the custom module
+        if: github.event_name != 'pull_request' || github.base_ref == 'main'
+        uses: ./.github/actions/build-module
+        with:
+          platform: ${{ matrix.platform }}
+          target: ${{ matrix.module-target }}
+          options: ${{ matrix.module-options }}
+
+  platforms:
+    name: ${{ matrix.name }}
+    if: github.event_name != 'pull_request' || github.base_ref == 'main'
+    runs-on: ${{ matrix.os }}
+    # A cold custom-module build takes most of this; Windows' editor is the longest.
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: 🏁 Windows (x86_64, MSVC)
+            os: windows-latest
+            platform: windows
+            module-target: editor
+            module-options: ''
+
+          - name: 🍎 macOS (universal)
+            os: macos-latest
+            platform: macos
+            module-target: editor
+            module-options: ''
+
+          - name: 🤖 Android (arm64)
+            os: ubuntu-latest
+            platform: android
+            module-target: template_release
+            module-options: arch=arm64
+
+          - name: 🍏 iOS (arm64)
+            os: macos-latest
+            platform: ios
+            module-target: template_release
+            module-options: arch=arm64 ios_simulator=no
+
+    defaults:
+      run:
+        shell: zsh {0}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+          persist-credentials: false
+
+      - name: clone Godot Cpp repository
+        uses: GuillaumeFalourd/clone-github-repo-action@19817562c346ff60f9935158dede6c5ece8fd0ac # v2.3
+        with:
+          depth: 1
+          branch: master
+          owner: 'godotengine'
+          repository: 'godot-cpp'
+
+      - name: setup for gdextension
+        uses: ./.github/actions/setup-extension
+        with:
+          platform: ${{ matrix.platform }}
+          os: ${{ matrix.os }}
+
+      - name: Setup Rust (Stable)
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: stable
+
+      - name: Setup Rust Cache
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: "ss_player/SpriteStudio-SDK"
+          key: ${{ matrix.platform }}
+          save-if: ${{ github.ref == 'refs/heads/develop' }}
+
+      # Keyed as in the extension job.
+      - name: Name the SCons cache
+        id: scons
+        shell: bash
+        run: |
+          echo "month=$(date -u +%Y-%m)" >> "$GITHUB_OUTPUT"
+          echo "godot-cpp=$(git -C godot-cpp rev-parse --short=12 HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the SCons cache
+        id: scons-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.scons_cache
+          key: ${{ runner.os }}-${{ matrix.platform }}-scons-${{ steps.scons.outputs.month }}-${{ steps.scons.outputs.godot-cpp }}-${{ hashFiles('SConstruct', 'ss_player/SCsub', 'ss_player/*.py', 'ss_player/*.cpp', 'ss_player/*.h', 'ss_player/*.in', 'ss_player/VERSION.txt', 'ss_player/format/**', 'ss_player/shaders/**', 'ss_player/doc_classes/**', 'ss_player/icons/**') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.platform }}-scons-${{ steps.scons.outputs.month }}-
+
+      # The runtime comes from the submodule's source rather than the pinned SDK
+      # release (download-sdk), as in the extension job: this tier checks
+      # develop's HEAD.
+      - name: Build Runtime (SDK, macOS universal)
+        if: matrix.platform == 'macos'
+        run: |
+          rustup target add aarch64-apple-darwin
+          rustup target add x86_64-apple-darwin
+          ./scripts/build-runtime.sh platform=macos arch=universal build=release
+
+      - name: Build Runtime (SDK, iOS)
+        if: matrix.platform == 'ios'
+        run: |
+          rustup target add aarch64-apple-ios
+          rustup target add aarch64-apple-ios-sim
+          rustup target add x86_64-apple-ios
+          ./scripts/build-runtime.sh platform=ios build=release
+
+      - name: Build Runtime (SDK, Android)
+        if: matrix.platform == 'android'
+        run: |
+          cargo install cargo-ndk
+          rustup target add aarch64-linux-android
+          rustup target add armv7-linux-androideabi
+          rustup target add x86_64-linux-android
+          ./scripts/build-runtime.sh platform=android build=release
+
+      - name: Build Runtime (SDK, Windows)
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: ./scripts/build-runtime.ps1 platform=windows build=release
+
+      # Not code-signed: this tier is for our own verification, not something we
+      # distribute, so it has no business handling the Developer ID certificate.
+      # Signing belongs to release.yml alone. The scripts no-op on signing
+      # without APPLE_SIGNING_IDENTITY.
+      - name: build macOS
+        if: matrix.platform == 'macos'
+        env:
+          SCONS_CACHE: ~/.scons_cache
+        run: ./scripts/release-gdextension-macos.sh
+
+      - name: build iOS
+        if: matrix.platform == 'ios'
+        env:
+          SCONS_CACHE: ~/.scons_cache
+        run: ./scripts/release-gdextension-ios.sh
+
+      - name: build Android
+        if: matrix.platform == 'android'
+        env:
+          SCONS_CACHE: ~/.scons_cache
+        run: ./scripts/release-gdextension-android.sh
+
+      - name: build Windows
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        env:
+          SCONS_CACHE: ~/.scons_cache
+        run: |
+          ./scripts/release-gdextension-windows.ps1
+          Remove-Item -Recurse -Force ./bin/windows/*.exp
+          Remove-Item -Recurse -Force ./bin/windows/*.lib
+
+      - name: Save the SCons cache
+        if: github.ref == 'refs/heads/develop' && steps.scons-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.scons_cache
+          key: ${{ steps.scons-cache.outputs.cache-primary-key }}
+
+      - name: Build the custom module
+        uses: ./.github/actions/build-module
+        with:
+          platform: ${{ matrix.platform }}
+          target: ${{ matrix.module-target }}
+          options: ${{ matrix.module-options }}
+
+  # docs.yml, the build pages.yml publishes, both locales --strict. A pull
+  # request into anything but main that touches the docs runs it on its own.
+  docs:
+    name: 📚 Docs site
+    if: github.event_name != 'pull_request' || github.base_ref == 'main'
+    uses: ./.github/workflows/docs.yml

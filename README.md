@@ -1,96 +1,77 @@
-[**日本語**](./README.ja.md) | [**English**](./README.md)
+[**English**](./README.md) | [**日本語**](./README.ja.md)
 
-# SpriteStudioPlayer for Godot
+# SpriteStudio Player for Godot
 
-## Introduction
+**Professional 2D animations for your Godot games. A plugin that balances intuitive usability with extreme performance.**
 
-This plugin enables playback of animations created with  
-[OPTPiX SpriteStudio](https://www.webtech.co.jp/spritestudio/index.html)  
-within the [Godot Engine](https://godotengine.org/).
+A high-performance extension plugin (GDExtension / Custom Module) for playing animations (`.ssab`) created with **[SpriteStudio](https://www.webtech.co.jp/spritestudio/)** on [Godot Engine](https://godotengine.org/). By combining Godot's powerful features with the expressive capabilities of a dedicated animation tool, it fully supports the development of rich 2D games.
 
-To prioritize runtime performance, the plugin is implemented as a C++ module.
+## ✨ Why use SpriteStudio with Godot?
 
-To use SpriteStudioPlayer for Godot, you must either:
+- **Bring your characters to life.** Breathing and blinking, swaying hair and clothes, flashy slash and magic effects — the motion is built visually in a dedicated editor (SpriteStudio) with bone rigs, mesh deformation and particles, and Godot just plays it. Animations crossfade and layer on tracks at runtime, so a walk eases into a run instead of snapping. Nothing to rebuild by hand in `AnimationPlayer`.
+- **Not just characters — effects, UI and whole scenes.** Combine characters, backgrounds, effects and UI into a cutscene or a full-screen sequence in the editor, and play it in Godot as a single animation. `SpriteStudioButton` makes one a Godot button that plays its own section for hover, press, disabled and focus.
+- **Just another node.** `SpriteStudioPlayer2D` sits in your scene like any other node and is controlled from GDScript — with signals from timeline keys and per-part overrides at runtime. The animation lives in its own file rather than inside the scene, so teammates don't collide over scene merges in Git.
+- **A seamless SpriteStudio ⇄ Godot round trip.** Drop a `.sspj` onto the SS Importer dock and it is converted inside the editor. To tweak it, click **Open SSPJ** in the Inspector, save in SpriteStudio, then click **Reconvert** — no manual export step.
+- **Zero-parse loading, SIMD playback.** `.ssab` is a FlatBuffers binary read in place, so loading involves no parsing, and poses are computed by a SIMD-optimised Rust core — light enough for mobile and for scenes with many characters. Turn on **sub-frame interpolation** and motion follows high-refresh-rate displays.
 
-- Build the Godot Engine editor with the SpriteStudioPlayer [custom module](https://docs.godotengine.org/en/stable/contributing/development/core_and_modules/custom_modules_in_cpp.html), **or**
-- Add the SpriteStudioPlayer [GDExtension](https://docs.godotengine.org/en/stable/tutorials/scripting/gdextension/what_is_gdextension.html) to your project.
+## 📚 Documentation
 
-## Supported Versions of OPTPiX SpriteStudio
+Comprehensive documentation is available in the `docs/` folder — the data-flow diagram, key features and supported versions are all there:
 
-Supports SpriteStudio **Ver.6** and **Ver.7**.  
-*Note: New features added in Ver. 7.1 (text, sound, etc.) are not supported.*
+- [**Documentation site (hosted)**](https://cri-middleware.github.io/SSPlayerForGodot/)
+- [**Documentation (English)**](./docs/en/index.md)
+- [**ドキュメント (日本語)**](./docs/ja/index.md)
+- [**For AI assistants**](https://cri-middleware.github.io/SSPlayerForGodot/llms.txt) — these docs as Markdown: `llms.txt` indexes the pages and `llms-full.txt` holds all of them in one file
+- [**SpriteStudio Docs (portal)**](https://cri-middleware.github.io/SpriteStudio-Docs/) — the SDK and every official player in one place
 
-## Supported Versions of Godot Engine
+### Quick Links (English)
+- [Installation](./docs/en/setup/install.md)
+- [Basic Usage](./docs/en/workflow/usage_basic.md)
+- [Limitations & Scope](./docs/en/limitations.md)
+- [Troubleshooting](./docs/en/troubleshooting.md)
+- [Migration from v1.x](./docs/en/migration_from_v1.md)
 
-- [4.5 branch](https://github.com/godotengine/godot/tree/4.5):  
-  Verified build and execution on Windows / macOS  
-- [3.x branch](https://github.com/godotengine/godot/tree/3.x):  
-  Verified build and execution on Windows / macOS
+## 🚀 Quick Start with GDExtension
 
-## Build
+**Using it in your game?** Read on — install the add-on, drag a `.sspj` onto the editor, place a node.
+Everything after that (scripting, signals, per-part overrides) is the same path further in, in the
+[documentation](./docs/en/index.md).
+**Working on the Player, or the Rust runtime under it?** [CONTRIBUTING.md](./CONTRIBUTING.md), the [Build Guide](./docs/en/development/build.md) — which also covers using a changed build and checking it in Godot — and [How the Player Is Put Together](./docs/en/development/architecture.md) for the layers and the reasons that span files.
 
-See **[BUILD.md](BUILD.md)**.
+You need Godot 4.7 or later from the [official site](https://godotengine.org/download/). Projects have to be authored in **SpriteStudio 7.6 or later**.
 
-## Usage
+1. **Install**: Open the [latest Release](https://github.com/cri-middleware/SSPlayerForGodot/releases/latest) and download `ssplayer-godot-extension-4.7.zip` from its **Assets** — the Releases whose tag starts with `v1` are the 1.x plugin, which has neither `SSABResource` nor `SpriteStudioPlayer2D`. Extract it, copy its `addons` folder into your Godot project root, and restart the editor.
+2. **Import**: Drag your `.sspj` from your file manager onto the **SS Importer** dock. It is converted into a folder named after it under `res://ssab_generated/`, the dock's default output folder (see [Asset Import and Editor Integration](./docs/en/workflow/usage_asset_pipeline.md)).
 
-See **[USAGE.md](USAGE.md)**.
+   ```
+   MyGame/                         ← the folder holding project.godot
+   ├── addons/
+   │   └── spritestudio/           ← from the ZIP's addons/
+   │       ├── spritestudio.gdextension
+   │       ├── bin/
+   │       └── …
+   ├── ssab_generated/
+   │   └── Ringo/                  ← converted from Ringo.sspj
+   │       ├── Ringo.ssab
+   │       ├── Ringo.png
+   │       └── …
+   └── project.godot
+   ```
 
-## Samples
+3. **Play**: Drag `res://ssab_generated/Ringo/Ringo.ssab` from the FileSystem dock into the 2D viewport. That places a `SpriteStudioPlayer2D` node with the pack in its `Ssab` property and its first animation selected; run the scene to see it play.
 
-Sample projects are available in the **[examples folder](./examples/)**.
+No `.sspj` of your own yet? SpriteStudio's [official sample data](https://www.webtech.co.jp/help/ja/spritestudio7/download/sample/) works as-is — the page is in Japanese, the downloads are not. [Ringo](https://www.webtech.co.jp/help/ja/spritestudio7/download/sample/#ringo) is a good character to start with, and [Particle](https://www.webtech.co.jp/help/ja/spritestudio7/download/sample/#Perticle_sample) a good one for effects.
 
-**Note:**  
-These samples were created for **Godot 3.x**.  
-For use with **Godot 4.4**, please run **“Convert Full Project”** first.
+**Read next:** [Installation](./docs/en/setup/install.md) · [Basic Usage](./docs/en/workflow/usage_basic.md) · [Limitations & Scope](./docs/en/limitations.md)
 
-### [feature_test](./examples/feature_test)
+## 🔗 Related Repositories
 
-Basic functional test project with the following scenes:
+- [SpriteStudio Docs](https://cri-middleware.github.io/SpriteStudio-Docs/) — the documentation portal for the SDK and every official player
+- [SpriteStudio-SDK](https://github.com/cri-middleware/SpriteStudio-SDK) — The SDK itself, providing `libssruntime` / `libssconverter`
+- [SSConverterGUI](https://github.com/cri-middleware/SSConverterGUI) — a standalone desktop GUI for converting `.sspj` without a player
 
-- **v6_feature.tscn**  
-  - Verify features supported from SpriteStudio v6.0 to v7.0  
-  - Enable visibility of nodes you want to inspect  
-  - `Signal` & `UserData` trigger Godot signals when reaching their keys  
-  - Parameters appear in the console  
-  - Original project (`v6_all.sspj`) is located under `ssdata/`
+## 📄 License
 
-- **sspj_load.tscn**  
-  - Loads SS projects via GDScript and plays selected animations  
-  - Automatically switches to another SS project when playback finishes
+See [LICENSE.md](./LICENSE.md).
 
-- **texture_change.tscn**  
-  - Demonstrates dynamic texture replacement  
-  - Toggle “Change” in Inspector to switch textures
-
-### [mesh_bone](./examples/mesh_bone)
-
-Sample using mesh, bone, and effect features for character animation.
-
-### [particle_effect](./examples/particle_effect)
-
-Sample demonstrating effect animation features.  
-Displays one of 40 possible animations.  
-More animations can be tested through the Anime Pack.
-
-### [feature_test_gdextension](./examples/feature_test_gdextension)
-
-Test project for GDExtension operation.  
-Provides the same samples as `feature_test`.
-
-## Contact
-
-For questions, feature requests, or bug reports, please post to **[Issues](../../issues)**.
-
-For private inquiries, contact us via the  
-[Help Center](https://www.webtech.co.jp/help/ja/spritestudio7/inquiries/ssplayer_tool/).
-
-=========================================================  
-
-CRI Middleware Co., Ltd.  
-https://www.cri-mw.co.jp/  
-Copyright © CRI Middleware Co., Ltd.  
-
-=========================================================  
-
-* SpriteStudio and Web Technology are registered trademarks of Web Technology Corp.
-* Other product names are registered trademarks or trademarks of their respective companies.
+For third-party library licenses (such as FlatBuffers and SpriteStudio-SDK dependencies), see [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md).

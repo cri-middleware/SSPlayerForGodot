@@ -1,0 +1,106 @@
+name: 🛠️ Bug report / 不具合の報告
+description: Something in the player behaves incorrectly. / プレイヤーの動作に問題がある場合。
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this.
+
+        Before filing, please [search existing issues](https://github.com/cri-middleware/SSPlayerForGodot/issues?q=is%3Aissue).
+        **Do not attach proprietary `.sspj` files here** — this is a public tracker. Send them privately through the
+        [Japanese Help Center form](https://www.webtech.co.jp/help/ja/spritestudio7/inquiries/ssplayer_tool/), which takes a zip of up to 8 MB.
+
+        投稿前に既存の Issue を検索してください。**業務データの `.sspj` は公開の場である本 Issue に添付しないでください。** 送付が必要な場合は[ヘルプセンター](https://www.webtech.co.jp/help/ja/spritestudio7/inquiries/ssplayer_tool/)をご利用ください（8 MB までの zip を添付できます）。
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened? / 症状
+      description: What you expected, and what you got instead. / 期待した挙動と、実際の挙動。
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce / 再現手順
+      description: |
+        The smallest sequence that shows the problem. A minimal `.ssab` helps a lot.
+        問題を再現できる最小限の手順。最小限の `.ssab` があると助かります。
+      placeholder: |
+        1. Add a SpriteStudioPlayer2D to a scene
+        2. Assign the .ssab resource
+        3. Play "..."
+        4. See ...
+    validations:
+      required: true
+
+  - type: input
+    id: player-version
+    attributes:
+      label: Plugin version / プラグインのバージョン
+      description: The release you installed, or the commit you are on.
+    validations:
+      required: true
+
+  - type: input
+    id: godot-version
+    attributes:
+      label: Godot version / Godot のバージョン
+      placeholder: 4.7.0-stable
+    validations:
+      required: true
+
+  - type: dropdown
+    id: renderer
+    attributes:
+      label: Rendering method / レンダリング方式
+      options:
+        - Forward+
+        - Mobile
+        - Compatibility
+        - Not sure / わからない
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Which component? / どの機能か
+      options:
+        - SpriteStudioPlayer2D (playback)
+        - SpriteStudioPartAttachment2D (attaching nodes to parts)
+        - SSABResource / SSQBResource (loading)
+        - SpriteStudioAudioBackend (audio)
+        - Import pipeline (.sspj → .ssab)
+        - Other / わからない・その他
+
+  - type: checkboxes
+    id: platforms
+    attributes:
+      label: Platforms affected / 発生するプラットフォーム
+      options:
+        - label: Editor (macOS)
+        - label: Editor (Windows)
+        - label: Editor (Linux)
+        - label: Exported desktop build
+        - label: Android
+        - label: iOS
+        - label: Web
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Godot output / 出力コンソール
+      description: Any errors, warnings, or stack traces. / エラー・警告・スタックトレース。
+      render: text
+
+  - type: textarea
+    id: other-players
+    attributes:
+      label: Does it reproduce on another SpriteStudio player? / 他の SpriteStudio Player でも再現しますか？
+      description: |
+        If it does, the cause is most likely the shared SpriteStudio runtime rather than this
+        player, and saying so here saves a round trip.
+        再現する場合は、この Player 固有ではなく共通ランタイム側の可能性が高いため、その旨をお書きください。

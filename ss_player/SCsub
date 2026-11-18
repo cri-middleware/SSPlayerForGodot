@@ -1,0 +1,78 @@
+#!/usr/bin/env python
+import os
+import sys
+
+# Import shared source definitions
+# In SCons, __file__ is not defined. Use Dir('.').abspath to get the directory of the current SCsub.
+sys.path.append(str(Dir('.').abspath))
+import sources
+
+Import("env")
+Import("env_modules")
+
+env_ss = env_modules.Clone()
+
+# The engine build names the Linux platform linuxbsd; godot-cpp, and with it
+# the runtime library directories, call it linux.
+platform = "linux" if env["platform"] == "linuxbsd" else env["platform"]
+
+# Version header: stamp VERSION.txt + git hash into ss_player/gen/ss_version.gen.h
+# (gitignored). Shared with the GDExtension build via ss_player/sources.py.
+sources.generate_version_header()
+
+# --- Compilation Flags ---
+if platform in ["macos", "linux", "ios", "android"]:
+    env_ss.Append(CCFLAGS=["-fvisibility=hidden"])
+    env_ss.Append(CXXFLAGS=["-fvisibility=hidden"])
+
+if not env_ss.msvc:
+    env_ss.Append(CXXFLAGS=["-Wno-inconsistent-missing-override"])
+
+# --- Source Files ---
+# Extension sources
+env_ss.add_source_files(env.modules_sources, "*.cpp")
+
+# FlatBuffers is header-only here -- see the note in sources.py.
+
+# --- Includes ---
+env_ss.Append(CPPPATH=sources.get_include_paths())
+
+# --- Libraries & Library Paths ---
+module_path = env.Dir('.').abspath
+arch = env['arch']
+
+runtime_libpath = sources.get_runtime_lib_path(module_path, platform, arch)
+
+env.Append(LIBPATH=[runtime_libpath])
+
+if env['target'] == 'editor':
+    env.Append(LIBS=["ssconverter"])
+    if platform == "windows":
+        env.Append(LINKFLAGS=["Userenv.lib", "Bcrypt.lib", "Ntdll.lib", "Ws2_32.lib", "Synchronization.lib"])
+        env.Append(LINKFLAGS=["/FORCE:MULTIPLE", "/IGNORE:4006"])
+    elif platform == "linux":
+        # ssruntime's panic handler and allocator shims against the ones in
+        # ssconverter's std, which GNU ld rejects as duplicates.
+        env.Append(LINKFLAGS=["-Wl,--allow-multiple-definition"])
+
+# On Apple embedded platforms (iOS) the engine is archived into a single static
+# library: platform/ios/SCsub feeds env["LIBS"] as *input files* to
+# combine_libs_apple_embedded, so a bare "-lssruntime" name is resolved as a
+# missing source. Pass the static archive by full path instead. Other platforms
+# link it normally via -l from LIBPATH.
+if platform == "ios":
+    # Godot's iOS detect.py declares BoolVariable(("simulator", "ios_simulator"), ...),
+    # so the flag is stored under env["simulator"] (the primary name). Reading the
+    # "ios_simulator" alias here always returns False, which would wrongly link the
+    # device slice into simulator builds. Honor "simulator" (with the alias as a fallback).
+    if env.get("simulator", env.get("ios_simulator", False)):
+        slice_dir = "ios-arm64_x86_64-simulator"
+    else:
+        slice_dir = "ios-arm64"
+    xcf_libpath = os.path.join(runtime_libpath, "libssruntime.xcframework", slice_dir)
+    env.Append(LIBS=[File(os.path.join(xcf_libpath, "libssruntime.a"))])
+else:
+    env.Append(LIBS=["ssruntime"])
+
+if platform == 'macos':
+    env_ss.Append(LINKFLAGS=['-framework', 'Metal'])

@@ -1,0 +1,92 @@
+# ▶️ 基本的な使い方
+
+このページでは、Godot のシーン上に SpriteStudio のアニメーションを配置して再生するまでの基本的な手順を解説します。
+
+> [!NOTE]
+> 本ページは **`.ssab` ファイルがすでに Godot プロジェクトにインポート済みであること** を前提としています。まだ `.ssab` が無い場合は、先に [アセットのインポートとエディタ連携](usage_asset_pipeline.md)（エディタからの取り込み）または [CLI コンバートと自動化](import.md)（CLI からの取り込み）を参照してください。
+
+## 最速セットアップ: ドラッグ＆ドロップによるノード生成
+
+Godot エディタの強力な機能を活かし、最短の手順でアニメーションをセットアップできます。
+
+1. **ファイルシステムドック**から、インポート済みの **`.ssab` ファイル** を探します。
+2. そのファイルを **2D ワークスペース (シーンビュー)** へドラッグ＆ドロップします。
+
+これだけで自動的に `SpriteStudioPlayer2D` ノードがシーンに追加され、リソースの割り当ても完了します。
+
+> [!TIP]
+> 
+> <video autoplay loop muted playsinline width="100%">
+>   <source src="../assets/3-setup_drag_and_drop.webm" type="video/webm">
+> </video>
+> <img src="../assets/3-setup_drag_and_drop.webp" width="100%" style="display: none;" loading="lazy">
+
+---
+
+## 手動でのノード追加とアタッチ
+
+既存のノード階層の特定の場所に配置したい場合は、手動でノードを追加してリソースを割り当てることも可能です。
+
+1. シーンドックの「＋」ボタンなどから、`SpriteStudioPlayer2D` ノードをシーンツリーに追加します。
+2. 追加したノードを選択し、インスペクターを開きます。
+3. インスペクターの **`Ssab`** プロパティへ、ファイルシステムドックから `.ssab` ファイルをドラッグ＆ドロップしてアタッチします。
+
+---
+
+## インスペクターでの設定とプレビュー
+
+ノードを選択すると、Godot のインスペクターから各種設定を行えます。
+
+1. **`Current Animation` の選択** インスペクターの `Current Animation` プロパティのドロップダウンを開くと、`.ssab` に含まれるアニメーションのリストが表示されます。再生したいアニメーション名を選択してください。
+
+> [!TIP]
+> 
+> <video autoplay loop muted playsinline width="100%">
+>   <source src="../assets/4-inspector_preview-1.webm" type="video/webm">
+> </video>
+> <img src="../assets/4-inspector_preview-1.webp" width="100%" style="display: none;" loading="lazy">
+
+2. **エディタ上でのプレビュー** ノードを選択すると **SpriteStudio** ボトムパネルが表示されます。先頭から再生 / 現在位置から再生 / 停止のトランスポート、フレームスクラバ、および隣の **Loop** / **Speed** を使って、**ゲームを実行せずにエディタ上でアニメーションを再生**できます。ショートカットは AnimationPlayer エディタと同じく **D** 現在位置から再生 / **Shift+D** 先頭から / **S** 停止（パネルが表示中に有効）。
+   `Frame No` や `Speed Scale`、`Loop Count` などのパラメータを変更するとリアルタイムにプレビューへ反映されるため、素早い調整が可能です。**Loop** はオンで `Loop Count` を `-1`（無限）に、オフで `1` にし、**Speed** は `Speed Scale` を書き換えます。どちらもシーンへの編集なので、インスペクターで同じ変更をしたときと同じくシーンに保存され、Ctrl+Z で元に戻せます。
+
+> [!TIP]
+> 
+> <video autoplay loop muted playsinline width="100%">
+>   <source src="../assets/4-inspector_preview-2.webm" type="video/webm">
+> </video>
+> <img src="../assets/4-inspector_preview-2.webp" width="100%" style="display: none;" loading="lazy">
+
+---
+
+## 主なインスペクタープロパティ
+
+| プロパティ                | 型     | 説明                                                                |
+| -------------------------- | ------ | ------------------------------------------------------------------- |
+| `Ssab`           | Resource | 再生対象の `SSABResource` (`.ssab` ファイル)                     |
+| `Current Animation`        | String | 選択中のアニメーション名                                            |
+| `Autoplay`                 | bool   | ゲーム開始時に自動再生するかどうか                                  |
+| `Offset`                   | Vector2| 描画位置のオフセット。Transformを動かさずに見た目だけをずらす際に便利 |
+| `Flip H / Flip V`          | bool   | アニメーションの水平 / 垂直反転                                     |
+| `Frame No`                 | float  | 現在のフレーム位置                                                  |
+| `Speed Scale`              | float  | 再生速度倍率 (既定: 1.0)                                            |
+| `Loop Count`               | int    | ループ回数 (`-1` で無限ループ)                                      |
+| `Animation Section Start` | int    | 部分再生の開始フレーム。`Animation Section End` より後ろへは動かせないので、先に終了フレームを動かす |
+| `Animation Section End`   | int    | 部分再生の終了フレーム。`Animation Section Start` より前へは動かせないので、先に開始フレームを動かす |
+| `Frame Skip Enabled`       | bool   | 描画間隔がフレーム間隔を超えた際にフレームを飛ばすか                |
+| `Sub Frame Enabled`        | bool   | サブフレーム補間を有効化するか                                      |
+| `Animation Process Mode`   | int    | `_physics_process` (Physics) / `_process` (Idle) の同期設定、または `advance()` に委ねる (Manual) |
+| `Play Audio`               | bool   | アニメーションのサウンドパートを内蔵プレイヤーで鳴らすか（[サウンド再生](audio.md) 参照） |
+| `Audio Volume`             | float  | 内蔵サウンド再生のリニア音量 `[0, 1]`                               |
+| `Audio Bus`                | StringName | 内蔵サウンド再生を流すバス (既定: `Master`)                     |
+| `Audio Backend`            | Resource | 内蔵サウンド再生を置き換える `SpriteStudioAudioBackend`（任意）    |
+
+> [!NOTE]
+> **アニメーション切り替えで残るもの。** 設定したものはすべて残ります。`Loop Count` / `Speed Scale` / `Frame Skip Enabled` / `Sub Frame Enabled`、`frame_rate` の上書き、再生**方向とスタイル** はいずれも `set_animation()` を跨いで保持されます。リセットされるのは **再生区間** だけで、新しいクリップ自身の範囲に戻ります。
+>
+> 方向・スタイル・`frame_rate` はスクリプトから設定し（`player.playback_direction` / `player.frame_rate`）、シーンには保存されません。
+
+---
+
+## マスクパーツへの対応
+
+本プラグインは SpriteStudio の「マスク機能（Mask）」に対応しています（上限などは [制約と適用範囲 → マスク](../limitations.md#マスク) を参照）。設定は要りません。`.ssab` にマスクパーツがあれば、シーンに置くだけで作ったとおりにクリッピングされます。

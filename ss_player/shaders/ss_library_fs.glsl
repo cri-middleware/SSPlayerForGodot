@@ -1,0 +1,146 @@
+R"GLSL(
+uniform sampler2D map0;
+uniform sampler2D map1;
+
+// Cell rectangle in UV space: (left_u, top_v, right_u, bottom_v).
+// Populated per-part on the per-part material path (Default and other
+// shareable variants leave it at zero — they don't reference it).
+// `ss-circle` / `ss-spot` use this to clip-sample inside the part's
+// cell bounds; the cell center is `(ss_cell_rect.xy + ss_cell_rect.zw) * 0.5`.
+uniform vec4 ss_cell_rect;
+
+uniform float ss_param0;
+uniform float ss_param1;
+uniform float ss_param2;
+uniform float ss_param3;
+uniform float ss_param4;
+uniform float ss_param5;
+uniform float ss_param6;
+uniform float ss_param7;
+
+// ---- Mask test -------------------------------------------------------------
+// Coverage bitmap (offscreen RGBA8, 24 writer bits in RGB), per-frame writer
+// metadata, and this part's number on the tree sequence / its polarity.
+// Masking is off by default
+// (ss_mask_enabled == false) so non-masked draws are untouched. `ss_mask_uv`
+// is the fragment's coverage UV, written in the vertex stage from the
+// player-local position via `ss_mask_uv_basis` / `ss_mask_uv_off`.
+// MUST be nearest: the coverage packs writer bits into the RGBA8 channels, so
+// any linear blending across texels corrupts the per-bit decode (edge halos).
+uniform sampler2D ss_mask_coverage : filter_nearest;
+uniform bool ss_mask_enabled;
+uniform vec4 ss_mask_uv_basis;        // (basis.xy = row0, basis.zw = row1)
+uniform vec2 ss_mask_uv_off;          // (offset.x, offset.y)
+uniform int ss_mask_count;            // active writer count (0..96)
+uniform vec4 ss_mask_meta[96];        // per writer: (open, close, bit, op_invert)
+// The coverage's tile grid (columns, rows): 24 writer bits per tile, the tiles
+// splitting one texture (1x1, 2x1 or 2x2). Writer `bit` lives in tile bit / 24.
+uniform vec2 ss_mask_tiles = vec2(1.0);
+uniform float ss_mask_rank;           // this part's number on the tree sequence
+uniform float ss_mask_visible_inside; // 1 = draw inside mask region, 0 = outside
+varying vec2 ss_mask_uv;
+
+// A macro rather than a function, because a built-in must not cross a function
+// boundary: Godot resolves `TEXTURE` to a sampler by name, and where that name
+// is not registered -- the headless renderer, which is what the test suite runs
+// on -- `shader_compiler.cpp` fails `custom_samplers.has(tex_builtin)`, falls
+// back to the project default sampler and logs one error per material built.
+// Real renderers resolve it, so nothing about a shipped build changes here.
+//
+// This is still the input-side extension point: fold a conversion in by
+// wrapping the sample, not the sampler.
+#define ss_input_texture(tex, uv) texture(tex, uv)
+
+vec3 ss_partcolor_blend(vec3 pixel_rgb, vec3 color_rgb, vec4 varg) {
+    return pixel_rgb * varg.x + mix(vec3(1.0), pixel_rgb, varg.z) * color_rgb * varg.y;
+}
+
+// Reconstruct the masked / unmasked state at this fragment by replaying the
+// mask writers that hold their bit at this part (CBP). Returns true when the
+// fragment should be drawn. Writer `i`'s coverage bit lives in `ss_mask_meta[i]`.
+bool ss_mask_passes() {
+    if (!ss_mask_enabled) {
+        return true;
+    }
+    // No writer writes this frame: nothing is masked, so the polarity alone
+    // decides — a part drawn only inside a mask has nowhere to draw.
+    if (ss_mask_count <= 0) {
+        return ss_mask_visible_inside <= 0.5;
+    }
+    // The coverage bitmap only spans the mask writers' bounding box. A fragment
+    // outside it (uv beyond [0,1]) is covered by no writer, so it must not be
+    // masked. Without this, filter_nearest + edge clamp smear an edge writer's
+    // bits across everything beyond the bbox — and the bbox shrinks/grows with
+    // the writer set, so e.g. toggling one writer's mask_write would spuriously
+    // clip parts drawn outside the remaining writers' extent.
+    if (ss_mask_uv.x < 0.0 || ss_mask_uv.x > 1.0 || ss_mask_uv.y < 0.0 || ss_mask_uv.y > 1.0) {
+        // masked_state = false: visible_inside=0 draws, visible_inside=1 discards.
+        return ss_mask_visible_inside <= 0.5;
+    }
+    // Each tile maps the same bbox, so the fragment reads the same texel of
+    // every tile the writers use. Clamped half a texel inside the tile, or its
+    // edge would read the neighbouring tile's bits.
+    int cols = int(ss_mask_tiles.x + 0.5);
+    vec2 tiles = max(ss_mask_tiles, vec2(1.0));
+    vec2 tile_px = vec2(textureSize(ss_mask_coverage, 0)) / tiles;
+    vec2 local_px = clamp(ss_mask_uv * tile_px, vec2(0.5), tile_px - vec2(0.5));
+    int tile_bits[4] = { 0, 0, 0, 0 };
+    int tiles_used = (ss_mask_count + 23) / 24;
+    for (int t = 0; t < 4; t++) {
+        if (t >= tiles_used) { break; }
+        vec2 origin = vec2(float(t % cols), float(t / cols)) * tile_px;
+        vec4 cov = texture(ss_mask_coverage, (origin + local_px) / (tile_px * tiles));
+        tile_bits[t] = int(cov.r * 255.0 + 0.5)
+                     | (int(cov.g * 255.0 + 0.5) << 8)
+                     | (int(cov.b * 255.0 + 0.5) << 16);
+    }
+    // `Invert` (mask_influence == 1) and `IncrementWrap` (mask_influence == 0)
+    // are each their own inverse alone, but they do NOT commute, so replaying
+    // both into one accumulator makes coverage depend on the order the writers
+    // happen to be emitted in: `incr then invert` lands on 254 (covered) where
+    // `invert then incr` wraps back to 0 (not covered). A stencil buffer keeps
+    // them apart by giving each op its own WriteMask;
+    // replaying in a shader, separate accumulators do the same job with no bit
+    // budget to divide — so the counter has no overlap limit here.
+    int parity = 0; // mask_influence == 1: covered where an odd number overlap
+    int count = 0;  // mask_influence == 0: covered where any overlap
+    for (int i = 0; i < ss_mask_count; i++) {
+        vec4 m = ss_mask_meta[i];
+        // A writer holds its bit over an open interval of the tree sequence: a
+        // pure mask from the start of its own animation up to itself, a
+        // clipping writer from itself to the end of the tree.
+        bool active = ss_mask_rank > m.x && ss_mask_rank < m.y;
+        if (!active) { continue; }
+        int bit = int(m.z + 0.5);
+        int tile = bit / 24;
+        if (((tile_bits[tile] >> (bit - tile * 24)) & 1) == 0) { continue; }
+        if (m.w > 0.5) {
+            parity ^= 1; // invert (parity plane)
+        } else {
+            count += 1; // increment (counter plane)
+        }
+    }
+    // The union of the two planes — what SpriteStudio specifies where writers of
+    // differing mask_influence overlap.
+    bool masked = (parity != 0) || (count != 0);
+    return masked == (ss_mask_visible_inside > 0.5);
+}
+
+vec4 ss_output_color(vec4 c, float pma_flag) {
+    if (!ss_mask_passes()) {
+        discard;
+    }
+    // Last, as Godot applies it to any canvas item: after the PartColor and the
+    // add-on shader, before the blend-specific output form.
+    c *= ss_modulate;
+#ifdef SS_BLEND_MUL
+    // blend_mul multiplies the backdrop by the source colour and never reads its
+    // alpha, so a transparent texel would still darken it by the colour it
+    // carries — black blocks wherever the atlas is empty but not white. Fading
+    // to white by alpha makes the result d * (1 - a + c * a).
+    return vec4(mix(vec3(1.0), c.rgb, c.a), c.a);
+#else
+    return pma_flag > 0.5 ? vec4(c.rgb * c.a, c.a) : c;
+#endif
+}
+)GLSL"

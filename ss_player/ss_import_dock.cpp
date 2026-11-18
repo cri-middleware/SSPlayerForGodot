@@ -1,0 +1,751 @@
+#ifdef TOOLS_ENABLED
+
+#include "ss_macros.h"
+
+#ifdef SPRITESTUDIO_GODOT_EXTENSION
+#include <godot_cpp/classes/accept_dialog.hpp>
+#include <godot_cpp/classes/dir_access.hpp>
+#include <godot_cpp/classes/display_server.hpp>
+#include <godot_cpp/classes/editor_file_system.hpp>
+#include <godot_cpp/classes/editor_interface.hpp>
+#include <godot_cpp/classes/editor_settings.hpp>
+#include <godot_cpp/classes/input_event_mouse_button.hpp>
+#include <godot_cpp/classes/os.hpp>
+#include <godot_cpp/classes/config_file.hpp>
+#include <godot_cpp/classes/control.hpp>
+#include <godot_cpp/classes/text_server.hpp>
+#include <godot_cpp/classes/window.hpp>
+#include <godot_cpp/variant/utility_functions.hpp>
+using namespace godot;
+#else
+#include "core/input/input_event.h"
+#include "core/io/dir_access.h"
+#include "core/os/os.h"
+#include "core/io/config_file.h"
+#include "editor/editor_interface.h"
+#include "editor/settings/editor_settings.h"
+#include "scene/gui/dialogs.h"
+#include "scene/main/window.h"
+#include "servers/text/text_server.h"
+#include "editor/file_system/editor_file_system.h"
+#endif
+
+#include "ss_clickable_label.h"
+#include "ss_import_dock.h"
+#include "ss_importer.h"
+#include "ssconverter.h"
+
+// Plugin version, stamped at build time from VERSION.txt + git hash.
+// Generated into ss_player/gen/ by generate_version_header() (ss_player/sources.py).
+#include "gen/ss_version.gen.h"
+
+void SSImportControl::_bind_methods() {
+    ClassDB::bind_method(D_METHOD("_on_window_files_dropped", "files"), &SSImportControl::_on_window_files_dropped);
+    ClassDB::bind_method(D_METHOD("_on_line_edit_submitted", "text"), &SSImportControl::_on_line_edit_submitted);
+    ClassDB::bind_method(D_METHOD("_on_output_dir_focus_exited"), &SSImportControl::_on_output_dir_focus_exited);
+    ClassDB::bind_method(D_METHOD("_on_browse_button_pressed"), &SSImportControl::_on_browse_button_pressed);
+    ClassDB::bind_method(D_METHOD("_on_reset_button_pressed"), &SSImportControl::_on_reset_button_pressed);
+    ClassDB::bind_method(D_METHOD("_on_open_dir_button_pressed"), &SSImportControl::_on_open_dir_button_pressed);
+    ClassDB::bind_method(D_METHOD("_on_dir_selected"), &SSImportControl::_on_dir_selected);
+    ClassDB::bind_method(D_METHOD("_on_recent_file_pressed", "path"), &SSImportControl::_on_recent_file_pressed);
+    ClassDB::bind_method(D_METHOD("_on_recent_gui_input", "event", "path"), &SSImportControl::_on_recent_gui_input);
+    ClassDB::bind_method(D_METHOD("_on_recent_menu_id_pressed", "id"), &SSImportControl::_on_recent_menu_id_pressed);
+    ClassDB::bind_method(D_METHOD("_on_clear_recent_pressed"), &SSImportControl::_on_clear_recent_pressed);
+    ClassDB::bind_method(D_METHOD("_on_importer_files_resolved", "paths"), &SSImportControl::_on_importer_files_resolved);
+}
+
+
+SSImportControl::SSImportControl() {
+    set_h_size_flags(Control::SIZE_EXPAND_FILL);
+    set_v_size_flags(Control::SIZE_EXPAND_FILL);
+
+    // Output Dir row
+    {
+        VBoxContainer *output_vbox = memnew(VBoxContainer);
+        add_child(output_vbox);
+
+        HBoxContainer *header_hbox = memnew(HBoxContainer);
+        output_vbox->add_child(header_hbox);
+
+        Label *label = memnew(Label);
+        label->set_text(tr("Output:"));
+        header_hbox->add_child(label);
+
+        Control *spacer = memnew(Control);
+        spacer->set_h_size_flags(SIZE_EXPAND_FILL);
+        header_hbox->add_child(spacer);
+
+        browse_button = memnew(Button);
+        browse_button->set_tooltip_text(tr("Choose output directory"));
+        browse_button->connect("pressed", Callable(this, "_on_browse_button_pressed"));
+        header_hbox->add_child(browse_button);
+
+        reset_button = memnew(Button);
+        reset_button->set_tooltip_text(tr("Reset to default directory"));
+        reset_button->connect("pressed", callable_mp(this, &SSImportControl::_on_reset_button_pressed));
+        header_hbox->add_child(reset_button);
+
+        open_dir_button = memnew(Button);
+        open_dir_button->set_tooltip_text(tr("Open in File Manager"));
+        open_dir_button->connect("pressed", Callable(this, "_on_open_dir_button_pressed"));
+        header_hbox->add_child(open_dir_button);
+
+        path_line_edit = memnew(LineEdit);
+        path_line_edit->set_h_size_flags(SIZE_EXPAND_FILL);
+        path_line_edit->set_editable(true);
+        path_line_edit->connect("text_submitted", Callable(this, "_on_line_edit_submitted"));
+        // text_submitted alone only fires on Enter, so a value typed and then
+        // clicked away from would be imported into without ever being
+        // validated or saved.
+        path_line_edit->connect("focus_exited", Callable(this, "_on_output_dir_focus_exited"));
+        output_vbox->add_child(path_line_edit);
+    }
+
+    file_dialog = memnew(EditorFileDialog);
+    file_dialog->set_access(EditorFileDialog::ACCESS_RESOURCES);
+    file_dialog->set_file_mode(EditorFileDialog::FILE_MODE_OPEN_DIR);
+    file_dialog->connect("dir_selected", Callable(this, "_on_dir_selected"));
+    add_child(file_dialog);
+
+    // Drop area (compact, fixed height)
+    {
+        drop_panel = memnew(Panel);
+        drop_panel->set_custom_minimum_size(Size2(0, 200));
+        drop_panel->set_h_size_flags(Control::SIZE_EXPAND_FILL);
+        drop_panel->set_mouse_filter(Control::MOUSE_FILTER_IGNORE);
+
+        Ref<StyleBoxFlat> panel_style = memnew(StyleBoxFlat);
+        panel_style->set_bg_color(Color(0.18, 0.20, 0.26, 0.55));
+        panel_style->set_border_width_all(2);
+        panel_style->set_border_color(Color(0.45, 0.55, 0.75, 0.7));
+        panel_style->set_corner_radius_all(8);
+#ifdef SPRITESTUDIO_GODOT_EXTENSION
+        drop_panel->add_theme_stylebox_override("panel", panel_style);
+#else
+        drop_panel->add_theme_style_override("panel", panel_style);
+#endif
+        add_child(drop_panel);
+
+        instruction_label = memnew(Label);
+        instruction_label->set_text(tr("Drop SSPJ or a folder here\n(drag from your file manager)"));
+        instruction_label->set_horizontal_alignment(HORIZONTAL_ALIGNMENT_CENTER);
+        instruction_label->set_vertical_alignment(VERTICAL_ALIGNMENT_CENTER);
+        instruction_label->set_anchors_preset(Control::PRESET_FULL_RECT);
+        instruction_label->set_mouse_filter(Control::MOUSE_FILTER_IGNORE);
+        drop_panel->add_child(instruction_label);
+    }
+
+    // Recent SSPJs section
+    {
+        HBoxContainer *recent_header = memnew(HBoxContainer);
+        add_child(recent_header);
+
+        recent_label = memnew(Label);
+        recent_label->set_text(tr("Recent SSPJs"));
+        recent_label->set_h_size_flags(Control::SIZE_EXPAND_FILL);
+        recent_header->add_child(recent_label);
+
+        clear_recent_button = memnew(Button);
+        clear_recent_button->set_tooltip_text(tr("Clear recent SSPJ files"));
+        clear_recent_button->connect("pressed", Callable(this, "_on_clear_recent_pressed"));
+        recent_header->add_child(clear_recent_button);
+
+        ScrollContainer *scroll = memnew(ScrollContainer);
+        scroll->set_h_size_flags(SIZE_EXPAND_FILL);
+        scroll->set_v_size_flags(Control::SIZE_EXPAND_FILL);
+        add_child(scroll);
+
+        recent_vbox = memnew(VBoxContainer);
+        recent_vbox->set_h_size_flags(SIZE_EXPAND_FILL);
+        scroll->add_child(recent_vbox);
+    }
+
+    // Right-click popup (single shared instance)
+    recent_popup = memnew(PopupMenu);
+    recent_popup->connect("id_pressed", Callable(this, "_on_recent_menu_id_pressed"));
+    add_child(recent_popup);
+
+    // Footer: plugin + converter version
+    {
+        VBoxContainer *vbox = memnew(VBoxContainer);
+        add_child(vbox);
+
+        HBoxContainer *hbox_plugin = memnew(HBoxContainer);
+        vbox->add_child(hbox_plugin);
+
+        Label *plugin_label = memnew(Label);
+        plugin_label->set_text(tr("player:"));
+        hbox_plugin->add_child(plugin_label);
+
+        SSClickableLabel *plugin_version = memnew(SSClickableLabel);
+        plugin_version->set_text(String(SSPLAYER_VERSION_FULL));
+        plugin_version->set_tooltip_text(String(SSPLAYER_VERSION_FULL));
+        plugin_version->set_text_overrun_behavior(TextServer::OVERRUN_TRIM_ELLIPSIS);
+        plugin_version->set_h_size_flags(Control::SIZE_EXPAND_FILL);
+        hbox_plugin->add_child(plugin_version);
+
+        HBoxContainer *hbox_converter = memnew(HBoxContainer);
+        vbox->add_child(hbox_converter);
+
+        Label *label = memnew(Label);
+        label->set_text(tr("converter:"));
+        hbox_converter->add_child(label);
+
+        SSClickableLabel *clickable_label = memnew(SSClickableLabel);
+        const char *v = ss_converter_version();
+        String text = String(v);
+        clickable_label->set_text(text);
+        clickable_label->set_tooltip_text(text);
+        clickable_label->set_text_overrun_behavior(TextServer::OVERRUN_TRIM_ELLIPSIS);
+        clickable_label->set_h_size_flags(Control::SIZE_EXPAND_FILL);
+        ss_converter_version_free((char *)v);
+        v = nullptr;
+        hbox_converter->add_child(clickable_label);
+    }
+
+    _load_settings();
+}
+
+SSImportControl::~SSImportControl() {
+    stop_intercepting();
+}
+
+void SSImportControl::_notification(int p_what) {
+    switch (p_what) {
+        case NOTIFICATION_THEME_CHANGED: {
+            if (browse_button) browse_button->set_button_icon(get_theme_icon(SNAME("Load"), SNAME("EditorIcons")));
+            if (reset_button) reset_button->set_button_icon(get_theme_icon(SNAME("Reload"), SNAME("EditorIcons")));
+            if (open_dir_button) open_dir_button->set_button_icon(get_theme_icon(SNAME("Filesystem"), SNAME("EditorIcons")));
+            if (clear_recent_button) clear_recent_button->set_button_icon(get_theme_icon(SNAME("Clear"), SNAME("EditorIcons")));
+        } break;
+        case NOTIFICATION_ENTER_TREE: {
+            start_intercepting();
+            if (importer && !importer->is_connected("import_files_resolved", Callable(this, "_on_importer_files_resolved"))) {
+                importer->connect("import_files_resolved", Callable(this, "_on_importer_files_resolved"));
+            }
+        } break;
+        case NOTIFICATION_EXIT_TREE: {
+            stop_intercepting();
+        } break;
+    }
+}
+
+void SSImportControl::start_intercepting() {
+    if (is_intercepting) return;
+
+    auto window = get_window();
+    if (!window) return;
+
+#ifdef SPRITESTUDIO_GODOT_EXTENSION
+    TypedArray<Dictionary> connections = window->get_signal_connection_list("files_dropped");
+#else
+    List<Connection> connections;
+    window->get_signal_connection_list("files_dropped", &connections);
+#endif
+
+    // Godot delivers OS file drops to every files_dropped handler and gives us
+    // no way to "consume" the event, so to claim SSPJ drops we take over ALL
+    // existing handlers and hand every drop we do not claim to them directly.
+    original_drop_handlers.clear();
+#ifdef SPRITESTUDIO_GODOT_EXTENSION
+    for (int i = 0; i < connections.size(); i++) {
+        Dictionary conn = connections[i];
+        Callable target = conn["callable"];
+#else
+    for (const Connection &conn : connections) {
+        Callable target = conn.callable;
+#endif
+        if (target.get_object() == this) continue;
+
+        original_drop_handlers.push_back(target);
+        window->disconnect("files_dropped", target);
+    }
+
+    if (!window->is_connected("files_dropped", Callable(this, "_on_window_files_dropped"))) {
+        window->connect("files_dropped", Callable(this, "_on_window_files_dropped"));
+    }
+
+    is_intercepting = true;
+}
+
+void SSImportControl::stop_intercepting() {
+    if (!is_intercepting) return;
+
+    // Drop the intercept state up-front: every exit path below must leave this
+    // control un-intercepting, or a later start_intercepting() early-returns and
+    // the editor's own files_dropped handlers stay disconnected for the session.
+    is_intercepting = false;
+
+    auto window = get_window();
+    if (window) {
+        if (window->is_connected("files_dropped", Callable(this, "_on_window_files_dropped"))) {
+            window->disconnect("files_dropped", Callable(this, "_on_window_files_dropped"));
+        }
+
+        for (int i = 0; i < original_drop_handlers.size(); i++) {
+            const Callable &handler = original_drop_handlers[i];
+            if (handler.is_valid() && !window->is_connected("files_dropped", handler)) {
+                window->connect("files_dropped", handler);
+            }
+        }
+    }
+    original_drop_handlers.clear();
+}
+
+void SSImportControl::_on_window_files_dropped(const PackedStringArray &p_files) {
+    if (!is_visible_in_tree()) {
+        _perform_default_drop_logic(p_files);
+        return;
+    }
+
+    if (get_global_rect().has_point(get_global_mouse_position())) {
+
+        if (importer && importer->is_importing()) {
+            WARN_PRINT("SSImportControl: Already importing. Please wait.");
+            return;
+        }
+
+        // Split the drop into directories (recursively scanned for .sspj) and
+        // loose .sspj files.
+        PackedStringArray sspj_files;
+        PackedStringArray dirs;
+        for (int i = 0; i < p_files.size(); i++) {
+            String file_path = p_files[i];
+            if (DirAccess::dir_exists_absolute(file_path)) {
+                dirs.push_back(file_path);
+            } else if (file_path.get_extension() == "sspj") {
+                sspj_files.push_back(file_path);
+            }
+        }
+
+        if (dirs.is_empty() && sspj_files.is_empty()) {
+            ERR_PRINT("SSImportControl: No .sspj files or folders found.");
+            AcceptDialog *dialog = memnew(AcceptDialog);
+            dialog->set_title(tr("Import Error"));
+            dialog->set_text(tr("No .sspj files or folders found.\nPlease drop SpriteStudio project (.sspj) files or a folder containing them."));
+            EditorInterface::get_singleton()->get_base_control()->add_child(dialog);
+            dialog->connect("confirmed", Callable(dialog, "queue_free"));
+            dialog->connect("canceled", Callable(dialog, "queue_free"));
+            dialog->popup_centered();
+            return;
+        }
+
+        if (!importer) {
+            ERR_PRINT("SSImportControl: importer is not set.");
+            return;
+        }
+
+        String output_dir = _take_output_dir_for_import();
+        if (output_dir.is_empty()) {
+            return;
+        }
+
+        if (!dirs.is_empty()) {
+            // A folder was dropped: scan it (and any loose .sspj) and import all.
+            importer->queue_scan_and_import(dirs, sspj_files, output_dir);
+        } else {
+            _start_import(sspj_files, output_dir);
+        }
+    } else {
+        _perform_default_drop_logic(p_files);
+    }
+}
+
+void SSImportControl::_start_import(const PackedStringArray &p_sspj_files, const String &p_output_dir) {
+    if (!importer) {
+        ERR_PRINT("SSImportControl: importer is not set.");
+        return;
+    }
+
+    for (int i = 0; i < p_sspj_files.size(); i++) {
+        _add_to_recent_files(p_sspj_files[i]);
+    }
+
+    importer->queue_import(p_sspj_files, p_output_dir);
+}
+
+void SSImportControl::_perform_default_drop_logic(const PackedStringArray &p_files) {
+    // Called directly rather than re-emitting files_dropped: a re-emit would
+    // also reach every handler connected after start_intercepting(), which
+    // already had this drop from the original emit.
+    for (int i = 0; i < original_drop_handlers.size(); i++) {
+        const Callable &handler = original_drop_handlers[i];
+        if (handler.is_valid()) {
+            handler.call(p_files);
+        }
+    }
+}
+
+String SSImportControl::_normalize_output_dir(const String &p_text, String &r_reason) const {
+    const String typed = p_text.strip_edges();
+    if (typed.is_empty()) {
+        r_reason = tr("The output directory cannot be empty.");
+        return String();
+    }
+
+    String path = typed;
+    if (!path.begins_with("res://")) {
+        // is_absolute_path() is true for anything carrying a scheme or a drive
+        // ("user://x", "/tmp/x", "C:/x"), none of which the editor imports.
+        // What is left is a project-relative "ssab_out", which is almost
+        // certainly a res:// path with the prefix left off -- and which the
+        // converter would otherwise resolve against its own working directory,
+        // while the dock created the folder inside the project.
+        if (path.is_absolute_path()) {
+            r_reason = vformat(tr("\"%s\" is not inside the project.\nThe output directory has to be a res:// path."), typed);
+            return String();
+        }
+        path = "res://" + path;
+    }
+
+    path = path.simplify_path();
+    // simplify_path() deliberately leaves a leading ".." under res:// alone, so
+    // a legal-looking path can still point out of the project.
+    if (path == "res://.." || path.begins_with("res://../")) {
+        r_reason = vformat(tr("\"%s\" is not inside the project.\nThe output directory has to be a res:// path."), typed);
+        return String();
+    }
+    return path;
+}
+
+void SSImportControl::_show_output_dir_error(const String &p_reason) {
+    AcceptDialog *dialog = memnew(AcceptDialog);
+    dialog->set_title(tr("Output directory"));
+    dialog->set_text(p_reason);
+    EditorInterface::get_singleton()->get_base_control()->add_child(dialog);
+    dialog->connect("confirmed", Callable(dialog, "queue_free"));
+    dialog->connect("canceled", Callable(dialog, "queue_free"));
+    dialog->popup_centered();
+}
+
+bool SSImportControl::_commit_output_dir() {
+    const String text = path_line_edit->get_text();
+    if (text == committed_output_dir) {
+        return true;
+    }
+
+    String reason;
+    String normalized = _normalize_output_dir(text, reason);
+    if (normalized.is_empty()) {
+        // Put the last usable value back: a rejected edit must not sit in the
+        // field looking accepted, and the next import has somewhere to go.
+        path_line_edit->set_text(committed_output_dir);
+        _show_output_dir_error(reason);
+        return false;
+    }
+
+    path_line_edit->set_text(normalized);
+    committed_output_dir = normalized;
+    _save_settings();
+    _ensure_output_dir_exists();
+    return true;
+}
+
+String SSImportControl::_take_output_dir_for_import() {
+    // A drop does not move focus, so the field may still hold an edit that
+    // neither Enter nor focus_exited has been through yet.
+    if (!_commit_output_dir()) {
+        return String();
+    }
+    return path_line_edit->get_text();
+}
+
+void SSImportControl::_on_line_edit_submitted(const String &p_path) {
+    _commit_output_dir();
+}
+
+void SSImportControl::_on_output_dir_focus_exited() {
+    _commit_output_dir();
+}
+
+void SSImportControl::_on_browse_button_pressed() {
+    auto p = path_line_edit->get_text();
+    Ref<DirAccess> da = DirAccess::open("res://");
+    String dir;
+    if (da->dir_exists(p)) {
+        dir = p;
+    } else {
+        dir = "res://";
+    }
+
+    file_dialog->set_current_dir(dir);
+    file_dialog->popup_file_dialog();
+}
+
+void SSImportControl::_on_reset_button_pressed() {
+    path_line_edit->set_text(DEFAULT_PATH);
+    _commit_output_dir();
+}
+
+void SSImportControl::_on_open_dir_button_pressed() {
+    String path = path_line_edit->get_text();
+    if (path.is_empty()) {
+        return;
+    }
+
+    String global_path = ProjectSettings::get_singleton()->globalize_path(path);
+    Error err = OS::get_singleton()->shell_open(global_path);
+    if (err != OK) {
+        ERR_PRINT(vformat("SSImportControl: failed to open output directory %s. error=%d", global_path, (int)err));
+    }
+}
+
+void SSImportControl::_on_dir_selected(const String &p_path) {
+    path_line_edit->set_text(p_path);
+    _commit_output_dir();
+}
+
+void SSImportControl::_on_recent_file_pressed(const String &p_path) {
+    if (importer && importer->is_importing()) {
+        WARN_PRINT("SSImportControl: Already importing. Please wait.");
+        return;
+    }
+    _reconvert_sspj(p_path);
+}
+
+void SSImportControl::_reconvert_sspj(const String &p_sspj_path) {
+    if (!importer) {
+        return;
+    }
+
+    // Move to top of recent list regardless of which path we take below.
+    _add_to_recent_files(p_sspj_path);
+
+    // Prefer the original output_dir from the source map (where the existing
+    // ssabs already live). Falls back to the LineEdit-driven import flow when
+    // we have no record yet (e.g. previous conversion failed).
+    String original_dst_dir = importer->lookup_output_dir_for_sspj(p_sspj_path);
+    if (!original_dst_dir.is_empty()) {
+        PackedStringArray sspjs;
+        PackedStringArray dst_dirs;
+        sspjs.push_back(p_sspj_path);
+        dst_dirs.push_back(original_dst_dir);
+        importer->queue_reconvert(sspjs, dst_dirs);
+        return;
+    }
+
+    PackedStringArray files;
+    files.push_back(p_sspj_path);
+    String output_dir = _take_output_dir_for_import();
+    if (output_dir.is_empty()) {
+        return;
+    }
+    importer->queue_import(files, output_dir);
+}
+
+void SSImportControl::_on_recent_gui_input(const Ref<InputEvent> &p_event, const String &p_path) {
+    Ref<InputEventMouseButton> mb = p_event;
+    if (!mb.is_valid() || !mb->is_pressed()) {
+        return;
+    }
+#ifdef SPRITESTUDIO_GODOT_EXTENSION
+    if (mb->get_button_index() == MOUSE_BUTTON_RIGHT) {
+#else
+    if (mb->get_button_index() == MouseButton::RIGHT) {
+#endif
+        _show_recent_context_menu(p_path);
+    }
+}
+
+void SSImportControl::_show_recent_context_menu(const String &p_path) {
+    pending_recent_path = p_path;
+
+    recent_popup->clear();
+    
+    Ref<Texture2D> icon_open = get_theme_icon(SNAME("Load"), SNAME("EditorIcons"));
+    Ref<Texture2D> icon_reconvert = get_theme_icon(SNAME("Reload"), SNAME("EditorIcons"));
+    Ref<Texture2D> icon_reveal = get_theme_icon(SNAME("Filesystem"), SNAME("EditorIcons"));
+    Ref<Texture2D> icon_remove = get_theme_icon(SNAME("Remove"), SNAME("EditorIcons"));
+
+    String os_name = OS::get_singleton()->get_name();
+    if (os_name != "Linux") {
+        recent_popup->add_icon_item(icon_open, tr("Open SSPJ"), RECENT_MENU_OPEN_IN_EDITOR);
+    }
+    recent_popup->add_icon_item(icon_reconvert, tr("Reconvert"), RECENT_MENU_RECONVERT);
+    recent_popup->add_icon_item(icon_reveal, tr("Reveal"), RECENT_MENU_REVEAL);
+    recent_popup->add_separator();
+    recent_popup->add_icon_item(icon_remove, tr("Remove from Recent"), RECENT_MENU_REMOVE);
+
+    Vector2i mouse = DisplayServer::get_singleton()->mouse_get_position();
+    recent_popup->set_position(mouse);
+    recent_popup->popup();
+}
+
+void SSImportControl::_on_recent_menu_id_pressed(int p_id) {
+    String path = pending_recent_path;
+    pending_recent_path = String();
+    if (path.is_empty()) {
+        return;
+    }
+
+    switch (p_id) {
+        case RECENT_MENU_OPEN_IN_EDITOR: {
+            Error err = OS::get_singleton()->shell_open(path);
+            if (err != OK) {
+                ERR_PRINT(vformat("SSImportControl: failed to open sspj %s. error=%d", path, (int)err));
+            }
+        } break;
+        case RECENT_MENU_REVEAL: {
+            Error err = OS::get_singleton()->shell_show_in_file_manager(path, false);
+            if (err != OK) {
+                ERR_PRINT(vformat("SSImportControl: failed to reveal %s. error=%d", path, (int)err));
+            }
+        } break;
+        case RECENT_MENU_RECONVERT: {
+            if (importer && importer->is_importing()) {
+                WARN_PRINT("SSImportControl: Already importing. Please wait.");
+                return;
+            }
+            _reconvert_sspj(path);
+        } break;
+        case RECENT_MENU_REMOVE: {
+            _remove_from_recent_files(path);
+        } break;
+    }
+}
+
+void SSImportControl::_on_clear_recent_pressed() {
+    Ref<EditorSettings> es = EditorInterface::get_singleton()->get_editor_settings();
+    es->set_project_metadata("spritestudio", "recent_files", PackedStringArray());
+    _update_recent_files_ui();
+}
+
+void SSImportControl::_remove_from_recent_files(const String &p_path) {
+    Ref<EditorSettings> es = EditorInterface::get_singleton()->get_editor_settings();
+    PackedStringArray recent_files = es->get_project_metadata("spritestudio", "recent_files", PackedStringArray());
+    for (int i = 0; i < recent_files.size(); i++) {
+        if (recent_files[i] == p_path) {
+            recent_files.remove_at(i);
+            break;
+        }
+    }
+    es->set_project_metadata("spritestudio", "recent_files", recent_files);
+    _update_recent_files_ui();
+}
+
+void SSImportControl::_update_recent_files_ui() {
+    while (recent_vbox->get_child_count() > 0) {
+        Node *child = recent_vbox->get_child(0);
+        recent_vbox->remove_child(child);
+        child->queue_free();
+    }
+
+    PackedStringArray recent_files = EditorInterface::get_singleton()->get_editor_settings()->get_project_metadata("spritestudio", "recent_files", PackedStringArray());
+
+    if (recent_files.is_empty()) {
+        Label *empty_label = memnew(Label);
+        empty_label->set_text(tr("No recent files. Drop a sspj above to start."));
+        empty_label->set_modulate(Color(1, 1, 1, 0.5));
+        empty_label->set_autowrap_mode(TextServer::AUTOWRAP_WORD_SMART);
+        recent_vbox->add_child(empty_label);
+        return;
+    }
+
+    for (int i = 0; i < recent_files.size(); i++) {
+        String path = recent_files[i];
+        String filename = path.get_file();
+        String parent_basename = path.get_base_dir().get_file();
+        String label_text = parent_basename.is_empty()
+                                ? filename
+                                : filename + String::utf8("  ·  ") + parent_basename;
+
+        Button *btn = memnew(Button);
+        btn->set_text(label_text);
+        btn->set_tooltip_text(path);
+        btn->set_text_alignment(HORIZONTAL_ALIGNMENT_LEFT);
+        btn->set_clip_text(true);
+        btn->connect("pressed", callable_mp(this, &SSImportControl::_on_recent_file_pressed).bind(path));
+        btn->connect("gui_input", callable_mp(this, &SSImportControl::_on_recent_gui_input).bind(path));
+        recent_vbox->add_child(btn);
+    }
+}
+
+void SSImportControl::_add_to_recent_files(const String &p_path) {
+    Ref<EditorSettings> es = EditorInterface::get_singleton()->get_editor_settings();
+    PackedStringArray recent_files = es->get_project_metadata("spritestudio", "recent_files", PackedStringArray());
+
+    for (int i = 0; i < recent_files.size(); i++) {
+        if (recent_files[i] == p_path) {
+            recent_files.remove_at(i);
+            break;
+        }
+    }
+
+    recent_files.insert(0, p_path);
+
+    if (recent_files.size() > RECENT_FILES_CAP) {
+        recent_files.resize(RECENT_FILES_CAP);
+    }
+
+    es->set_project_metadata("spritestudio", "recent_files", recent_files);
+
+    _update_recent_files_ui();
+}
+
+void SSImportControl::_on_importer_files_resolved(const PackedStringArray &p_paths) {
+    for (int i = 0; i < p_paths.size(); i++) {
+        _add_to_recent_files(p_paths[i]);
+    }
+}
+
+void SSImportControl::_load_settings() {
+    Ref<ConfigFile> cfg;
+    cfg.instantiate();
+    cfg->load(SSPLAYER_SOURCES_CFG_PATH);
+    
+    String path = DEFAULT_PATH;
+    if (cfg->has_section_key("general", "output_directory")) {
+        path = cfg->get_value("general", "output_directory");
+    } else {
+        cfg->set_value("general", "output_directory", path);
+        cfg->save(SSPLAYER_SOURCES_CFG_PATH);
+    }
+
+    // The file is hand-editable, so the stored value gets the same treatment a
+    // typed one does rather than being carried until the field is next touched.
+    String reason;
+    String normalized = _normalize_output_dir(path, reason);
+    if (normalized.is_empty()) {
+        WARN_PRINT(vformat("SSImportControl: ignoring output_directory \"%s\" (%s); using %s.", path, reason, DEFAULT_PATH));
+        normalized = DEFAULT_PATH;
+    }
+    path_line_edit->set_text(normalized);
+    committed_output_dir = normalized;
+
+    _ensure_output_dir_exists();
+    _update_recent_files_ui();
+}
+
+void SSImportControl::_save_settings() {
+    Ref<ConfigFile> cfg;
+    cfg.instantiate();
+    cfg->load(SSPLAYER_SOURCES_CFG_PATH);
+    cfg->set_value("general", "output_directory", path_line_edit->get_text());
+    cfg->save(SSPLAYER_SOURCES_CFG_PATH);
+}
+
+void SSImportControl::_ensure_output_dir_exists() {
+    if (!path_line_edit) return;
+    String path = path_line_edit->get_text();
+    if (path.is_empty()) return;
+
+    Ref<DirAccess> da = DirAccess::open("res://");
+    if (da.is_null()) return;
+    if (da->dir_exists(path)) return;
+    da->make_dir_recursive(path);
+
+    auto *efs = EditorInterface::get_singleton()->get_resource_filesystem();
+    if (!efs) return;
+    // Full scan: scan_sources()/scan_changes() are mtime-driven and do not
+    // reliably notice a brand-new directory (parent-mtime granularity on
+    // Windows), so the folder would not show up in the FileSystem dock until an
+    // unrelated rescan. The importer's own sync phase uses a full scan for the
+    // same reason (see SSImporter::_poll_fs_sync). A scan issued while one is
+    // already running is dropped, so skip it then — the in-flight scan (and the
+    // importer's own, on the next import) covers the new folder.
+    if (!efs->is_scanning()) {
+        efs->scan();
+    }
+}
+
+#endif // #ifdef TOOLS_ENABLED

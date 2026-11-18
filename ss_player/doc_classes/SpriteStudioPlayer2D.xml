@@ -1,0 +1,856 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="SpriteStudioPlayer2D" inherits="Node2D" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+		Plays a SpriteStudio animation ([code].ssab[/code]) in a 2D scene.
+	</brief_description>
+	<description>
+		Node that plays a SpriteStudio animation imported as an [code].ssab[/code] resource ([SSABResource]).
+		Assign a resource to [member ssab], pick an animation with [member current_animation], then drive playback from code with [method play], [method pause], [method resume] and [method stop], or preview it in the editor from the [b]SpriteStudio[/b] bottom panel (shown while the node is selected).
+		[b]Editor preview:[/b] with the node selected, the bottom panel provides transport controls (play from start / play from current / stop), a frame scrubber, loop and speed. Its keyboard shortcuts mirror the AnimationPlayer editor ([kbd]D[/kbd] play from current, [kbd]Shift+D[/kbd] play from start, [kbd]S[/kbd] stop).
+		[b]Part overrides:[/b] the [code]set_part_*_override[/code] family changes what the current frame draws without changing which frame it is, and lands on the next tick rather than on the call — so a value read straight back reports the frame computed before it. The tick does not have to advance the animation: a held frame, a paused or stopped player, and [constant ANIMATION_PROCESS_MANUAL] all pick the override up.
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="advance">
+			<return type="void" />
+			<param index="0" name="delta" type="float" />
+			<description>
+				Steps playback by [param delta] seconds and emits [signal frame_updated], exactly as an automatic tick would - so part attachments and anything else driven by that signal stay in step.
+				Meant for [constant ANIMATION_PROCESS_MANUAL], which is the mode that stops the node ticking itself. Calling it under the other two modes advances the animation [i]on top of[/i] the node's own tick rather than instead of it.
+				[codeblock]
+				func _process(delta: float) -&gt; void:
+				    # A slow-motion group the engine's own time scale must not touch.
+				    $SpriteStudioPlayer2D.advance(delta * slowmo_factor)
+				[/codeblock]
+			</description>
+		</method>
+		<method name="play">
+			<return type="void" />
+			<param index="0" name="start_frame" type="float" default="-1.0" />
+			<description>
+				Starts playback. [param start_frame] of [code]-1.0[/code] (the default) [b]rewinds to the start of the playback section[/b] - its end when [method set_playback_direction] is set to [constant PLAYBACK_DIRECTION_BACKWARD] - rather than continuing from where the playhead is. Pass [method get_frame_no] to play on from the current position.
+				This is a fresh start, not a resume: it re-arms the loop counter and clears the paused state. Resuming a pause is [method resume]'s job.
+			</description>
+		</method>
+		<method name="pause">
+			<return type="void" />
+			<description>
+				Holds playback where it stands, keeping the current frame. Idempotent: pausing an already-paused animation leaves it paused. A held animation is still considered playing ([method is_playing] returns [code]true[/code]) - a pause is a hold, not a stop - so [method is_pausing] is what detects it. Lift the hold with [method resume]; [method play] rewinds and cannot resume.
+			</description>
+		</method>
+		<method name="resume">
+			<return type="void" />
+			<description>
+				Lifts a [method pause], carrying on from the frame it stopped at. Idempotent, and a no-op on an animation that is stopped rather than held - starting a stopped animation is [method play]'s job, and it rewinds.
+			</description>
+		</method>
+		<method name="stop">
+			<return type="void" />
+			<description>
+				Stops playback. The playhead [b]stays where it was[/b], so the node keeps drawing the frame it stopped on; seek with [member frame_no] or start over with [method play] if you want it elsewhere.
+			</description>
+		</method>
+		<method name="is_finished" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Returns [code]true[/code] once every configured loop has played. A [b]state[/b], not a pulse: it latches on completion and holds until the next [method play] or [member current_animation] change, so a caller that was not listening when [signal animation_finished] fired can still ask whether the run is over.
+				Never [code]true[/code] under an infinite [member loop_count], and [b]not raised by [method stop][/b] - a commanded stop is not a completion. That is what separates it from [code]not is_playing()[/code], which cannot tell the two apart. Connect to [signal animation_finished] if you want the one-shot edge instead.
+			</description>
+		</method>
+		<method name="is_playing" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Returns [code]true[/code] while the animation is playing, [b]including while it is paused[/b]. Use [method is_pausing] to distinguish a held animation. Both are [code]false[/code] on an animation that has never played, and after [method stop].
+			</description>
+		</method>
+		<method name="is_pausing" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Returns [code]true[/code] while playback is held by [method pause]. [code]false[/code] before the first [method play], and after [method stop].
+			</description>
+		</method>
+		<method name="is_playing_forward" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Returns which way the playhead is actually travelling this frame, which is [b]not[/b] the heading [method set_playback_direction] configured - [method get_playback_direction] reports that. Under ping-pong the return leg runs backward while the configured heading still reads [code]PLAYBACK_DIRECTION_FORWARD[/code], and a speed of zero or below is a stop rather than a reversal.
+				This is the gate to put in front of audio. SpriteStudio has no reverse audio, so a sound key crossed on a backward leg is not meant to sound - the player applies exactly this test itself when [member play_audio] is on, and a project driving its own audio from [signal audio] wants the same one. The player also leaves unsounded the keys on the frame a seek lands on, which the next update reports; a project driving its own audio skips those itself. Returns [code]true[/code] before anything has played: forward is the resting state.
+			</description>
+		</method>
+		<method name="just_looped" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Returns [code]true[/code] when the last update crossed a loop boundary. A [b]pulse[/b], not a state: the runtime clears it at the top of every update, so it only reads [code]true[/code] inside the tick that crossed, and reading it a tick late reads [code]false[/code]. Connect to [signal animation_looped] if you would rather have it delivered than polled.
+			</description>
+		</method>
+		<method name="get_animation_names" qualifiers="const">
+			<return type="PackedStringArray" />
+			<description>
+				Names of the animations in the assigned [SSABResource], empty when none is assigned. The same list [member current_animation] is chosen from.
+			</description>
+		</method>
+		<method name="get_total_frames" qualifiers="const">
+			<return type="int" />
+			<description>
+				Returns the number of frames in the current playback section ([code]get_end_frame() - get_start_frame() + 1[/code]): the whole animation until [method set_animation_section] narrows it.
+			</description>
+		</method>
+		<method name="set_frame_rate">
+			<return type="void" />
+			<param index="0" name="fps" type="int" />
+			<description>
+				Sets the playback frame rate, in frames per second. It overrides whatever the animation was authored at, and the override is kept across [member current_animation] changes. Pass [code]0[/code] to clear it and hand playback back to each clip's authored rate.
+				This is an [i]absolute[/i] rate where [member speed_scale] is a multiplier, so its effect depends on the clip: 60 against a 30fps animation is double speed, and against a 60fps one is none.
+				[code]player.frame_rate = 30[/code] does the same, but [code]frame_rate[/code] is not a member: it is neither shown in the Inspector nor stored in the scene.
+			</description>
+		</method>
+		<method name="get_frame_rate" qualifiers="const">
+			<return type="int" />
+			<description>
+				Returns the frame rate playback runs at: the rate set with [method set_frame_rate], or the current animation's authored rate while none is set.
+			</description>
+		</method>
+		<method name="get_start_frame" qualifiers="const">
+			<return type="int" />
+			<description>
+				Returns the first frame that plays - the start of the current playback section, which is frame [code]0[/code] until [method set_animation_section] narrows it. Same value as [member animation_section_start].
+			</description>
+		</method>
+		<method name="get_end_frame" qualifiers="const">
+			<return type="int" />
+			<description>
+				Returns the last frame that plays - the end of the current playback section, which is the animation's last frame until [method set_animation_section] narrows it. Same value as [member animation_section_end].
+			</description>
+		</method>
+		<method name="set_animation_section">
+			<return type="bool" />
+			<param index="0" name="start" type="int" />
+			<param index="1" name="end" type="int" />
+			<description>
+				Limits playback to the inclusive frame range [code][start, end][/code], so [code]start == end[/code] plays that one frame, the last frame included. An end outside the animation ([code]-1[/code], say) is the animation's edge on that side.
+				Returns [code]false[/code] when both ends are inside the animation and [param end] is before [param start]: the section and the playhead stay as they were, and the Output panel names the pair, once for each pair.
+			</description>
+		</method>
+		<method name="set_animation_section_by_label">
+			<return type="bool" />
+			<param index="0" name="start_label" type="String" />
+			<param index="1" name="end_label" type="String" />
+			<param index="2" name="start_offset" type="int" default="0" />
+			<param index="3" name="end_offset" type="int" default="0" />
+			<description>
+				[method set_animation_section] with the ends named by labels of the current animation: from [param start_label]'s frame plus [param start_offset] to [param end_label]'s frame plus [param end_offset], the rule an Instance part's start and end labels follow. [code]_start[/code] and [code]_end[/code] name the animation's own first and last frame, as in SpriteStudio, unless the animation has a real label of that name. It does not play.
+				Returns [code]false[/code] when the animation has no such label, or when the frames the labels name are a section [method set_animation_section] refuses; the section and the playhead stay as they were, and the Output panel says which, once for each call. Unlike an Instance part, a missing label is not read as the animation's edge. Returns [code]false[/code] without a word before an animation is set up.
+			</description>
+		</method>
+		<method name="get_label_table" qualifiers="const">
+			<return type="Array" />
+			<param index="0" name="animation" type="String" default="&quot;&quot;" />
+			<description>
+				Returns the labels of [param animation] - the current animation when empty - in frame order, as dictionaries with a [code]name[/code] ([String]) and a [code]frame[/code] ([int]). Empty for an animation the [member ssab] does not have, and when no resource is assigned.
+				It is read out of the resource on every call, so keep the result rather than asking each frame.
+			</description>
+		</method>
+		<method name="set_playback_direction">
+			<return type="void" />
+			<param index="0" name="direction" type="int" enum="SpriteStudioPlayer2D.PlaybackDirection" />
+			<param index="1" name="style" type="int" enum="SpriteStudioPlayer2D.PlaybackStyle" />
+			<description>
+				Sets the playback direction and style.
+				Both are kept across [member current_animation] changes - "play this backwards" describes the playback rather than the clip that happens to be loaded. What does not carry is the heading within a [constant PLAYBACK_STYLE_PING_PONG] cycle: a new animation always starts on the outward leg.
+			</description>
+		</method>
+		<method name="get_playback_direction" qualifiers="const">
+			<return type="int" enum="SpriteStudioPlayer2D.PlaybackDirection" />
+			<description>
+				Returns the direction half of [method set_playback_direction].
+			</description>
+		</method>
+		<method name="get_playback_style" qualifiers="const">
+			<return type="int" enum="SpriteStudioPlayer2D.PlaybackStyle" />
+			<description>
+				Returns the style half of [method set_playback_direction].
+			</description>
+		</method>
+		<method name="set_cellmap_texture">
+			<return type="void" />
+			<param index="0" name="cellmap_name" type="String" />
+			<param index="1" name="texture" type="Texture2D" />
+			<description>
+				Overrides the texture used for the named cell map. Pass an invalid texture to clear the override. It reaches the parts of this player's own animation only: an Instance part's sub-animation keeps drawing from its own textures.
+			</description>
+		</method>
+		<method name="get_cellmap_texture" qualifiers="const">
+			<return type="Texture2D" />
+			<param index="0" name="cellmap_name" type="String" />
+			<description>
+				Returns the override set by [method set_cellmap_texture] for [param cellmap_name], or [code]null[/code] when there is none; the texture loaded from the [code].ssab[/code] is not returned. This is what the [code]cellmaps/[/code] properties in the Inspector show.
+			</description>
+		</method>
+		<method name="get_cellmap_names" qualifiers="const">
+			<return type="PackedStringArray" />
+			<description>
+				Names of the cell maps in the assigned [SSABResource] (without the [code].ssce[/code] extension), or an empty array when no resource is assigned. Pass one of these to [method get_cell_names] or [method set_part_cell_override].
+			</description>
+		</method>
+		<method name="get_cell_names" qualifiers="const">
+			<return type="PackedStringArray" />
+			<param index="0" name="cellmap_name" type="String" />
+			<description>
+				Names of the cells inside [param cellmap_name], or an empty array when no resource is assigned or the cell map is unknown.
+			</description>
+		</method>
+		<method name="get_part_names" qualifiers="const">
+			<return type="PackedStringArray" />
+			<description>
+				Returns every part name in the bound [member ssab]. Parts belong to the asset rather than to one animation, so the list is the same whichever animation is selected. Empty when no resource is assigned.
+			</description>
+		</method>
+		<method name="find_part_index" qualifiers="const">
+			<return type="int" />
+			<param index="0" name="part_name" type="String" />
+			<description>
+				Resolves a part name to its index, or [code]-1[/code] when the asset has no such part. Indices are stable within one [code].ssab[/code], so code that sets overrides often should resolve once here and use the [code]_by_index[/code] methods afterwards.
+			</description>
+		</method>
+		<method name="get_part_quad" qualifiers="const">
+			<return type="PackedVector2Array" />
+			<param index="0" name="part_name" type="String" />
+			<description>
+				Returns the outline the part is drawn with on the current frame, as four corners - top-left, top-right, bottom-right, bottom-left - in this node's local space with [member flip_h], [member flip_v] and [member offset] applied, as [method get_part_transform] does. The corners go round the part, so the array can be drawn with [method CanvasItem.draw_polyline] or tested with [method Geometry2D.is_point_in_polygon] as it is.
+				A part with a cell is its four drawn corners, skew and vertex deformation included. A Mesh part is the axis-aligned box around its vertices. A part with a size and no cell - a Shape - is that size around its pivot; a vertex deformation that carries a corner outside the size is not followed. Returns an empty array for a part that is unknown or hidden on the current frame, and for a Null, bone, Instance or Effect part, which has no size. A part drawn at alpha 0 still has an outline.
+			</description>
+		</method>
+		<method name="hit_test_part" qualifiers="const">
+			<return type="int" />
+			<param index="0" name="point" type="Vector2" />
+			<param index="1" name="parts" type="PackedStringArray" default="PackedStringArray()" />
+			<description>
+				Returns the index of the front-most part whose [method get_part_quad] outline holds [param point], given in this node's local space - or [code]-1[/code] when none does, as [method find_part_index] answers for an unknown name. With [param parts], only the parts named there are tested, and a name the asset does not have is skipped; empty, every part is.
+				It answers from the current frame and evaluates nothing, so it is cheap enough to call on every pointer move. To turn a point on the screen into this node's space, use [code]to_local()[/code] or [code]get_global_transform().affine_inverse()[/code].
+			</description>
+		</method>
+		<method name="get_part_transform" qualifiers="const">
+			<return type="Transform2D" />
+			<param index="0" name="part_name" type="String" />
+			<description>
+				Returns the part's transform on the current frame, in this node's local space with [member flip_h], [member flip_v] and [member offset] already applied. Multiply by [code]global_transform[/code] for world space. Returns the identity when the part is unknown.
+				Parts nested inside an Instance part cannot be addressed - the child animation runs as a separate player - though the Instance part itself can. For continuous following, [SpriteStudioPartAttachment2D] does this every frame.
+			</description>
+		</method>
+		<method name="is_part_hidden" qualifiers="const">
+			<return type="bool" />
+			<param index="0" name="part_name" type="String" />
+			<description>
+				Returns [code]true[/code] when the part is hidden on the current frame, by the animation or by [method set_part_visibility_override]. Returns [code]false[/code] when the part is unknown.
+			</description>
+		</method>
+		<method name="is_part_skinned_mesh" qualifiers="const">
+			<return type="bool" />
+			<param index="0" name="part_name" type="String" />
+			<description>
+				Returns [code]true[/code] when the part is a skinned (bone-bound) mesh. Returns [code]false[/code] when it is not, or when the part is unknown.
+				A skinned mesh draws its vertices by skinning while the part's own transform stays near the setup pose, so it is a poor part to follow. [SpriteStudioPartAttachment2D] leaves such parts out of its [member SpriteStudioPartAttachment2D.part_name] suggestions and warns when one is named anyway.
+			</description>
+		</method>
+		<method name="get_canvas_size" qualifiers="const">
+			<return type="Vector2" />
+			<description>
+				Returns the canvas the current animation was authored in, in this node's units. Returns [code]Vector2(0, 0)[/code] when nothing is set up.
+				The canvas is authored [b]per animation[/b], not per asset, so a script that keeps the value should read it again when [signal animation_changed] is emitted. It is the box the artist composed in, not a measured bounding box: parts are free to draw outside it. For an animation other than the current one, see [method SSABResource.get_canvas_size].
+			</description>
+		</method>
+		<method name="get_canvas_rect" qualifiers="const">
+			<return type="Rect2" />
+			<description>
+				Returns the canvas of the current animation placed against this node's origin by the animation's pivot, in this node's local space with [member flip_h], [member flip_v] and [member offset] applied, as [method get_part_transform] does. Returns an empty [Rect2] when nothing is set up.
+				The pivot is where the origin sits inside the canvas. A character authored standing on the ground has its pivot on the canvas's bottom edge, so the rectangle lies entirely above the origin. See [method get_canvas_size] for what the canvas is, and is not.
+			</description>
+		</method>
+		<method name="set_part_color_override">
+			<return type="bool" />
+			<param index="0" name="part_name" type="String" />
+			<param index="1" name="color" type="Color" />
+			<param index="2" name="blend_op" type="int" enum="SpriteStudioPlayer2D.ColorBlendOperation" default="0" />
+			<param index="3" name="priority" type="int" enum="SpriteStudioPlayer2D.OverridePriority" default="1" />
+			<description>
+				Tints one part with a single color, winning over the keyframes. Applies to normal (image) parts; other part types ignore it silently and the call still returns [code]true[/code].
+				Colors are read in the same 8-bit sRGB space as the authored Part Color and the runtime pre-multiplies alpha, so pass the color as authored. Returns [code]false[/code] when the part is unknown or the runtime rejects the call. See [enum ColorBlendOperation] and [enum OverridePriority].
+			</description>
+		</method>
+		<method name="set_part_cell_override">
+			<return type="bool" />
+			<param index="0" name="part_name" type="String" />
+			<param index="1" name="cellmap_name" type="String" />
+			<param index="2" name="cell_name" type="String" />
+			<param index="3" name="priority" type="int" enum="SpriteStudioPlayer2D.OverridePriority" default="1" />
+			<description>
+				Makes one part draw a different cell. [param cellmap_name] is written without the [code].ssce[/code] suffix; [method get_cellmap_names] and [method get_cell_names] enumerate what can be passed. The lookup happens now, so an unknown cell map or cell fails immediately and returns [code]false[/code].
+				Where [method set_cellmap_texture] swaps a whole texture for every part that samples it, this changes what a single part draws.
+			</description>
+		</method>
+		<method name="set_part_visibility_override">
+			<return type="bool" />
+			<param index="0" name="part_name" type="String" />
+			<param index="1" name="force_hidden" type="bool" />
+			<param index="2" name="cascade" type="bool" default="false" />
+			<description>
+				Force-hides a part regardless of the keyframes; [param force_hidden] of [code]false[/code] hands visibility back to the animation. With [param cascade] the part's descendants are hidden too.
+				Unlike the color and cell overrides this takes no priority: it always wins, and it is always dropped when a new animation is set up. Hiding an Instance part also stops its contents from drawing.
+			</description>
+		</method>
+		<method name="clear_part_color_override">
+			<return type="bool" />
+			<param index="0" name="part_name" type="String" />
+			<description>
+				Drops the part's color override, whether it was set by [method set_part_color_override] or [method set_part_color_override_corners] - the two share one slot.
+			</description>
+		</method>
+		<method name="clear_part_cell_override">
+			<return type="bool" />
+			<param index="0" name="part_name" type="String" />
+			<description>
+				Drops the part's cell override, so it draws the cell the animation keys again.
+			</description>
+		</method>
+		<method name="clear_part_visibility_override">
+			<return type="bool" />
+			<param index="0" name="part_name" type="String" />
+			<description>
+				Drops the part's visibility override, so the animation decides again whether it draws.
+			</description>
+		</method>
+		<method name="clear_all_part_overrides">
+			<return type="bool" />
+			<description>
+				Drops every override on every part of this player. Assigning a different [member ssab] does this on its own, because part identity is lost with the asset.
+			</description>
+		</method>
+		<method name="set_part_color_override_by_index">
+			<return type="bool" />
+			<param index="0" name="part_index" type="int" />
+			<param index="1" name="color" type="Color" />
+			<param index="2" name="blend_op" type="int" enum="SpriteStudioPlayer2D.ColorBlendOperation" default="0" />
+			<param index="3" name="priority" type="int" enum="SpriteStudioPlayer2D.OverridePriority" default="1" />
+			<description>
+				[method set_part_color_override] addressed by the index from [method find_part_index], skipping the name lookup.
+			</description>
+		</method>
+		<method name="set_part_color_override_corners_by_index">
+			<return type="bool" />
+			<param index="0" name="part_index" type="int" />
+			<param index="1" name="corners" type="PackedColorArray" />
+			<param index="2" name="blend_op" type="int" enum="SpriteStudioPlayer2D.ColorBlendOperation" default="0" />
+			<param index="3" name="priority" type="int" enum="SpriteStudioPlayer2D.OverridePriority" default="1" />
+			<description>
+				[method set_part_color_override_corners] addressed by the index from [method find_part_index], skipping the name lookup.
+			</description>
+		</method>
+		<method name="set_part_cell_override_by_index">
+			<return type="bool" />
+			<param index="0" name="part_index" type="int" />
+			<param index="1" name="cellmap_name" type="String" />
+			<param index="2" name="cell_name" type="String" />
+			<param index="3" name="priority" type="int" enum="SpriteStudioPlayer2D.OverridePriority" default="1" />
+			<description>
+				[method set_part_cell_override] addressed by the index from [method find_part_index], skipping the name lookup.
+			</description>
+		</method>
+		<method name="set_part_visibility_override_by_index">
+			<return type="bool" />
+			<param index="0" name="part_index" type="int" />
+			<param index="1" name="force_hidden" type="bool" />
+			<param index="2" name="cascade" type="bool" default="false" />
+			<description>
+				[method set_part_visibility_override] addressed by the index from [method find_part_index], skipping the name lookup.
+			</description>
+		</method>
+		<method name="clear_part_color_override_by_index">
+			<return type="bool" />
+			<param index="0" name="part_index" type="int" />
+			<description>
+				[method clear_part_color_override] addressed by the index from [method find_part_index].
+			</description>
+		</method>
+		<method name="clear_part_cell_override_by_index">
+			<return type="bool" />
+			<param index="0" name="part_index" type="int" />
+			<description>
+				[method clear_part_cell_override] addressed by the index from [method find_part_index].
+			</description>
+		</method>
+		<method name="clear_part_visibility_override_by_index">
+			<return type="bool" />
+			<param index="0" name="part_index" type="int" />
+			<description>
+				[method clear_part_visibility_override] addressed by the index from [method find_part_index].
+			</description>
+		</method>
+		<method name="set_part_color_override_corners">
+			<return type="bool" />
+			<param index="0" name="part_name" type="String" />
+			<param index="1" name="corners" type="PackedColorArray" />
+			<param index="2" name="blend_op" type="int" enum="SpriteStudioPlayer2D.ColorBlendOperation" default="0" />
+			<param index="3" name="priority" type="int" enum="SpriteStudioPlayer2D.OverridePriority" default="1" />
+			<description>
+				Overrides a part's color with a distinct color per corner, producing a gradient across the part. See [enum ColorBlendOperation] and [enum OverridePriority] for [param blend_op] and [param priority].
+				Shares one override slot with [method set_part_color_override], so the last call wins and [method clear_part_color_override] clears either kind. Returns [code]false[/code] when the part is unknown or the runtime rejects the call.
+			</description>
+		</method>
+		<method name="set_track_animation">
+			<return type="bool" />
+			<param index="0" name="track" type="int" />
+			<param index="1" name="anim_name" type="String" />
+			<description>
+				Lays the animation [param anim_name] of [member ssab] on [param track], replacing what the track played. Tracks are created as needed: setting track 3 creates tracks 1 and 2 empty.
+				On track 0 it switches the current animation, as [method crossfade] does, and leaves the tracks above it in place; [method set_animation] to a different animation instead folds the stack back to track 0 alone, the overlays and every track's alpha, blend and sync included.
+				Like every track mutator, returns [code]false[/code] when no animation is set up, [param anim_name] is not in [member ssab], or the runtime refuses the call.
+			</description>
+		</method>
+		<method name="get_track_count" qualifiers="const">
+			<return type="int" />
+			<description>
+				Returns the number of tracks, track 0 included. A read of a track that does not exist returns [code]0[/code], so check this first when [code]0[/code] could also be a real answer.
+			</description>
+		</method>
+		<method name="clear_track">
+			<return type="bool" />
+			<param index="0" name="track" type="int" />
+			<description>
+				Empties [param track]. Track 0 cannot be emptied: fade its alpha to [code]0[/code] with [method fade_track] instead.
+			</description>
+		</method>
+		<method name="set_track_alpha">
+			<return type="bool" />
+			<param index="0" name="track" type="int" />
+			<param index="1" name="alpha" type="float" />
+			<description>
+				Sets how much of [param track] lays over the tracks below it. This is the strength control; [method set_source_weight] only sets proportions within one track. Not clamped to [code][0, 1][/code]: above [code]1[/code] it extrapolates.
+			</description>
+		</method>
+		<method name="get_track_alpha" qualifiers="const">
+			<return type="float" />
+			<param index="0" name="track" type="int" />
+			<description>
+				Returns the alpha of [param track]. See [method set_track_alpha].
+			</description>
+		</method>
+		<method name="set_track_blend">
+			<return type="bool" />
+			<param index="0" name="track" type="int" />
+			<param index="1" name="blend" type="int" enum="SpriteStudioPlayer2D.TrackBlend" />
+			<description>
+				Sets how [param track] lays its animation over the tracks below it. See [enum TrackBlend].
+			</description>
+		</method>
+		<method name="get_track_blend" qualifiers="const">
+			<return type="int" enum="SpriteStudioPlayer2D.TrackBlend" />
+			<param index="0" name="track" type="int" />
+			<description>
+				Returns how [param track] lays its animation over the tracks below it.
+			</description>
+		</method>
+		<method name="set_track_sync">
+			<return type="bool" />
+			<param index="0" name="track" type="int" />
+			<param index="1" name="sync" type="int" enum="SpriteStudioPlayer2D.TrackSync" />
+			<description>
+				Sets where the animations laid on [param track] [i]next[/i] start. It does not move what the track already plays, so set it before laying. See [enum TrackSync].
+			</description>
+		</method>
+		<method name="get_track_sync" qualifiers="const">
+			<return type="int" enum="SpriteStudioPlayer2D.TrackSync" />
+			<param index="0" name="track" type="int" />
+			<description>
+				Returns where the animations laid on [param track] next start.
+			</description>
+		</method>
+		<method name="set_track_frame">
+			<return type="bool" />
+			<param index="0" name="track" type="int" />
+			<param index="1" name="frame_no" type="float" />
+			<description>
+				Moves the playhead of [param track] to [param frame_no]. With [method set_track_speed] at [code]0.0[/code], this is how a track is driven by a value rather than by the clock.
+			</description>
+		</method>
+		<method name="get_track_frame" qualifiers="const">
+			<return type="float" />
+			<param index="0" name="track" type="int" />
+			<description>
+				Returns where the playhead of [param track] is, in frames.
+			</description>
+		</method>
+		<method name="set_track_speed">
+			<return type="bool" />
+			<param index="0" name="track" type="int" />
+			<param index="1" name="speed" type="float" />
+			<description>
+				Sets the speed multiplier of [param track]. This and the frame rate, frame skip and playback direction of a track belong to the track: they reach every animation on it, both sides of a crossfade included, and outlast them. Track 0's is [member speed_scale], which writes the same value.
+			</description>
+		</method>
+		<method name="get_track_speed" qualifiers="const">
+			<return type="float" />
+			<param index="0" name="track" type="int" />
+			<description>
+				Returns the speed multiplier of [param track].
+			</description>
+		</method>
+		<method name="set_track_frame_rate">
+			<return type="bool" />
+			<param index="0" name="track" type="int" />
+			<param index="1" name="fps" type="int" />
+			<description>
+				Sets the frame rate [param track] plays at, overriding what its animations were authored at. Track 0's is [method set_frame_rate].
+			</description>
+		</method>
+		<method name="get_track_frame_rate" qualifiers="const">
+			<return type="int" />
+			<param index="0" name="track" type="int" />
+			<description>
+				Returns the frame rate [param track] plays at.
+			</description>
+		</method>
+		<method name="set_track_frame_skip_enabled">
+			<return type="bool" />
+			<param index="0" name="track" type="int" />
+			<param index="1" name="enabled" type="bool" />
+			<description>
+				Sets whether [param track] may skip frames to keep real-time playback under load. Track 0's is [member frame_skip_enabled].
+			</description>
+		</method>
+		<method name="is_track_frame_skip_enabled" qualifiers="const">
+			<return type="bool" />
+			<param index="0" name="track" type="int" />
+			<description>
+				Returns whether [param track] may skip frames.
+			</description>
+		</method>
+		<method name="set_track_playback_direction">
+			<return type="bool" />
+			<param index="0" name="track" type="int" />
+			<param index="1" name="direction" type="int" enum="SpriteStudioPlayer2D.PlaybackDirection" />
+			<param index="2" name="style" type="int" enum="SpriteStudioPlayer2D.PlaybackStyle" />
+			<description>
+				Sets the playback direction and style of [param track]. Track 0's is [method set_playback_direction].
+			</description>
+		</method>
+		<method name="get_track_playback_direction" qualifiers="const">
+			<return type="int" enum="SpriteStudioPlayer2D.PlaybackDirection" />
+			<param index="0" name="track" type="int" />
+			<description>
+				Returns the configured playback direction of [param track].
+			</description>
+		</method>
+		<method name="get_track_playback_style" qualifiers="const">
+			<return type="int" enum="SpriteStudioPlayer2D.PlaybackStyle" />
+			<param index="0" name="track" type="int" />
+			<description>
+				Returns the playback style of [param track].
+			</description>
+		</method>
+		<method name="set_track_loop_count">
+			<return type="bool" />
+			<param index="0" name="track" type="int" />
+			<param index="1" name="count" type="int" />
+			<description>
+				Sets the loop count of the animation on [param track], counted as [member loop_count] is. Unlike the other track settings it belongs to the animation: one laid on a track loops forever ([code]-1[/code]) until this sets it again. Track 0's is [member loop_count], which the node puts back on every animation track 0 switches to.
+			</description>
+		</method>
+		<method name="get_track_loop_count" qualifiers="const">
+			<return type="int" />
+			<param index="0" name="track" type="int" />
+			<description>
+				Returns the loop count of the animation on [param track], or [code]0[/code] for a track playing nothing.
+			</description>
+		</method>
+		<method name="is_track_finished" qualifiers="const">
+			<return type="bool" />
+			<param index="0" name="track" type="int" />
+			<description>
+				Returns [code]true[/code] when the animation on [param track] has played every configured loop, as of the last tick. A finished track holds its last frame and stays mixed in until it is faded or cleared. No signal is sent for it; track 0's is [method is_finished], with [signal animation_finished].
+			</description>
+		</method>
+		<method name="track_just_looped" qualifiers="const">
+			<return type="bool" />
+			<param index="0" name="track" type="int" />
+			<description>
+				Returns [code]true[/code] when the last tick took the animation on [param track] across a loop boundary. A pulse, not a state, and no signal is sent for it; track 0's is [method just_looped], with [signal animation_looped].
+			</description>
+		</method>
+		<method name="set_track_outgoing_event_threshold">
+			<return type="bool" />
+			<param index="0" name="track" type="int" />
+			<param index="1" name="threshold" type="float" />
+			<description>
+				Sets the share at or above which the outgoing side of a crossfade on [param track] fires its events. That share is [code]1 - progress[/code]. The default, [constant @GDScript.INF], silences the outgoing side as the fade begins.
+			</description>
+		</method>
+		<method name="get_track_outgoing_event_threshold" qualifiers="const">
+			<return type="float" />
+			<param index="0" name="track" type="int" />
+			<description>
+				Returns the share at or above which the outgoing side of a crossfade on [param track] fires its events.
+			</description>
+		</method>
+		<method name="crossfade">
+			<return type="bool" />
+			<param index="0" name="track" type="int" />
+			<param index="1" name="anim_name" type="String" />
+			<param index="2" name="duration" type="float" />
+			<description>
+				Fades [param track] from what it plays to [param anim_name] over [param duration] seconds, as [method advance] takes them. [param anim_name] takes the track over from the call on: on track 0 it is [member current_animation] from then, and [signal animation_changed] is sent.
+				On a track playing nothing it starts at once, with no fade. A fade already in flight is taken over as it stands, so the pose does not jump. Returns [code]false[/code] for a [param duration] of [code]0[/code] or less, or an unknown name.
+			</description>
+		</method>
+		<method name="fade_track">
+			<return type="bool" />
+			<param index="0" name="track" type="int" />
+			<param index="1" name="target_alpha" type="float" />
+			<param index="2" name="duration" type="float" />
+			<description>
+				Drives the alpha of [param track] to [param target_alpha] over [param duration] seconds. It changes how much the track counts, not what it plays.
+			</description>
+		</method>
+		<method name="get_track_fade_progress" qualifiers="const">
+			<return type="float" />
+			<param index="0" name="track" type="int" />
+			<description>
+				Returns the progress of the fade on [param track], from [code]0[/code] to [code]1[/code], or [code]-1[/code] when the track is not fading.
+			</description>
+		</method>
+		<method name="cancel_track_fade">
+			<return type="bool" />
+			<param index="0" name="track" type="int" />
+			<description>
+				Stops the fade on [param track], leaving its alpha and weights where they stand.
+			</description>
+		</method>
+		<method name="get_track_main_source" qualifiers="const">
+			<return type="int" />
+			<param index="0" name="track" type="int" />
+			<description>
+				Returns the handle of the source carrying the animation of [param track], or [code]-1[/code] for none. The [code]source[/code] key of the event payloads carries the same handles.
+			</description>
+		</method>
+		<method name="add_track_source">
+			<return type="int" />
+			<param index="0" name="track" type="int" />
+			<param index="1" name="anim_name" type="String" />
+			<param index="2" name="weight" type="float" />
+			<description>
+				Lays [param anim_name] on [param track] beside what the track carries, with [param weight] as its share, and returns the handle of the new source, or [code]-1[/code] on failure.
+			</description>
+		</method>
+		<method name="set_source_weight">
+			<return type="bool" />
+			<param index="0" name="source" type="int" />
+			<param index="1" name="weight" type="float" />
+			<description>
+				Sets the share of [param source] within its track. A ratio between the sources of one track, not an absolute value: how much the track counts is [method set_track_alpha].
+			</description>
+		</method>
+		<method name="get_source_weight" qualifiers="const">
+			<return type="float" />
+			<param index="0" name="source" type="int" />
+			<description>
+				Returns the share of [param source] within its track.
+			</description>
+		</method>
+		<method name="set_source_frame">
+			<return type="bool" />
+			<param index="0" name="source" type="int" />
+			<param index="1" name="frame_no" type="float" />
+			<description>
+				Moves the playhead of [param source] to [param frame_no].
+			</description>
+		</method>
+		<method name="get_source_frame" qualifiers="const">
+			<return type="float" />
+			<param index="0" name="source" type="int" />
+			<description>
+				Returns where the playhead of [param source] is, in frames.
+			</description>
+		</method>
+		<method name="set_source_event_threshold">
+			<return type="bool" />
+			<param index="0" name="source" type="int" />
+			<param index="1" name="threshold" type="float" />
+			<description>
+				Sets the weight at or above which [param source] fires its events. The default, [constant @GDScript.INF], means that only the main source of track 0 fires.
+			</description>
+		</method>
+		<method name="get_source_event_threshold" qualifiers="const">
+			<return type="float" />
+			<param index="0" name="source" type="int" />
+			<description>
+				Returns the weight at or above which [param source] fires its events.
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="ssab" type="SSABResource" setter="set_ssab_resource" getter="get_ssab_resource">
+			The SpriteStudio animation resource ([code].ssab[/code]) to play.
+		</member>
+		<member name="current_animation" type="String" setter="set_animation" getter="get_current_animation" default="&quot;&quot;">
+			Name of the animation to play, chosen from the animations contained in [member ssab].
+		</member>
+		<member name="autoplay" type="bool" setter="set_autoplay" getter="is_autoplay" default="true">
+			If [code]true[/code] (the default), the selected animation starts playing automatically when the scene runs. A node placed in a scene has no code calling [method play] for it, so it plays.
+			Turn it off for a node whose playback you drive yourself, or one that should hold its first frame as a pose. Note that autoplay starts at [constant Node.NOTIFICATION_READY], before an attached script's [method Node._ready] runs — so a script connecting [signal animation_started] there will not see the one autoplay fired.
+		</member>
+		<member name="offset" type="Vector2" setter="set_offset" getter="get_offset" default="Vector2(0, 0)">
+			The drawing offset of the animation. Useful for visually centering an animation without altering the node's Transform.
+		</member>
+		<member name="flip_h" type="bool" setter="set_flip_h" getter="is_flipped_h" default="false">
+			If [code]true[/code], the animation is flipped horizontally.
+		</member>
+		<member name="flip_v" type="bool" setter="set_flip_v" getter="is_flipped_v" default="false">
+			If [code]true[/code], the animation is flipped vertically.
+		</member>
+		<member name="animation_process_mode" type="int" setter="set_animation_process_mode" getter="get_animation_process_mode" enum="SpriteStudioPlayer2D.AnimationProcessMode" default="1">
+			Determines whether to advance the animation in [code]_physics_process[/code] ([constant ANIMATION_PROCESS_PHYSICS]) or [code]_process[/code] ([constant ANIMATION_PROCESS_IDLE]). Use Physics if the parent node moves using the physics engine to avoid jitter. [constant ANIMATION_PROCESS_MANUAL] stops the node advancing itself, leaving playback to [method advance].
+		</member>
+		<member name="animation_section_start" type="int" setter="set_animation_section_start" getter="get_animation_section_start" default="0">
+			First frame of the played section, inclusive. Setting it keeps [member animation_section_end], so a start past that end is refused, as [method set_animation_section] refuses it: move the end first, or use [method set_animation_section] to move both endpoints at once.
+		</member>
+		<member name="animation_section_end" type="int" setter="set_animation_section_end" getter="get_animation_section_end" default="0">
+			Last frame of the played section, inclusive. Setting it keeps [member animation_section_start], so an end before that start is refused, as [method set_animation_section] refuses it: move the start first, or use [method set_animation_section] to move both endpoints at once.
+		</member>
+		<member name="frame_no" type="float" setter="set_frame_no" getter="get_frame_no" default="0.0">
+			Where the playhead is, in frames. Fractional: sub-frame interpolation puts it between two authored frames. Editor-only display. Can be keyframed from an [AnimationPlayer] to drive playback from a timeline.
+		</member>
+		<member name="speed_scale" type="float" setter="set_speed_scale" getter="get_speed_scale" default="1.0">
+			Playback speed multiplier. [code]1.0[/code] is normal speed.
+		</member>
+		<member name="loop_count" type="int" setter="set_loop_count" getter="get_loop_count" default="-1">
+			How many times to play the animation. [code]n[/code] plays [code]n[/code] cycles and stops, so [code]1[/code] plays it once; [code]-1[/code] loops forever, and [code]0[/code] is an alias for that rather than "no cycles" - the runtime normalizes everything at or below zero to [code]-1[/code].
+			Kept across [member current_animation] changes, because it is the node's own configuration - as are [member speed_scale], [member frame_skip_enabled], the frame rate from [method set_frame_rate] and the playback direction and style. Only the playback section is per-transition: frame indices mean nothing against a different clip.
+		</member>
+		<member name="frame_skip_enabled" type="bool" setter="set_frame_skip_enabled" getter="is_frame_skip_enabled" default="true">
+			If [code]true[/code], frames may be skipped to keep real-time playback under load.
+		</member>
+		<member name="sub_frame_enabled" type="bool" setter="set_sub_frame_enabled" getter="is_sub_frame_enabled" default="false">
+			If [code]true[/code], interpolates between integer frames for smoother sub-frame playback.
+		</member>
+		<member name="play_audio" type="bool" setter="set_play_audio" getter="is_play_audio" default="true">
+			If [code]true[/code], the built-in audio player plays the sounds emitted by the animation's audio parts. Set to [code]false[/code] to handle audio yourself via the [signal audio] signal. Audio is fired-and-forgotten: it plays only when its frame is passed during forward playback (reverse playback and the frame a seek lands on play no sound), it is not resynced on seek, and it keeps playing while the animation is paused.
+		</member>
+		<member name="audio_volume" type="float" setter="set_audio_volume" getter="get_audio_volume" default="1.0">
+			Volume of the built-in audio playback, as a linear value in [code][0, 1][/code]. Ignored when [member audio_backend] is set.
+		</member>
+		<member name="audio_bus" type="StringName" setter="set_audio_bus" getter="get_audio_bus" default="&amp;&quot;Master&quot;">
+			Bus the built-in audio voices play on, chosen from the project's audio bus layout as [member AudioStreamPlayer.bus] is. A name the layout does not have plays on [code]"Master"[/code]. Taken by each voice as it starts, so a change reaches the next sound rather than the ones already playing. Ignored when [member audio_backend] is set.
+		</member>
+		<member name="audio_backend" type="SpriteStudioAudioBackend" setter="set_audio_backend" getter="get_audio_backend">
+			Optional override backend. When assigned, built-in playback is suppressed and each audio event is routed to the backend's [code]play_audio[/code] method instead (e.g. to drive audio middleware).
+		</member>
+	</members>
+	<signals>
+		<signal name="animation_started">
+			<param index="0" name="anim_name" type="String" />
+			<description>
+				Emitted when playback of an animation starts.
+			</description>
+		</signal>
+		<signal name="animation_changed">
+			<param index="0" name="anim_name" type="String" />
+			<description>
+				Emitted when the current animation changes, with the name of the new one.
+				A host that called [method set_animation] already knows what it selected, so this exists for the routes that do not go through it: [member current_animation] is an exported property, so the inspector, an [AnimationPlayer] track or a tool script can mount a different clip without any of the node's own callers touching it.
+			</description>
+		</signal>
+		<signal name="animation_finished">
+			<param index="0" name="anim_name" type="String" />
+			<description>
+				Emitted when a non-looping animation reaches its end.
+			</description>
+		</signal>
+		<signal name="animation_looped">
+			<param index="0" name="anim_name" type="String" />
+			<description>
+				Emitted each time a looping animation wraps around.
+			</description>
+		</signal>
+		<signal name="user_data">
+			<param index="0" name="payload" type="Dictionary" />
+			<description>
+				Emitted when a user-data key on the timeline is reached. [param payload] always carries the event's origin - [code]part_index[/code], [code]part_name[/code], [code]frame_no[/code] (the frame the key sits on, not necessarily the frame it was noticed on) and [code]source[/code] (the handle of the source that fired it, as [method get_track_main_source] returns them) - plus whichever of [code]integer[/code], [code]point[/code], [code]rect[/code] and [code]string[/code] the animator filled in. A value left unset is absent from the dictionary rather than zero.
+			</description>
+		</signal>
+		<signal name="signal_emitted">
+			<param index="0" name="command" type="String" />
+			<param index="1" name="value" type="Dictionary" />
+			<param index="2" name="info" type="Dictionary" />
+			<description>
+				Emitted when a signal attribute on the timeline fires. [param command] is the command id and [param value] holds its parameters, keyed by the parameter ids authored in SpriteStudio. [param info] is kept separate precisely because those keys are author-defined: it carries [code]part_index[/code], [code]part_name[/code], [code]frame_no[/code] and [code]source[/code].
+			</description>
+		</signal>
+		<signal name="audio">
+			<param index="0" name="payload" type="Dictionary" />
+			<description>
+				Emitted when an audio part fires an audio event. [param payload] carries [code]part_index[/code], [code]part_name[/code], [code]frame_no[/code], [code]source[/code], [code]sound_list_name_hash[/code], [code]sound_name_hash[/code], [code]sound_name[/code] and [code]loop_num[/code] (the play count). This is an observation channel and fires in every playback direction (and in the editor), independently of [member play_audio].
+			</description>
+		</signal>
+		<signal name="frame_updated">
+			<param index="0" name="frame_no" type="float" />
+			<description>
+				Emitted after the animation state has been evaluated for [param frame_no], before the parts are drawn. Connect to this to read part poses in the same frame they render, independently of [member animation_process_mode]. [SpriteStudioPartAttachment2D] uses this signal internally.
+			</description>
+		</signal>
+	</signals>
+	<constants>
+		<constant name="ANIMATION_PROCESS_PHYSICS" value="0" enum="AnimationProcessMode">
+			Syncs animation to [code]_physics_process[/code] frame.
+		</constant>
+		<constant name="ANIMATION_PROCESS_IDLE" value="1" enum="AnimationProcessMode">
+			Syncs animation to [code]_process[/code] frame.
+		</constant>
+		<constant name="ANIMATION_PROCESS_MANUAL" value="2" enum="AnimationProcessMode">
+			The node does not advance the animation on its own; call [method advance] to step it. Audio voices already sounding still tick, since they are fire-and-forget and outlive the frame that started them.
+		</constant>
+		<constant name="PLAYBACK_DIRECTION_FORWARD" value="0" enum="PlaybackDirection">
+			Plays the animation from the section start towards its end.
+		</constant>
+		<constant name="PLAYBACK_DIRECTION_BACKWARD" value="1" enum="PlaybackDirection">
+			Plays the animation from the section end towards its start. Audio parts do not fire while playing backwards.
+		</constant>
+		<constant name="PLAYBACK_STYLE_NORMAL" value="0" enum="PlaybackStyle">
+			Each loop restarts from the same end of the section.
+		</constant>
+		<constant name="PLAYBACK_STYLE_PING_PONG" value="1" enum="PlaybackStyle">
+			Playback reverses at each end of the section instead of restarting.
+		</constant>
+		<constant name="COLOR_BLEND_MIX" value="0" enum="ColorBlendOperation">
+			Blends the override color over the part's color.
+		</constant>
+		<constant name="COLOR_BLEND_MUL" value="1" enum="ColorBlendOperation">
+			Multiplies the part's color by the override color.
+		</constant>
+		<constant name="COLOR_BLEND_ADD" value="2" enum="ColorBlendOperation">
+			Adds the override color to the part's color.
+		</constant>
+		<constant name="COLOR_BLEND_SUB" value="3" enum="ColorBlendOperation">
+			Subtracts the override color from the part's color.
+		</constant>
+		<constant name="OVERRIDE_PRIORITY_OVERWRITE_ON_NEXT_KEYFRAME" value="0" enum="OverridePriority">
+			The override is dropped as soon as the animation next keys the attribute.
+		</constant>
+		<constant name="OVERRIDE_PRIORITY_HOLD_UNTIL_NEXT_ANIMATION" value="1" enum="OverridePriority">
+			The override is held until another animation is set up. This is the default.
+		</constant>
+		<constant name="OVERRIDE_PRIORITY_PERMANENT" value="2" enum="OverridePriority">
+			The override survives animation changes and is only removed by an explicit clear.
+		</constant>
+		<constant name="TRACK_BLEND_MIX" value="0" enum="TrackBlend">
+			The track pulls the pose below it toward its own pose, by its alpha. This is the default.
+		</constant>
+		<constant name="TRACK_BLEND_ADDITIVE" value="1" enum="TrackBlend">
+			The track adds its offset from the setup pose, so what is below keeps showing through.
+		</constant>
+		<constant name="TRACK_SYNC_FREE" value="0" enum="TrackSync">
+			An animation laid on the track starts at the head of its section. This is the default.
+		</constant>
+		<constant name="TRACK_SYNC_START" value="1" enum="TrackSync">
+			An animation laid on the track starts at the phase the animation of track 0 stands at.
+		</constant>
+	</constants>
+</class>

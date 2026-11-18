@@ -1,0 +1,134 @@
+name: Publish docs via GitHub Pages
+
+# Build the MkDocs site and deploy it to GitHub Pages via the artifact method
+# (no gh-pages branch) — matching SSPlayerForWeb / SSPlayerForRenPy.
+#
+# The published site is tied to releases, not to merges: a published release or a
+# manual dispatch deploys, and nothing else does. This keeps the docs site in step
+# with the release the SpriteStudio Docs portal links to, rather than running ahead
+# of it on every merge. Every sibling player repository uses this same trigger pair.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+# Read-only by default. Only the deploy job gets what the artifact-based Pages
+# deploy needs (pages: write, id-token: write); the build job runs the
+# repository's scripts and does not need them. No contents:write — nothing is
+# pushed to a branch.
+permissions:
+  contents: read
+
+# Never run two deploys at once; let an in-progress deploy finish rather than
+# cancelling it.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  # A Release deploys the site only when it becomes Latest
+  # (scripts/release-channel.sh, read from the default branch): a pre-release
+  # once its package has a full release, or a patch to an earlier line, leaves
+  # the site as it is. A dispatch deploys from a tag, and refuses a branch such
+  # as develop.
+  channel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      deploy: ${{ steps.channel.outputs.deploy }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-tags: true
+          persist-credentials: false
+      - id: channel
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" != release ]; then
+            case "$GITHUB_REF" in
+              refs/tags/*)
+                echo "deploy=true" >> "$GITHUB_OUTPUT"
+                exit 0
+                ;;
+            esac
+            echo "::error::a dispatch deploys from a tag, and ${GITHUB_REF_NAME} is a branch"
+            exit 1
+          fi
+          channel="$(./scripts/release-channel.sh "$TAG")"
+          echo "::notice::${TAG} is a ${channel} release"
+          if [ "$channel" = latest ]; then
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    needs: channel
+    if: needs.channel.outputs.deploy == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: 3.x
+          cache: pip
+          cache-dependency-path: docs/requirements.txt
+
+      # Both steps below run the same scripts a contributor runs locally, rather than
+      # repeating the commands here, and so does docs.yml, which builds the docs on a
+      # pull request. That build catches what this one would hit only while both run
+      # the scripts — the fewer places the build is spelled out, the better.
+      #
+      # prepare-docs.sh creates .venv and installs the pins from docs/requirements.txt;
+      # build-pages.sh then finds zensical there. (It falls back to PATH when there is no
+      # venv, so a plain `pip install -r docs/requirements.txt` step would still work
+      # here — but then CI and the README would be running different things.) It stays a
+      # step of its own so a dependency failure is legible as one in the run summary,
+      # which is also why build-pages.sh is invoked below with prepare=no.
+      - name: Install dependencies
+        run: ./scripts/prepare-docs.sh
+
+      # scripts/build-pages.sh is the tree this job uploads. Here that is the two locale
+      # builds and nothing else — the site carries no demo and no examples — so it runs
+      # build-docs.sh and adds only what a working tree needs on top (the toolchain, and
+      # a server to look at the result). Running it here is what keeps CI and the local
+      # build from drifting apart, and it is the same command in every repository in the
+      # family, whatever else that repository's site carries.
+      #
+      # One build per locale, English first, because the English build wipes site/ and the Japanese site
+      # lives inside it at site/ja. build-docs.sh owns that order; the reason it exists is
+      # that the opposite order silently publishes a site with no Japanese pages at all.
+      #
+      # --strict fails the build on broken links, so a publish
+      # aborts rather than deploying a site with a dead link.
+      #
+      # Every option is spelled out rather than left to the script's defaults: they are
+      # chosen for a working tree, and a publish should not change because one of them did.
+      - name: Build the Pages tree (docs, both locales, strict validation)
+        run: ./scripts/build-pages.sh prepare=no serve=no
+
+      # Only the MkDocs output (site/) is served — no examples/demos to bundle.
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

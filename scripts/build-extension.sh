@@ -19,10 +19,6 @@ else
 fi
 
 HOST_ARCH=$(uname -m)
-pushd $ROOTDIR/godot-cpp > /dev/null
-GODOT_BRANCH=$(git branch --show-current | sed -e "s/[\r\n]\+//g")
-GODOT_TAG=$(git describe --tags --abbrev=0 | sed -e "s/[\r\n]\+//g")
-popd > /dev/null
 
 # Godot scons default options
 declare -A scons_default_opts=(
@@ -30,12 +26,12 @@ declare -A scons_default_opts=(
     [platform]=${PLATFORM}
     [target]="editor"
     [compiledb]="yes"
+    [api_version]="$("${BASEDIR}/godot-api-version.sh")"
 )
 
-# macbuild default options
+# This script's own options
 declare -A build_default_opts=(
     [cpus]=${CPUS}
-    [version]="4.4"
     [strip]="no"
 )
 
@@ -50,10 +46,10 @@ func usage() {
     echo "$APP options:"
     echo "  arch=<arch>         Target architecture (default: ${HOST_ARCH})"
     echo "  platform=<platform> Target platform (default: ${scons_default_opts[platform]})"
-    echo "  cpus=<nums>         number of scons -j option"
-    echo "  target=<target>     build target (default: ${build_default_opts[target]})"
-    echo "  version=<version>   Godot version. $APP uses this version at can not getting Godot version from git branch or tag. (default: ${build_default_opts[version]})"
-    echo "  strip=<yes|no>      Execute strip command to the app binary (default: ${build_default_opts[strip]})"
+    echo "  cpus=<nums>         number of scons -j option (default: ${build_default_opts[cpus]})"
+    echo "  target=<target>     build target (default: ${scons_default_opts[target]})"
+    echo "  api_version=<ver>   Target Godot API version (default: ${scons_default_opts[api_version]})"
+    echo "  strip=<yes|no>      Accepted for parity with build.sh; godot-cpp already links without symbols unless debug_symbols=yes, so nothing is stripped (default: ${build_default_opts[strip]})"
     echo "Godot scons options: "
     pushd $ROOTDIR/godot-cpp > /dev/null
     scons --help
@@ -81,20 +77,10 @@ for key value in ${(kv)opts}; do
 done
 echo ""
 
-# get Godot Version
-if [[ -n $GODOT_BRANCH ]]; then
-    VERSION=${GODOT_BRANCH}
-elif [[ -n $GODOT_TAG ]]; then
-    VERSION=${GODOT_TAG}
-else
-    VERSION=${opts[version]}
-fi
-echo "Godot Version: ${VERSION}"
-
-# validate scons command options from macbuild.sh options
+# validate scons command options from this script's options
 for key value in ${(kv)opts}; do
     if [[ -v build_default_opts[$key] ]]; then
-        # skip macbuild default options
+        # skip this script's own options
         continue
     fi
     if [[ $key == "arch" ]]; then
@@ -103,7 +89,8 @@ for key value in ${(kv)opts}; do
     fi
     scons_command_opts="$scons_command_opts $key=$value"
 done
-scons_command_opts="$scons_command_opts -j $build_default_opts[cpus]"
+
+scons_command_opts="$scons_command_opts -j $opts[cpus]"
 
 echo "scons command options: $scons_command_opts"
 
@@ -115,7 +102,7 @@ alias scons_macro="scons ${scons_command_opts}"
 if [[ ${opts[arch]} == "universal" ]]; then
     if [[ ${opts[platform]} == "android" ]]; then
         ARCHES=('arm64' 'x86_64')
-    else 
+    else
         ARCHES=${opts[arch]}
     fi
 else
@@ -124,10 +111,6 @@ fi
 for arch in $ARCHES; do
     echo "scons command build target arch: $arch"
     scons_macro arch=$arch
-    # TODO
-    # if [[ ${opts[strip]} == "yes" ]]; then
-    #     strip ${BINDIR}/libSSGodot.macos.${opts[target]}
-    # fi
     if [[ ${opts[platform]} == "ios" ]] && [[ ${opts[ios_simulator]} == "yes" ]]; then
         pushd ${BINDIR} > /dev/null
         mv libSSGodot.${opts[platform]}.${opts[target]}.framework libSSGodot.${opts[platform]}.${opts[target]}.simulator.framework
@@ -135,6 +118,36 @@ for arch in $ARCHES; do
     fi
 done
 
-/bin/cp misc/ssplayer_godot_extension.gdextension ./examples/feature_test_gdextension/bin
+# Copy .gdextension and binaries to example projects in the idiomatic addons structure
+MAIN_PROJECT="dev_gdextension"
+OTHER_PROJECTS=("overall_gdextension")
+
+# Ensure MAIN_PROJECT has the .gdextension and icons
+/bin/cp misc/spritestudio.gdextension "./examples/${MAIN_PROJECT}/addons/spritestudio/"
+/bin/cp LICENSE.md LICENSE.ja.md "./examples/${MAIN_PROJECT}/addons/spritestudio/"
+/bin/mkdir -p "./examples/${MAIN_PROJECT}/addons/spritestudio/icons"
+/bin/cp ss_player/icons/icon_*.svg "./examples/${MAIN_PROJECT}/addons/spritestudio/icons/"
+
+# The headless test project is not a sample, so it is not under examples/ --
+# but it loads the extension exactly as one does -- hence the _gdextension
+# suffix every project carrying the addon wears. See test_gdextension/project.godot.
+TEST_PROJECT="./test_gdextension"
+
+# Copy from MAIN_PROJECT to OTHER_PROJECTS
+for project in "${OTHER_PROJECTS[@]}"; do
+    DEST_DIR="./examples/${project}/addons/spritestudio"
+    /bin/mkdir -p "${DEST_DIR}"
+    /bin/cp misc/spritestudio.gdextension "${DEST_DIR}/"
+    echo "Syncing binaries and icons to ${project}..."
+    /bin/cp -R "./examples/${MAIN_PROJECT}/addons/spritestudio/bin" "${DEST_DIR}/"
+    /bin/cp -R "./examples/${MAIN_PROJECT}/addons/spritestudio/icons" "${DEST_DIR}/"
+done
+
+TEST_DEST="${TEST_PROJECT}/addons/spritestudio"
+/bin/mkdir -p "${TEST_DEST}"
+/bin/cp misc/spritestudio.gdextension "${TEST_DEST}/"
+echo "Syncing binaries and icons to test_gdextension..."
+/bin/cp -R "./examples/${MAIN_PROJECT}/addons/spritestudio/bin" "${TEST_DEST}/"
+/bin/cp -R "./examples/${MAIN_PROJECT}/addons/spritestudio/icons" "${TEST_DEST}/"
 
 popd > /dev/null # ${ROOTDIR}

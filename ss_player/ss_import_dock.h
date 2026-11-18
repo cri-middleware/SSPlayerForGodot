@@ -1,0 +1,144 @@
+#pragma once
+
+#ifdef TOOLS_ENABLED
+
+#include "ss_macros.h"
+
+#ifdef SPRITESTUDIO_GODOT_EXTENSION
+#include <godot_cpp/classes/button.hpp>
+#include <godot_cpp/classes/control.hpp>
+#include <godot_cpp/classes/editor_file_dialog.hpp>
+#include <godot_cpp/classes/h_box_container.hpp>
+#include <godot_cpp/classes/input_event.hpp>
+#include <godot_cpp/classes/label.hpp>
+#include <godot_cpp/classes/line_edit.hpp>
+#include <godot_cpp/classes/panel.hpp>
+#include <godot_cpp/classes/popup_menu.hpp>
+#include <godot_cpp/classes/project_settings.hpp>
+#include <godot_cpp/classes/scroll_container.hpp>
+#include <godot_cpp/classes/style_box_flat.hpp>
+#include <godot_cpp/classes/v_box_container.hpp>
+#include <godot_cpp/templates/vector.hpp>
+#include <godot_cpp/variant/callable.hpp>
+using namespace godot;
+#else
+#include "core/config/project_settings.h"
+#include "servers/display/display_server.h"
+#include "core/input/input_event.h"
+#include "editor/gui/editor_file_dialog.h"
+#include "scene/gui/box_container.h"
+#include "scene/gui/button.h"
+#include "scene/gui/control.h"
+#include "scene/gui/label.h"
+#include "scene/gui/line_edit.h"
+#include "scene/gui/panel.h"
+#include "scene/gui/popup_menu.h"
+#include "scene/gui/scroll_container.h"
+#include "scene/resources/style_box_flat.h"
+#include "core/templates/vector.h"
+#include "core/variant/callable.h"
+#endif
+
+class SSImporter;
+
+class SSImportControl : public VBoxContainer {
+  GDCLASS(SSImportControl, VBoxContainer)
+
+protected:
+  static void _bind_methods();
+
+public:
+  SSImportControl();
+  ~SSImportControl();
+
+  void _notification(int p_what);
+
+  void set_importer(SSImporter *p_importer) { importer = p_importer; }
+
+  void start_intercepting();
+  void stop_intercepting();
+
+private:
+  enum RecentMenuId {
+    RECENT_MENU_OPEN_IN_EDITOR,
+    RECENT_MENU_REVEAL,
+    RECENT_MENU_RECONVERT,
+    RECENT_MENU_REMOVE,
+  };
+
+  SSImporter *importer = nullptr;
+
+  // The window's files_dropped handlers that start_intercepting() took over.
+  // Chiefly the editor's own, which copies every OS-dropped file into the
+  // project wherever it lands: left connected, it would also copy an .sspj
+  // dropped on this dock into res://. Every drop this dock does not claim is
+  // handed to each of them directly.
+  Vector<Callable> original_drop_handlers;
+  bool is_intercepting = false;
+
+  void _on_window_files_dropped(const PackedStringArray &p_files);
+  void _perform_default_drop_logic(const PackedStringArray &p_files);
+
+  Label *instruction_label = nullptr;
+  Panel *drop_panel = nullptr;
+
+  LineEdit *path_line_edit = nullptr;
+  Button *browse_button = nullptr;
+  Button *reset_button = nullptr;
+  Button *open_dir_button = nullptr;
+  EditorFileDialog *file_dialog = nullptr;
+
+  VBoxContainer *recent_vbox = nullptr;
+  Label *recent_label = nullptr;
+  Label *recent_empty_label = nullptr;
+  Button *clear_recent_button = nullptr;
+
+  PopupMenu *recent_popup = nullptr;
+  String pending_recent_path;
+
+  const String DEFAULT_PATH = "res://ssab_generated";
+  static const int RECENT_FILES_CAP = 20;
+
+  // The last Output value that passed _commit_output_dir(). A rejected edit is
+  // rolled back to it, so the field never holds a directory an import cannot
+  // use.
+  String committed_output_dir;
+
+  // Turns what is typed in the Output field into a res:// directory, or
+  // returns an empty String with r_reason set. A bare "ssab_out" becomes
+  // res://ssab_out: only res:// is globalized for the converter and scanned by
+  // the editor, so anything else splits the two apart.
+  String _normalize_output_dir(const String &p_text, String &r_reason) const;
+  // Validates the field, writes the normalized value back and saves it.
+  // False, with an error dialog and the field rolled back, when it does not
+  // name a directory inside the project.
+  bool _commit_output_dir();
+  // The directory an import should write into, or empty when the field does
+  // not name one -- the caller then does nothing, the dialog has said why.
+  String _take_output_dir_for_import();
+  void _show_output_dir_error(const String &p_reason);
+  void _on_output_dir_focus_exited();
+
+  void _on_line_edit_submitted(const String &p_path);
+  void _on_browse_button_pressed();
+  void _on_reset_button_pressed();
+  void _on_open_dir_button_pressed();
+  void _on_dir_selected(const String &p_path);
+  void _on_recent_file_pressed(const String &p_path);
+  void _on_recent_gui_input(const Ref<InputEvent> &p_event, const String &p_path);
+  void _show_recent_context_menu(const String &p_path);
+  void _on_recent_menu_id_pressed(int p_id);
+  void _on_clear_recent_pressed();
+  void _remove_from_recent_files(const String &p_path);
+  void _update_recent_files_ui();
+  void _add_to_recent_files(const String &p_path);
+  // Adds .sspj resolved by a directory scan to the Recent list (the dock has no
+  // list at drop time; the importer emits them once the scan completes).
+  void _on_importer_files_resolved(const PackedStringArray &p_paths);
+  void _reconvert_sspj(const String &p_sspj_path);
+  void _start_import(const PackedStringArray &p_sspj_files, const String &p_output_dir);
+  void _load_settings();
+  void _save_settings();
+  void _ensure_output_dir_exists();
+};
+#endif // #ifdef TOOLS_ENABLED

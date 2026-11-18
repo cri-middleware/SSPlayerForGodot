@@ -1,0 +1,95 @@
+# ▶️ Basic Usage
+
+This page explains the basic workflow for placing and playing SpriteStudio animations in your Godot scene.
+
+> [!NOTE]
+> This page assumes that **an `.ssab` file has already been imported into your Godot project**. If you do not have an `.ssab` yet, first see [Asset Import and Editor Integration](usage_asset_pipeline.md) (editor-based import) or [CLI Conversion and Automation](import.md) (CLI-based import).
+
+## Fastest Setup: Auto Node Creation via Drag & Drop
+
+Taking advantage of Godot's powerful editor, you can set up an animation with the shortest possible workflow.
+
+1. Find the imported **`.ssab` file** in the **FileSystem dock**.
+2. **Drag and drop** the file into the **2D workspace (Scene view)**.
+
+This action automatically creates a `SpriteStudioPlayer2D` node and assigns the resource to it.
+
+> [!TIP]
+> 
+> <video autoplay loop muted playsinline width="100%">
+>   <source src="../assets/3-setup_drag_and_drop.webm" type="video/webm">
+> </video>
+> <img src="../assets/3-setup_drag_and_drop.webp" width="100%" style="display: none;" loading="lazy">
+
+---
+
+## Manual Node Addition and Attachment
+
+If you want to place the node in a specific location within an existing node hierarchy, you can add it manually and assign the resource.
+
+1. Add a `SpriteStudioPlayer2D` node to your scene tree using the "+" button in the Scene dock.
+2. Select the added node and open the Inspector.
+3. Drag and drop the `.ssab` file from the FileSystem dock into the **`Ssab`** property box in the Inspector to attach it.
+
+---
+
+## Inspector Settings and Preview
+
+Once the node is selected, you can adjust various settings from Godot's Inspector.
+
+1. **Select the `Current Animation`**
+   Open the dropdown for the `Current Animation` property in the Inspector. You will see a list of animations contained in the `.ssab`. Select the name of the animation you want to play.
+
+> [!TIP]
+> 
+> <video autoplay loop muted playsinline width="100%">
+>   <source src="../assets/4-inspector_preview-1.webm" type="video/webm">
+> </video>
+> <img src="../assets/4-inspector_preview-1.webp" width="100%" style="display: none;" loading="lazy">
+
+2. **In-Editor Preview**
+   With the node selected, the **SpriteStudio** bottom panel appears. Use its transport controls (play from start / play from current / stop, the frame scrubber, and the **Loop** and **Speed** controls next to them) to **play the animation directly in the editor without running the game**. Keyboard shortcuts mirror the AnimationPlayer editor: **D** play from current, **Shift+D** play from start, **S** stop (active while the panel is visible).
+   Changes to parameters like `Frame No`, `Speed Scale`, and `Loop Count` are reflected in the preview in real-time, enabling quick adjustments. **Loop** sets `Loop Count` to `-1` (infinite) when on and to `1` when off, and **Speed** sets `Speed Scale`. Both are edits to the scene: they are saved with it and undone with Ctrl+Z, like the same change made in the Inspector.
+
+> [!TIP]
+> 
+> <video autoplay loop muted playsinline width="100%">
+>   <source src="../assets/4-inspector_preview-2.webm" type="video/webm">
+> </video>
+> <img src="../assets/4-inspector_preview-2.webp" width="100%" style="display: none;" loading="lazy">
+
+---
+
+## Main Inspector Properties
+
+| Property                   | Type     | Description                                                         |
+| -------------------------- | -------- | ------------------------------------------------------------------- |
+| `Ssab`            | Resource | The target `SSABResource` (`.ssab` file) to play                    |
+| `Current Animation`        | String   | The name of the currently selected animation                        |
+| `Autoplay`                 | bool     | Whether to play automatically when the game starts                  |
+| `Offset`                   | Vector2  | Drawing offset. Useful to shift visuals without changing the Node Transform |
+| `Flip H / Flip V`          | bool     | Horizontal / Vertical flip of the animation                         |
+| `Frame No`                 | float    | The current frame position                                          |
+| `Speed Scale`              | float    | Playback speed multiplier (Default: 1.0)                            |
+| `Loop Count`               | int      | Number of loops (`-1` for infinite loop)                            |
+| `Animation Section Start`  | int      | Start frame for partial playback. It cannot go past `Animation Section End`: move the end first |
+| `Animation Section End`    | int      | End frame for partial playback. It cannot go before `Animation Section Start`: move the start first |
+| `Frame Skip Enabled`       | bool     | Whether to skip frames when the draw interval exceeds the frame interval |
+| `Sub Frame Enabled`        | bool     | Whether to enable sub-frame interpolation                           |
+| `Animation Process Mode`   | int      | Whether to sync with `_physics_process` (Physics) or `_process` (Idle), or to leave stepping to `advance()` (Manual) |
+| `Play Audio`               | bool     | Whether the built-in player sounds the animation's audio parts (see [Audio Playback](audio.md)) |
+| `Audio Volume`             | float    | Linear volume `[0, 1]` for the built-in audio playback |
+| `Audio Bus`                | StringName | Bus the built-in audio playback plays on (Default: `Master`) |
+| `Audio Backend`            | Resource | Optional `SpriteStudioAudioBackend` that replaces the built-in audio playback |
+
+> [!NOTE]
+> **What an animation change keeps.** Everything you set: `Loop Count`, `Speed Scale`, `Frame Skip Enabled`, `Sub Frame Enabled`, a `frame_rate` override, and the playback **direction and style** all survive `set_animation()`. Only the **playback section** resets, to the new clip's own range.
+>
+> The direction, style and `frame_rate` are set from a script (`player.playback_direction`, `player.frame_rate`) and are not saved with the scene.
+
+---
+
+## Support for Mask Parts
+
+This plugin supports SpriteStudio's "Mask" feature (for its limits, see [Limitations & Scope → Masks](../limitations.md#masks)).
+Nothing to set up: mask parts in your `.ssab` clip as authored when you place it in the scene.

@@ -1,0 +1,1202 @@
+#include "ss_player_node_2d.h"
+
+#ifdef SPRITESTUDIO_GODOT_EXTENSION
+#include <godot_cpp/classes/audio_server.hpp>
+#include <godot_cpp/classes/engine.hpp>
+#include <godot_cpp/classes/viewport.hpp>
+#else
+#include "core/config/engine.h"
+#include "scene/main/viewport.h"
+#include "servers/audio/audio_server.h"
+#endif
+
+class SpriteStudioPlayer2D::_SignalSink : public SsPlayerEventSink {
+public:
+    explicit _SignalSink(SpriteStudioPlayer2D* p_owner) : _owner(p_owner) {}
+
+    void onAnimationStarted(const String& anim_name) override {
+        _owner->emit_signal(SNAME("animation_started"), anim_name);
+    }
+    void onAnimationChanged(const String& anim_name) override {
+        _owner->emit_signal(SNAME("animation_changed"), anim_name);
+    }
+    void onAnimationFinished(const String& anim_name) override {
+        _owner->emit_signal(SNAME("animation_finished"), anim_name);
+    }
+    void onAnimationLooped(const String& anim_name) override {
+        _owner->emit_signal(SNAME("animation_looped"), anim_name);
+    }
+    void onUserData(const Dictionary& payload) override {
+        _owner->emit_signal(SNAME("user_data"), payload);
+    }
+    void onSignal(const String& command, const Dictionary& value, const Dictionary& info) override {
+        _owner->emit_signal(SNAME("signal_emitted"), command, value, info);
+    }
+    void onAudio(const Dictionary& payload) override {
+        // Observation channel: always fires (any direction, even in the editor).
+        _owner->emit_signal(SNAME("audio"), payload);
+        // Built-in / backend playback (forward playback only, and not on a seek's
+        // landing frame).
+        _owner->_handle_audio(payload);
+    }
+
+private:
+    SpriteStudioPlayer2D* _owner;
+};
+
+
+SpriteStudioPlayer2D::SpriteStudioPlayer2D() {
+    _internal = memnew(SsInternalPlayer);
+    _sink = memnew(_SignalSink(this));
+    _internal->setEventSink(_sink);
+    _internal->setSkipFrames(true);
+    _internal->setSubFrameEnabled(false);
+    // A bus added, removed or renamed in the Audio panel changes the
+    // `audio_bus` list, as it does AudioStreamPlayer's. Only the inspector reads
+    // that list, so only the editor listens.
+    if (Engine::get_singleton()->is_editor_hint()) {
+        const Callable refresh(this, "notify_property_list_changed");
+        AudioServer::get_singleton()->connect("bus_layout_changed", refresh);
+        AudioServer::get_singleton()->connect("bus_renamed", refresh.unbind(3));
+        // Assigning `material` announces nothing but a property-list change,
+        // and the warning about it has to follow the assignment.
+        connect("property_list_changed", Callable(this, "update_configuration_warnings"));
+    }
+}
+
+SpriteStudioPlayer2D::~SpriteStudioPlayer2D() {
+    if (_audio_controller) {
+        _audio_controller->stop_all();
+        memdelete(_audio_controller);
+        _audio_controller = nullptr;
+    }
+    if (_internal) {
+        _internal->setEventSink(nullptr);
+        memdelete(_internal);
+        _internal = nullptr;
+    }
+    if (_sink) {
+        memdelete(_sink);
+        _sink = nullptr;
+    }
+}
+
+void SpriteStudioPlayer2D::setSSABResource(const Ref<SSABResource>& ssabRes) {
+    Callable changed_cb = callable_mp(this, &SpriteStudioPlayer2D::_on_ssab_changed);
+    Ref<SSABResource> prev = _internal->getSSABResource();
+    if (prev.is_valid() && prev->is_connected("changed", changed_cb)) {
+        prev->disconnect("changed", changed_cb);
+    }
+
+    _internal->setSSABResource(ssabRes);
+    _reported_refusals.clear();
+    _apply_transport_settings();
+
+    notify_property_list_changed();
+    update_configuration_warnings();
+
+    Ref<SSABResource> now = _internal->getSSABResource();
+    if (now.is_valid()) {
+        if (!now->is_connected("changed", changed_cb)) {
+            now->connect("changed", changed_cb);
+        }
+    }
+    _drawn_rect_changed();
+}
+
+void SpriteStudioPlayer2D::_on_ssab_changed() {
+    _internal->onSSABReloaded();
+    notify_property_list_changed();
+    update_configuration_warnings();
+    _drawn_rect_changed();
+}
+
+Ref<SSABResource> SpriteStudioPlayer2D::getSSABResource() const {
+    return _internal->getSSABResource();
+}
+
+void SpriteStudioPlayer2D::set_cellmap_texture(const String &cellmap_name, const Ref<Texture2D> &texture) {
+    // Clearing a name the pack has lost is what a scene saved before a reconvert
+    // does on load, and leaves nothing to report.
+    Ref<SSABResource> res = getSSABResource();
+    if (res.is_valid() && texture.is_valid() && res->get_cellmap_hash(cellmap_name) == 0) {
+        _refused(false, vformat("set_cellmap_texture(\"%s\")", cellmap_name), "the SSAB has no such cell map");
+    }
+    _internal->setCellMapOverrideTexture(cellmap_name, texture);
+}
+
+Ref<Texture2D> SpriteStudioPlayer2D::get_cellmap_texture(const String &cellmap_name) const {
+    return _internal->getCellMapOverrideTexture(cellmap_name);
+}
+
+// Structural names live in the .ssab, not the runtime, so these forward to the
+// bound SSABResource — the same source the inspector's cellmap list reads. They
+// are the discovery half of set_part_cell_override(); having them on the node
+// saves the caller a round-trip through get_ssab_resource(). Empty when no
+// resource is bound (or the cellmap is unknown).
+
+PackedStringArray SpriteStudioPlayer2D::get_cellmap_names() const {
+    PackedStringArray names;
+    Ref<SSABResource> res = _internal->getSSABResource();
+    if (res.is_null()) return names;
+    names = res->get_cellmap_names();
+    return names;
+}
+
+PackedStringArray SpriteStudioPlayer2D::get_cell_names(const String& cellmap_name) const {
+    PackedStringArray names;
+    Ref<SSABResource> res = _internal->getSSABResource();
+    if (res.is_null()) return names;
+    names = res->get_cell_names(cellmap_name);
+    return names;
+}
+
+int SpriteStudioPlayer2D::find_part_index(const String& part_name) const {
+    return _internal->resolve_part_index(part_name);
+}
+
+Transform2D SpriteStudioPlayer2D::get_part_transform(const String& part_name) const {
+    Transform2D xf;
+    int idx = _internal->resolve_part_index(part_name);
+    if (idx >= 0 && _internal->try_get_part_local_transform(idx, xf)) {
+        // The runtime's world matrix is relative to the internal root canvas
+        // item, which carries flip / offset. Compose it here so the result is
+        // the part's transform in THIS node's local space — otherwise an
+        // attachment pinned to a part detaches the moment the player is flipped.
+        xf = _make_root_transform() * xf;
+    }
+    return xf;
+}
+
+Vector2 SpriteStudioPlayer2D::get_canvas_size() const {
+    Ref<SSABResource> res = _internal->getSSABResource();
+    if (res.is_null()) return Vector2();
+    return res->get_canvas_size(_internal->getCurrentAnimation());
+}
+
+Rect2 SpriteStudioPlayer2D::get_canvas_rect() const {
+    return get_canvas_rect_of(_internal->getCurrentAnimation());
+}
+
+Rect2 SpriteStudioPlayer2D::get_canvas_rect_of(const String& p_animation) const {
+    Ref<SSABResource> res = _internal->getSSABResource();
+    if (res.is_null()) return Rect2();
+    const Rect2 rect = res->get_canvas_rect(p_animation);
+    if (rect.size == Vector2()) return rect;
+    // Flip and offset live on the internal root canvas item rather than on the
+    // Node2D transform, so a caller reading a box in this node's local space
+    // has to see them -- the same composition get_part_transform does, and for
+    // the same reason.
+    return _make_root_transform().xform(rect);
+}
+
+bool SpriteStudioPlayer2D::is_part_hidden(const String& part_name) const {
+    int idx = _internal->resolve_part_index(part_name);
+    if (idx < 0) return false;
+    bool hidden = false;
+    _internal->try_get_part_hidden(idx, hidden);
+    return hidden;
+}
+
+bool SpriteStudioPlayer2D::is_part_skinned_mesh(const String& part_name) const {
+    int idx = _internal->resolve_part_index(part_name);
+    if (idx < 0) return false;
+    bool skinned = false;
+    _internal->try_get_part_skinned_mesh(idx, skinned);
+    return skinned;
+}
+
+PackedStringArray SpriteStudioPlayer2D::get_part_names() const {
+    PackedStringArray names;
+    int count = _internal->get_part_count();
+    for (int i = 0; i < count; i++) {
+        names.push_back(_internal->get_part_name(i));
+    }
+    return names;
+}
+
+PackedVector2Array SpriteStudioPlayer2D::get_part_quad(const String& part_name) const {
+    PackedVector2Array quad;
+    Vector2 corners[4];
+    const int index = _internal->resolve_part_index(part_name);
+    if (index < 0 || !_internal->try_get_part_quad(index, corners)) return quad;
+    // Flip and offset are on the internal root canvas item, as for
+    // get_part_transform.
+    const Transform2D root = _make_root_transform();
+    quad.resize(4);
+    for (int i = 0; i < 4; i++) {
+        quad.set(i, root.xform(corners[i]));
+    }
+    return quad;
+}
+
+int SpriteStudioPlayer2D::hit_test_part(const Vector2& p_point, const PackedStringArray& p_parts) const {
+    const Vector2 point = _make_root_transform().affine_inverse().xform(p_point);
+    if (p_parts.is_empty()) return _internal->hit_test_part(point, nullptr, 0);
+    _hit_targets.clear();
+    for (int i = 0; i < p_parts.size(); i++) {
+        const int index = _internal->resolve_part_index(p_parts[i]);
+        if (index >= 0) _hit_targets.push_back(index);
+    }
+    if (_hit_targets.is_empty()) return -1;
+    return _internal->hit_test_part(point, _hit_targets.ptr(), (int)_hit_targets.size());
+}
+
+// ---- Refusals -------------------------------------------------------------
+
+// Says, once per call and what it was given, that a command did nothing: a
+// script that repeats a refused call every frame would otherwise fill the
+// Output panel. The reason is the runtime's when it refused, else p_why.
+bool SpriteStudioPlayer2D::_refused(bool p_ok, const String& p_call, const String& p_why) {
+    const String runtime = _internal->take_runtime_refusal();
+    if (p_ok) return true;
+    if (!_reported_refusals.has(p_call)) {
+        _reported_refusals.insert(p_call);
+        const String why = runtime.is_empty() ? p_why : runtime;
+        WARN_PRINT(vformat("[SS] %s did nothing%s.", p_call, why.is_empty() ? String() : ": " + why));
+    }
+    return false;
+}
+
+String SpriteStudioPlayer2D::_no_part(int p_index) const {
+    return p_index < 0 ? String("the animation has no such part") : String();
+}
+
+String SpriteStudioPlayer2D::_no_animation(const String& p_name) const {
+    return get_animation_names().has(p_name) ? String() : String("the SSAB has no such animation");
+}
+
+void SpriteStudioPlayer2D::_drawn_rect_changed() {
+    emit_signal(SNAME("item_rect_changed"));
+}
+
+// ---- Part overrides ------------------------------------------------------
+
+// By-index variants. The runtime addresses parts by index, so these skip the
+// name lookup — resolve a name once via find_part_index() and reuse the index.
+// An out-of-range index is a no-op returning false (guarded in SsInternalPlayer).
+
+bool SpriteStudioPlayer2D::set_part_visibility_override_by_index(int part_index, bool force_hidden, bool cascade) {
+    return _refused(_internal->set_part_visibility_override(part_index, force_hidden, cascade),
+                    vformat("set_part_visibility_override_by_index(%d)", part_index), _no_part(part_index));
+}
+
+bool SpriteStudioPlayer2D::clear_part_visibility_override_by_index(int part_index) {
+    return _refused(_internal->clear_part_visibility_override(part_index),
+                    vformat("clear_part_visibility_override_by_index(%d)", part_index), _no_part(part_index));
+}
+
+bool SpriteStudioPlayer2D::set_part_color_override_by_index(int part_index, const Color& color, ColorBlendOperation blend_op, OverridePriority priority) {
+    return _refused(_internal->set_part_color_override(part_index, color, (int)blend_op, (int)priority),
+                    vformat("set_part_color_override_by_index(%d)", part_index), _no_part(part_index));
+}
+
+bool SpriteStudioPlayer2D::set_part_color_override_corners_by_index(int part_index, const PackedColorArray& corners,
+                                                                    ColorBlendOperation blend_op, OverridePriority priority) {
+    // One argument rather than four, so this reads the same shape as the
+    // single-colour form. Four is the only valid length: a shorter array would
+    // silently leave corners at whatever the default Color is, which looks like a
+    // gradient bug rather than a bad call.
+    ERR_FAIL_COND_V_MSG(corners.size() != 4, false,
+                        "corners must hold exactly 4 colours, in left-top, right-top, left-bottom, right-bottom order");
+    return _refused(_internal->set_part_color_override_corners(part_index, corners[0], corners[1], corners[2], corners[3], (int)blend_op, (int)priority),
+                    vformat("set_part_color_override_corners_by_index(%d)", part_index), _no_part(part_index));
+}
+
+bool SpriteStudioPlayer2D::clear_part_color_override_by_index(int part_index) {
+    return _refused(_internal->clear_part_color_override(part_index),
+                    vformat("clear_part_color_override_by_index(%d)", part_index), _no_part(part_index));
+}
+
+bool SpriteStudioPlayer2D::set_part_cell_override_by_index(int part_index, const String& cellmap_name, const String& cell_name, OverridePriority priority) {
+    return _refused(_internal->set_part_cell_override(part_index, cellmap_name, cell_name, (int)priority),
+                    vformat("set_part_cell_override_by_index(%d, \"%s\", \"%s\")", part_index, cellmap_name, cell_name), _no_part(part_index));
+}
+
+bool SpriteStudioPlayer2D::clear_part_cell_override_by_index(int part_index) {
+    return _refused(_internal->clear_part_cell_override(part_index),
+                    vformat("clear_part_cell_override_by_index(%d)", part_index), _no_part(part_index));
+}
+
+// Name-based convenience wrappers — resolve the name and call the same
+// mutator (an unknown name resolves to -1 → no-op returning false). They report
+// a refusal by the name they were given, as the by-index forms do by index.
+
+bool SpriteStudioPlayer2D::set_part_visibility_override(const String& part_name, bool force_hidden, bool cascade) {
+    const int index = _internal->resolve_part_index(part_name);
+    return _refused(_internal->set_part_visibility_override(index, force_hidden, cascade),
+                    vformat("set_part_visibility_override(\"%s\")", part_name), _no_part(index));
+}
+
+bool SpriteStudioPlayer2D::clear_part_visibility_override(const String& part_name) {
+    const int index = _internal->resolve_part_index(part_name);
+    return _refused(_internal->clear_part_visibility_override(index),
+                    vformat("clear_part_visibility_override(\"%s\")", part_name), _no_part(index));
+}
+
+bool SpriteStudioPlayer2D::set_part_color_override(const String& part_name, const Color& color, ColorBlendOperation blend_op, OverridePriority priority) {
+    const int index = _internal->resolve_part_index(part_name);
+    return _refused(_internal->set_part_color_override(index, color, (int)blend_op, (int)priority),
+                    vformat("set_part_color_override(\"%s\")", part_name), _no_part(index));
+}
+
+bool SpriteStudioPlayer2D::set_part_color_override_corners(const String& part_name, const PackedColorArray& corners,
+                                                           ColorBlendOperation blend_op, OverridePriority priority) {
+    ERR_FAIL_COND_V_MSG(corners.size() != 4, false,
+                        "corners must hold exactly 4 colours, in left-top, right-top, left-bottom, right-bottom order");
+    const int index = _internal->resolve_part_index(part_name);
+    return _refused(_internal->set_part_color_override_corners(index, corners[0], corners[1], corners[2], corners[3], (int)blend_op, (int)priority),
+                    vformat("set_part_color_override_corners(\"%s\")", part_name), _no_part(index));
+}
+
+bool SpriteStudioPlayer2D::clear_part_color_override(const String& part_name) {
+    const int index = _internal->resolve_part_index(part_name);
+    return _refused(_internal->clear_part_color_override(index),
+                    vformat("clear_part_color_override(\"%s\")", part_name), _no_part(index));
+}
+
+bool SpriteStudioPlayer2D::set_part_cell_override(const String& part_name, const String& cellmap_name, const String& cell_name, OverridePriority priority) {
+    const int index = _internal->resolve_part_index(part_name);
+    return _refused(_internal->set_part_cell_override(index, cellmap_name, cell_name, (int)priority),
+                    vformat("set_part_cell_override(\"%s\", \"%s\", \"%s\")", part_name, cellmap_name, cell_name), _no_part(index));
+}
+
+bool SpriteStudioPlayer2D::clear_part_cell_override(const String& part_name) {
+    const int index = _internal->resolve_part_index(part_name);
+    return _refused(_internal->clear_part_cell_override(index),
+                    vformat("clear_part_cell_override(\"%s\")", part_name), _no_part(index));
+}
+
+bool SpriteStudioPlayer2D::clear_all_part_overrides() {
+    return _internal->clear_all_part_overrides();
+}
+
+// ---- Animation mixing ----------------------------------------------------
+
+bool SpriteStudioPlayer2D::set_track_animation(int track, const String& anim_name) {
+    if (!_refused(_internal->setTrackAnimation(track, anim_name),
+                  vformat("set_track_animation(%d, \"%s\")", track, anim_name), _no_animation(anim_name))) return false;
+    if (track == 0) _track_zero_switched();
+    return true;
+}
+int SpriteStudioPlayer2D::get_track_count() const { return _internal->getTrackCount(); }
+bool SpriteStudioPlayer2D::clear_track(int track) { return _internal->clearTrack(track); }
+bool SpriteStudioPlayer2D::set_track_alpha(int track, float alpha) { return _internal->setTrackAlpha(track, alpha); }
+float SpriteStudioPlayer2D::get_track_alpha(int track) const { return _internal->getTrackAlpha(track); }
+bool SpriteStudioPlayer2D::set_track_blend(int track, TrackBlend blend) { return _refused(_internal->setTrackBlend(track, (int)blend), vformat("set_track_blend(%d)", track)); }
+SpriteStudioPlayer2D::TrackBlend SpriteStudioPlayer2D::get_track_blend(int track) const { return (TrackBlend)_internal->getTrackBlend(track); }
+bool SpriteStudioPlayer2D::set_track_sync(int track, TrackSync sync) { return _refused(_internal->setTrackSync(track, (int)sync), vformat("set_track_sync(%d)", track)); }
+SpriteStudioPlayer2D::TrackSync SpriteStudioPlayer2D::get_track_sync(int track) const { return (TrackSync)_internal->getTrackSync(track); }
+bool SpriteStudioPlayer2D::set_track_frame(int track, float frame_no) { return _internal->setTrackFrame(track, frame_no); }
+float SpriteStudioPlayer2D::get_track_frame(int track) const { return _internal->getTrackFrame(track); }
+bool SpriteStudioPlayer2D::set_track_speed(int track, float speed) { return _internal->setTrackSpeed(track, speed); }
+float SpriteStudioPlayer2D::get_track_speed(int track) const { return _internal->getTrackSpeed(track); }
+bool SpriteStudioPlayer2D::set_track_frame_rate(int track, int fps) { return _internal->setTrackFrameRate(track, fps); }
+int SpriteStudioPlayer2D::get_track_frame_rate(int track) const { return _internal->getTrackFrameRate(track); }
+bool SpriteStudioPlayer2D::set_track_frame_skip_enabled(int track, bool enabled) { return _internal->setTrackSkipFrames(track, enabled); }
+bool SpriteStudioPlayer2D::is_track_frame_skip_enabled(int track) const { return _internal->getTrackSkipFrames(track); }
+bool SpriteStudioPlayer2D::set_track_playback_direction(int track, PlaybackDirection direction, PlaybackStyle style) { return _internal->setTrackPlaybackDirection(track, (int)direction, (int)style); }
+SpriteStudioPlayer2D::PlaybackDirection SpriteStudioPlayer2D::get_track_playback_direction(int track) const { return (PlaybackDirection)_internal->getTrackPlaybackDirection(track); }
+SpriteStudioPlayer2D::PlaybackStyle SpriteStudioPlayer2D::get_track_playback_style(int track) const { return (PlaybackStyle)_internal->getTrackPlaybackStyle(track); }
+
+bool SpriteStudioPlayer2D::set_track_loop_count(int track, int count) {
+    if (!_internal->setTrackLoopCount(track, count)) return false;
+    // Track 0's count is the node's loop_count, which every switch of track 0
+    // puts back; written past it, it would be undone at the next one.
+    if (track == 0) _loop_count = count;
+    return true;
+}
+int SpriteStudioPlayer2D::get_track_loop_count(int track) const { return _internal->getTrackLoopCount(track); }
+bool SpriteStudioPlayer2D::is_track_finished(int track) const { return _internal->isTrackFinished(track); }
+bool SpriteStudioPlayer2D::track_just_looped(int track) const { return _internal->trackJustLooped(track); }
+bool SpriteStudioPlayer2D::set_track_outgoing_event_threshold(int track, float threshold) { return _internal->setTrackOutgoingEventThreshold(track, threshold); }
+float SpriteStudioPlayer2D::get_track_outgoing_event_threshold(int track) const { return _internal->getTrackOutgoingEventThreshold(track); }
+bool SpriteStudioPlayer2D::crossfade(int track, const String& anim_name, float duration) {
+    if (!_refused(_internal->crossfade(track, anim_name, duration),
+                  vformat("crossfade(%d, \"%s\")", track, anim_name), _no_animation(anim_name))) return false;
+    if (track == 0) _track_zero_switched();
+    return true;
+}
+bool SpriteStudioPlayer2D::fade_track(int track, float target_alpha, float duration) { return _internal->fadeTrack(track, target_alpha, duration); }
+float SpriteStudioPlayer2D::get_track_fade_progress(int track) const { return _internal->getTrackFadeProgress(track); }
+bool SpriteStudioPlayer2D::cancel_track_fade(int track) { return _internal->cancelTrackFade(track); }
+int64_t SpriteStudioPlayer2D::get_track_main_source(int track) const { return _internal->getTrackMainSource(track); }
+int64_t SpriteStudioPlayer2D::add_track_source(int track, const String& anim_name, float weight) {
+    const int64_t source = _internal->addTrackSource(track, anim_name, weight);
+    _refused(source >= 0, vformat("add_track_source(%d, \"%s\")", track, anim_name), _no_animation(anim_name));
+    return source;
+}
+bool SpriteStudioPlayer2D::set_source_weight(int64_t source, float weight) { return _internal->setSourceWeight(source, weight); }
+float SpriteStudioPlayer2D::get_source_weight(int64_t source) const { return _internal->getSourceWeight(source); }
+bool SpriteStudioPlayer2D::set_source_frame(int64_t source, float frame_no) { return _internal->setSourceFrame(source, frame_no); }
+float SpriteStudioPlayer2D::get_source_frame(int64_t source) const { return _internal->getSourceFrame(source); }
+bool SpriteStudioPlayer2D::set_source_event_threshold(int64_t source, float threshold) { return _internal->setSourceEventThreshold(source, threshold); }
+float SpriteStudioPlayer2D::get_source_event_threshold(int64_t source) const { return _internal->getSourceEventThreshold(source); }
+
+void SpriteStudioPlayer2D::setAnimation(const String& strName) {
+    // Naming the animation already set up changes nothing. A state machine does
+    // it every frame, and writing the loop count rearms it: a finite loop would
+    // never finish.
+    if (strName == _internal->getCurrentAnimation()) return;
+    _internal->setAnimation(strName);
+    _apply_transport_settings();
+    notify_property_list_changed();
+    update_configuration_warnings();
+    _drawn_rect_changed();
+}
+
+String SpriteStudioPlayer2D::getCurrentAnimation() const {
+    return _internal->getCurrentAnimation();
+}
+
+void SpriteStudioPlayer2D::setAutoplay(bool p_autoplay) {
+    _autoplay = p_autoplay;
+}
+
+bool SpriteStudioPlayer2D::isAutoplay() const {
+    return _autoplay;
+}
+
+bool SpriteStudioPlayer2D::isPlaying() const { return _internal->isPlaying(); }
+void SpriteStudioPlayer2D::play(float p_start_frame) { _internal->play(p_start_frame); }
+bool SpriteStudioPlayer2D::isPausing() const { return _internal->isPausing(); }
+bool SpriteStudioPlayer2D::isPlayingForward() const { return _internal->isPlayingForward(); }
+bool SpriteStudioPlayer2D::justLooped() const { return _internal->justLooped(); }
+bool SpriteStudioPlayer2D::isFinished() const { return _internal->isFinished(); }
+
+PackedStringArray SpriteStudioPlayer2D::get_animation_names() const {
+    Ref<SSABResource> res = _internal->getSSABResource();
+    return res.is_valid() ? res->get_animation_names() : PackedStringArray();
+}
+// Built-in audio is fired-and-forgotten: it is not coupled to animation pause or
+// stop. Sounds already playing run to completion.
+void SpriteStudioPlayer2D::pause() { _internal->pause(); }
+void SpriteStudioPlayer2D::resume() { _internal->resume(); }
+void SpriteStudioPlayer2D::stop() { _internal->stop(); }
+
+void SpriteStudioPlayer2D::_handle_audio(const Dictionary& payload) {
+    if (!_play_audio) return;
+    // Plays during real forward playback, including the editor preview (the
+    // runtime also fires audio events on reverse playback, which is a limitation).
+    if (!_internal->isPlayingForward()) return;
+    // A seek lands on a frame without crossing its keys, so they are not sounded.
+    if (_internal->isSeekLanding((int)payload.get("frame_no", -1))) return;
+
+    if (_audio_controller == nullptr) {
+        _audio_controller = memnew(SsAudioController(this));
+    }
+    _audio_controller->play(payload, getSSABResource(), _audio_backend.ptr(), _audio_volume, _audio_bus);
+}
+
+void SpriteStudioPlayer2D::set_play_audio(bool p_enabled) {
+    _play_audio = p_enabled;
+    // Turning built-in playback off stops any in-flight built-in voices.
+    if (!_play_audio && _audio_controller) _audio_controller->stop_all();
+}
+bool SpriteStudioPlayer2D::is_play_audio() const { return _play_audio; }
+
+void SpriteStudioPlayer2D::set_audio_volume(float p_volume) { _audio_volume = p_volume; }
+float SpriteStudioPlayer2D::get_audio_volume() const { return _audio_volume; }
+
+// Taken by each voice as it starts, as the volume is, so a change reaches the
+// next sound rather than the ones already playing.
+void SpriteStudioPlayer2D::set_audio_bus(const StringName& p_bus) { _audio_bus = p_bus; }
+StringName SpriteStudioPlayer2D::get_audio_bus() const { return _audio_bus; }
+
+void SpriteStudioPlayer2D::set_audio_backend(const Ref<SpriteStudioAudioBackend>& p_backend) {
+    _audio_backend = p_backend;
+}
+Ref<SpriteStudioAudioBackend> SpriteStudioPlayer2D::get_audio_backend() const { return _audio_backend; }
+
+// `flip_h` / `flip_v` with an `is_flipped_*` reader, because that is what
+// `Sprite2D` and `AnimatedSprite2D` already put on a 2D node — a Godot user
+// reaches for `flip_h` on anything that draws, and an inspector row called
+// `flip_x` next to a Sprite2D's `flip_h` would read as a different feature.
+void SpriteStudioPlayer2D::set_flip_h(bool p_flip) {
+    _flip_h = p_flip;
+    _update_root_transform();
+    _drawn_rect_changed();
+}
+
+bool SpriteStudioPlayer2D::is_flipped_h() const { return _flip_h; }
+
+void SpriteStudioPlayer2D::set_flip_v(bool p_flip) {
+    _flip_v = p_flip;
+    _update_root_transform();
+    _drawn_rect_changed();
+}
+
+bool SpriteStudioPlayer2D::is_flipped_v() const { return _flip_v; }
+
+void SpriteStudioPlayer2D::set_offset(const Vector2& p_offset) {
+    _offset = p_offset;
+    _update_root_transform();
+    _drawn_rect_changed();
+}
+
+Vector2 SpriteStudioPlayer2D::get_offset() const { return _offset; }
+
+Transform2D SpriteStudioPlayer2D::_make_root_transform() const {
+    Transform2D xform;
+    xform.columns[0].x = _flip_h ? -1.0 : 1.0;
+    xform.columns[1].y = _flip_v ? -1.0 : 1.0;
+    xform.columns[2] = _offset;
+    return xform;
+}
+
+void SpriteStudioPlayer2D::_update_root_transform() {
+    _internal->setRootTransform(_make_root_transform());
+}
+
+void SpriteStudioPlayer2D::_push_coverage_screen_scale() {
+    // local-unit -> viewport-pixel scale = node global transform composed with
+    // the viewport/camera transform. The mask coverage pass sizes its target to
+    // the mask's on-screen footprint using this, so off-screen-small players use
+    // small coverage textures. One frame of staleness on a zoom only nudges the
+    // chosen size class, so reading it here (before update) is fine.
+    const Vector2 sc = get_global_transform_with_canvas().get_scale();
+    const float sx = sc.x < 0.0f ? -sc.x : sc.x;
+    const float sy = sc.y < 0.0f ? -sc.y : sc.y;
+    _internal->setCoverageScreenScale(sx > sy ? sx : sy);
+}
+
+void SpriteStudioPlayer2D::_push_host_viewport() {
+    // The mask coverage target is parented to this viewport so the server draws
+    // it before us. Tree changes are the only thing that can move a node to
+    // another viewport, so pushing it there keeps the link current.
+    Viewport* vp = get_viewport();
+    _internal->setHostViewport(vp ? vp->get_viewport_rid() : RID());
+}
+
+namespace {
+// CanvasItem's own rule for whose setting "parent node" means: the parent, if it
+// is a canvas item and this node is not top level.
+const CanvasItem* ss_parent_item(const CanvasItem* p_item) {
+    return p_item->is_set_as_top_level() ? nullptr : Object::cast_to<CanvasItem>(p_item->get_parent());
+}
+} // namespace
+
+void SpriteStudioPlayer2D::_resolve_texture_settings() {
+    int filter = TEXTURE_FILTER_PARENT_NODE;
+    for (const CanvasItem* item = this; item && filter == TEXTURE_FILTER_PARENT_NODE; item = ss_parent_item(item)) {
+        filter = item->get_texture_filter();
+    }
+    int repeat = TEXTURE_REPEAT_PARENT_NODE;
+    for (const CanvasItem* item = this; item && repeat == TEXTURE_REPEAT_PARENT_NODE; item = ss_parent_item(item)) {
+        repeat = item->get_texture_repeat();
+    }
+    // The server's enums number these as CanvasItem's do, with its "default" --
+    // the viewport's setting -- where CanvasItem has "parent node", which is
+    // what a chain that runs out of canvas items means.
+    _resolved_texture_filter = filter;
+    _resolved_texture_repeat = repeat;
+}
+
+void SpriteStudioPlayer2D::_push_canvas_item_defaults() {
+    _internal->setCanvasItemDefaults(_resolved_texture_filter, _resolved_texture_repeat, get_light_mask());
+}
+
+void SpriteStudioPlayer2D::_push_self_modulate() {
+    const Color self_modulate = get_self_modulate();
+    if (self_modulate == _pushed_self_modulate) return;
+    _pushed_self_modulate = self_modulate;
+    _internal->setRootModulate(self_modulate);
+}
+
+void SpriteStudioPlayer2D::set_animation_process_mode(AnimationProcessMode p_mode) {
+    AnimationProcessMode mode = p_mode;
+    if (_process_mode == mode) return;
+
+    bool active = is_inside_tree();
+    if (active) {
+        if (_process_mode == ANIMATION_PROCESS_PHYSICS) {
+            set_physics_process_internal(false);
+        } else {
+            set_process_internal(false);
+        }
+    }
+    
+    _process_mode = mode;
+    
+    // MANUAL keeps the idle notification: the animation is not advanced there,
+    // but the audio controller still needs a per-frame tick, and the node has
+    // to keep reporting its on-screen scale for the mask coverage pass.
+    if (active) {
+        if (_process_mode == ANIMATION_PROCESS_PHYSICS) {
+            set_physics_process_internal(true);
+        } else {
+            set_process_internal(true);
+        }
+    }
+}
+
+SpriteStudioPlayer2D::AnimationProcessMode SpriteStudioPlayer2D::get_animation_process_mode() const { return _process_mode; }
+
+void SpriteStudioPlayer2D::advance(double p_delta) {
+    _push_coverage_screen_scale();
+    _push_self_modulate();
+    _push_canvas_item_defaults();
+    _internal->update(p_delta);
+    // Same post-update contract as an automatic tick: world matrices are final,
+    // so part attachments mirror their parts before anything draws.
+    emit_signal(SNAME("frame_updated"), _internal->getFrameNo());
+}
+
+void SpriteStudioPlayer2D::setSpeedScale(float p_speed) { _internal->setSpeed(p_speed); }
+float SpriteStudioPlayer2D::getSpeedScale() const { return _internal->getSpeed(); }
+
+void SpriteStudioPlayer2D::setFrameNo(float p_frame) { _internal->setFrameNo(p_frame); }
+float SpriteStudioPlayer2D::getFrameNo() const { return _internal->getFrameNo(); }
+
+int SpriteStudioPlayer2D::getTotalFrames() const { return _internal->getTotalFrames(); }
+
+void SpriteStudioPlayer2D::setFrameRate(int p_fps) { _internal->setFrameRate(p_fps); }
+int SpriteStudioPlayer2D::getFrameRate() const { return _internal->getFrameRate(); }
+
+int SpriteStudioPlayer2D::getStartFrame() const { return _internal->getAnimationSectionStart(); }
+int SpriteStudioPlayer2D::getEndFrame() const { return _internal->getAnimationSectionEnd(); }
+
+bool SpriteStudioPlayer2D::setAnimationSection(int p_start, int p_end) {
+    return _refused(_internal->setAnimationSection(p_start, p_end),
+                    vformat("set_animation_section(%d, %d)", p_start, p_end), "its end is before its start");
+}
+void SpriteStudioPlayer2D::setAnimationSectionStart(int p_start) { setAnimationSection(p_start, getAnimationSectionEnd()); }
+void SpriteStudioPlayer2D::setAnimationSectionEnd(int p_end) { setAnimationSection(getAnimationSectionStart(), p_end); }
+int SpriteStudioPlayer2D::getAnimationSectionStart() const { return _internal->getAnimationSectionStart(); }
+int SpriteStudioPlayer2D::getAnimationSectionEnd() const { return _internal->getAnimationSectionEnd(); }
+
+bool SpriteStudioPlayer2D::set_animation_section_by_label(const String& p_start_label, const String& p_end_label,
+                                                          int p_start_offset, int p_end_offset) {
+    const ss::format::AnimationData* animation = _internal->getCurrentAnimationData();
+    if (!animation) return false;
+    LocalVector<SsLabel> labels;
+    SsInternalPlayer::get_label_table(animation, labels);
+    const String call = vformat("set_animation_section_by_label(\"%s\", \"%s\", %d, %d)",
+                                p_start_label, p_end_label, p_start_offset, p_end_offset);
+    int start = 0;
+    int end = 0;
+    const bool has_start = SsInternalPlayer::find_label_frame(animation, labels, p_start_label, start);
+    const bool has_end = SsInternalPlayer::find_label_frame(animation, labels, p_end_label, end);
+    if (!has_start || !has_end) {
+        PackedStringArray missing;
+        if (!has_start) missing.push_back("\"" + p_start_label + "\"");
+        if (!has_end && p_end_label != p_start_label) missing.push_back("\"" + p_end_label + "\"");
+        return _refused(false, call, vformat("animation \"%s\" has no label %s", getCurrentAnimation(), String(" or ").join(missing)));
+    }
+    const int from = start + p_start_offset;
+    const int to = end + p_end_offset;
+    return _refused(_internal->setAnimationSection(from, to), call,
+                    vformat("its labels name frames %d to %d, and the end is before the start", from, to));
+}
+
+Array SpriteStudioPlayer2D::get_label_table(const String& p_animation) const {
+    Array table;
+    Ref<SSABResource> res = _internal->getSSABResource();
+    if (res.is_null()) return table;
+    const ss::format::AnimationData* animation = res->find_animation(p_animation.is_empty() ? getCurrentAnimation() : p_animation);
+    LocalVector<SsLabel> labels;
+    SsInternalPlayer::get_label_table(animation, labels);
+    for (uint32_t i = 0; i < labels.size(); i++) {
+        Dictionary label;
+        label["name"] = labels[i].name;
+        label["frame"] = labels[i].frame;
+        table.push_back(label);
+    }
+    return table;
+}
+
+void SpriteStudioPlayer2D::setPlaybackDirection(PlaybackDirection p_direction, PlaybackStyle p_style) { _internal->setPlaybackDirection((int)p_direction, (int)p_style); }
+SpriteStudioPlayer2D::PlaybackDirection SpriteStudioPlayer2D::getPlaybackDirection() const { return (PlaybackDirection)_internal->getPlaybackDirection(); }
+SpriteStudioPlayer2D::PlaybackStyle SpriteStudioPlayer2D::getPlaybackStyle() const { return (PlaybackStyle)_internal->getPlaybackStyle(); }
+
+void SpriteStudioPlayer2D::setLoopCount(int p_count) {
+    _loop_count = p_count;
+    _internal->setLoop(p_count);
+}
+// Reads the runtime rather than the field: the two agree, because every path
+// that re-runs `setup_animation` pushes the field back afterwards.
+int SpriteStudioPlayer2D::getLoopCount() const { return _internal->getLoop(); }
+
+void SpriteStudioPlayer2D::_apply_transport_settings() {
+    _internal->setLoop(_loop_count);
+}
+
+void SpriteStudioPlayer2D::_track_zero_switched() {
+    // The runtime carries speed, direction, frame rate and frame skip over to
+    // the incoming animation, but lays it looping forever, as a setup does: the
+    // loop count is the one setting that has to be put back.
+    _apply_transport_settings();
+    // `current_animation` now names the incoming animation.
+    notify_property_list_changed();
+    _drawn_rect_changed();
+}
+
+void SpriteStudioPlayer2D::setFrameSkipEnabled(bool p_skip) { _internal->setSkipFrames(p_skip); }
+bool SpriteStudioPlayer2D::isFrameSkipEnabled() const { return _internal->isSkipFrames(); }
+
+void SpriteStudioPlayer2D::setSubFrameEnabled(bool p_enabled) { _internal->setSubFrameEnabled(p_enabled); }
+bool SpriteStudioPlayer2D::isSubFrameEnabled() const { return _internal->isSubFrameEnabled(); }
+
+
+void SpriteStudioPlayer2D::_bind_methods() {
+    ClassDB::bind_method( D_METHOD( "set_ssab_resource", "res_ssab" ), &SpriteStudioPlayer2D::setSSABResource );
+    ClassDB::bind_method( D_METHOD( "get_ssab_resource" ), &SpriteStudioPlayer2D::getSSABResource );
+    ClassDB::bind_method( D_METHOD( "set_animation", "name" ), &SpriteStudioPlayer2D::setAnimation );
+    ClassDB::bind_method( D_METHOD( "get_current_animation" ), &SpriteStudioPlayer2D::getCurrentAnimation );
+
+    ClassDB::bind_method( D_METHOD( "set_autoplay", "autoplay" ), &SpriteStudioPlayer2D::setAutoplay );
+    ClassDB::bind_method( D_METHOD( "is_autoplay" ), &SpriteStudioPlayer2D::isAutoplay );
+
+    ClassDB::bind_method( D_METHOD( "is_playing" ), &SpriteStudioPlayer2D::isPlaying );
+    ClassDB::bind_method( D_METHOD( "play", "start_frame" ), &SpriteStudioPlayer2D::play, DEFVAL(-1.0f) );
+    ClassDB::bind_method( D_METHOD( "is_pausing" ), &SpriteStudioPlayer2D::isPausing );
+    ClassDB::bind_method( D_METHOD( "is_playing_forward" ), &SpriteStudioPlayer2D::isPlayingForward );
+    ClassDB::bind_method( D_METHOD( "just_looped" ), &SpriteStudioPlayer2D::justLooped );
+    ClassDB::bind_method( D_METHOD( "is_finished" ), &SpriteStudioPlayer2D::isFinished );
+    ClassDB::bind_method( D_METHOD( "get_animation_names" ), &SpriteStudioPlayer2D::get_animation_names );
+    ClassDB::bind_method( D_METHOD( "pause" ), &SpriteStudioPlayer2D::pause );
+    ClassDB::bind_method( D_METHOD( "resume" ), &SpriteStudioPlayer2D::resume );
+    ClassDB::bind_method( D_METHOD( "stop" ), &SpriteStudioPlayer2D::stop );
+
+    ClassDB::bind_method( D_METHOD( "set_speed_scale", "speed_scale" ), &SpriteStudioPlayer2D::setSpeedScale );
+    ClassDB::bind_method( D_METHOD( "get_speed_scale" ), &SpriteStudioPlayer2D::getSpeedScale );
+    ClassDB::bind_method( D_METHOD( "set_frame_no", "frame_no" ), &SpriteStudioPlayer2D::setFrameNo );
+    ClassDB::bind_method( D_METHOD( "get_frame_no" ), &SpriteStudioPlayer2D::getFrameNo );
+
+    ClassDB::bind_method( D_METHOD( "get_total_frames" ), &SpriteStudioPlayer2D::getTotalFrames );
+    ClassDB::bind_method( D_METHOD( "get_start_frame" ), &SpriteStudioPlayer2D::getStartFrame );
+    ClassDB::bind_method( D_METHOD( "get_end_frame" ), &SpriteStudioPlayer2D::getEndFrame );
+
+    ClassDB::bind_method( D_METHOD( "set_frame_rate", "fps" ), &SpriteStudioPlayer2D::setFrameRate );
+    ClassDB::bind_method( D_METHOD( "get_frame_rate" ), &SpriteStudioPlayer2D::getFrameRate );
+
+    ClassDB::bind_method( D_METHOD( "set_animation_section", "start", "end" ), &SpriteStudioPlayer2D::setAnimationSection );
+    ClassDB::bind_method( D_METHOD( "set_animation_section_start", "start" ), &SpriteStudioPlayer2D::setAnimationSectionStart );
+    ClassDB::bind_method( D_METHOD( "set_animation_section_end", "end" ), &SpriteStudioPlayer2D::setAnimationSectionEnd );
+    ClassDB::bind_method( D_METHOD( "get_animation_section_start" ), &SpriteStudioPlayer2D::getAnimationSectionStart );
+    ClassDB::bind_method( D_METHOD( "get_animation_section_end" ), &SpriteStudioPlayer2D::getAnimationSectionEnd );
+    ClassDB::bind_method( D_METHOD( "set_animation_section_by_label", "start_label", "end_label", "start_offset", "end_offset" ), &SpriteStudioPlayer2D::set_animation_section_by_label, DEFVAL(0), DEFVAL(0) );
+    ClassDB::bind_method( D_METHOD( "get_label_table", "animation" ), &SpriteStudioPlayer2D::get_label_table, DEFVAL(String()) );
+
+    ClassDB::bind_method( D_METHOD( "set_playback_direction", "direction", "style" ), &SpriteStudioPlayer2D::setPlaybackDirection );
+    ClassDB::bind_method( D_METHOD( "get_playback_direction" ), &SpriteStudioPlayer2D::getPlaybackDirection );
+    ClassDB::bind_method( D_METHOD( "get_playback_style" ), &SpriteStudioPlayer2D::getPlaybackStyle );
+
+    ClassDB::bind_method( D_METHOD( "set_loop_count", "count" ), &SpriteStudioPlayer2D::setLoopCount );
+    ClassDB::bind_method( D_METHOD( "get_loop_count" ), &SpriteStudioPlayer2D::getLoopCount );
+
+    ClassDB::bind_method( D_METHOD( "set_frame_skip_enabled", "enabled" ), &SpriteStudioPlayer2D::setFrameSkipEnabled );
+    ClassDB::bind_method( D_METHOD( "is_frame_skip_enabled" ), &SpriteStudioPlayer2D::isFrameSkipEnabled );
+
+    ClassDB::bind_method( D_METHOD( "set_sub_frame_enabled", "enabled" ), &SpriteStudioPlayer2D::setSubFrameEnabled );
+    ClassDB::bind_method( D_METHOD( "is_sub_frame_enabled" ), &SpriteStudioPlayer2D::isSubFrameEnabled );
+
+    ClassDB::bind_method( D_METHOD( "set_cellmap_texture", "cellmap_name", "texture" ), &SpriteStudioPlayer2D::set_cellmap_texture );
+    ClassDB::bind_method( D_METHOD( "get_cellmap_texture", "cellmap_name" ), &SpriteStudioPlayer2D::get_cellmap_texture );
+
+    ClassDB::bind_method( D_METHOD( "get_cellmap_names" ), &SpriteStudioPlayer2D::get_cellmap_names );
+    ClassDB::bind_method( D_METHOD( "get_cell_names", "cellmap_name" ), &SpriteStudioPlayer2D::get_cell_names );
+
+    ClassDB::bind_method( D_METHOD( "set_play_audio", "enabled" ), &SpriteStudioPlayer2D::set_play_audio );
+    ClassDB::bind_method( D_METHOD( "is_play_audio" ), &SpriteStudioPlayer2D::is_play_audio );
+    ClassDB::bind_method( D_METHOD( "set_audio_volume", "volume" ), &SpriteStudioPlayer2D::set_audio_volume );
+    ClassDB::bind_method( D_METHOD( "get_audio_volume" ), &SpriteStudioPlayer2D::get_audio_volume );
+    ClassDB::bind_method( D_METHOD( "set_audio_bus", "bus" ), &SpriteStudioPlayer2D::set_audio_bus );
+    ClassDB::bind_method( D_METHOD( "get_audio_bus" ), &SpriteStudioPlayer2D::get_audio_bus );
+    ClassDB::bind_method( D_METHOD( "set_audio_backend", "backend" ), &SpriteStudioPlayer2D::set_audio_backend );
+    ClassDB::bind_method( D_METHOD( "get_audio_backend" ), &SpriteStudioPlayer2D::get_audio_backend );
+
+    ClassDB::bind_method( D_METHOD( "set_offset", "offset" ), &SpriteStudioPlayer2D::set_offset );
+    ClassDB::bind_method( D_METHOD( "get_offset" ), &SpriteStudioPlayer2D::get_offset );
+
+    ClassDB::bind_method( D_METHOD( "set_animation_process_mode", "mode" ), &SpriteStudioPlayer2D::set_animation_process_mode );
+    ClassDB::bind_method( D_METHOD( "get_animation_process_mode" ), &SpriteStudioPlayer2D::get_animation_process_mode );
+    ClassDB::bind_method( D_METHOD( "advance", "delta" ), &SpriteStudioPlayer2D::advance );
+
+    ClassDB::bind_method( D_METHOD( "set_flip_h", "flip_h" ), &SpriteStudioPlayer2D::set_flip_h );
+    ClassDB::bind_method( D_METHOD( "is_flipped_h" ), &SpriteStudioPlayer2D::is_flipped_h );
+    ClassDB::bind_method( D_METHOD( "set_flip_v", "flip_v" ), &SpriteStudioPlayer2D::set_flip_v );
+    ClassDB::bind_method( D_METHOD( "is_flipped_v" ), &SpriteStudioPlayer2D::is_flipped_v );
+
+    ClassDB::bind_method( D_METHOD( "find_part_index", "part_name" ), &SpriteStudioPlayer2D::find_part_index );
+    ClassDB::bind_method( D_METHOD( "get_part_transform", "part_name" ), &SpriteStudioPlayer2D::get_part_transform );
+    ClassDB::bind_method( D_METHOD( "is_part_hidden", "part_name" ), &SpriteStudioPlayer2D::is_part_hidden );
+    ClassDB::bind_method( D_METHOD( "is_part_skinned_mesh", "part_name" ), &SpriteStudioPlayer2D::is_part_skinned_mesh );
+    ClassDB::bind_method( D_METHOD( "get_part_names" ), &SpriteStudioPlayer2D::get_part_names );
+    ClassDB::bind_method( D_METHOD( "get_part_quad", "part_name" ), &SpriteStudioPlayer2D::get_part_quad );
+    ClassDB::bind_method( D_METHOD( "hit_test_part", "point", "parts" ), &SpriteStudioPlayer2D::hit_test_part, DEFVAL(PackedStringArray()) );
+
+    ClassDB::bind_method( D_METHOD( "get_canvas_size" ), &SpriteStudioPlayer2D::get_canvas_size );
+    ClassDB::bind_method( D_METHOD( "get_canvas_rect" ), &SpriteStudioPlayer2D::get_canvas_rect );
+
+    // ---- Part overrides ---------------------------------------------------
+    ClassDB::bind_method( D_METHOD( "set_part_visibility_override", "part_name", "force_hidden", "cascade" ), &SpriteStudioPlayer2D::set_part_visibility_override, DEFVAL(false) );
+    ClassDB::bind_method( D_METHOD( "clear_part_visibility_override", "part_name" ), &SpriteStudioPlayer2D::clear_part_visibility_override );
+    ClassDB::bind_method( D_METHOD( "set_part_color_override", "part_name", "color", "blend_op", "priority" ), &SpriteStudioPlayer2D::set_part_color_override, DEFVAL(COLOR_BLEND_MIX), DEFVAL(OVERRIDE_PRIORITY_HOLD_UNTIL_NEXT_ANIMATION) );
+    ClassDB::bind_method( D_METHOD( "set_part_color_override_corners", "part_name", "corners", "blend_op", "priority" ), &SpriteStudioPlayer2D::set_part_color_override_corners, DEFVAL(COLOR_BLEND_MIX), DEFVAL(OVERRIDE_PRIORITY_HOLD_UNTIL_NEXT_ANIMATION) );
+    ClassDB::bind_method( D_METHOD( "clear_part_color_override", "part_name" ), &SpriteStudioPlayer2D::clear_part_color_override );
+    ClassDB::bind_method( D_METHOD( "set_part_cell_override", "part_name", "cellmap_name", "cell_name", "priority" ), &SpriteStudioPlayer2D::set_part_cell_override, DEFVAL(OVERRIDE_PRIORITY_HOLD_UNTIL_NEXT_ANIMATION) );
+    ClassDB::bind_method( D_METHOD( "clear_part_cell_override", "part_name" ), &SpriteStudioPlayer2D::clear_part_cell_override );
+    ClassDB::bind_method( D_METHOD( "clear_all_part_overrides" ), &SpriteStudioPlayer2D::clear_all_part_overrides );
+
+    // By-index variants
+    ClassDB::bind_method( D_METHOD( "set_part_visibility_override_by_index", "part_index", "force_hidden", "cascade" ), &SpriteStudioPlayer2D::set_part_visibility_override_by_index, DEFVAL(false) );
+    ClassDB::bind_method( D_METHOD( "clear_part_visibility_override_by_index", "part_index" ), &SpriteStudioPlayer2D::clear_part_visibility_override_by_index );
+    ClassDB::bind_method( D_METHOD( "set_part_color_override_by_index", "part_index", "color", "blend_op", "priority" ), &SpriteStudioPlayer2D::set_part_color_override_by_index, DEFVAL(COLOR_BLEND_MIX), DEFVAL(OVERRIDE_PRIORITY_HOLD_UNTIL_NEXT_ANIMATION) );
+    ClassDB::bind_method( D_METHOD( "set_part_color_override_corners_by_index", "part_index", "corners", "blend_op", "priority" ), &SpriteStudioPlayer2D::set_part_color_override_corners_by_index, DEFVAL(COLOR_BLEND_MIX), DEFVAL(OVERRIDE_PRIORITY_HOLD_UNTIL_NEXT_ANIMATION) );
+    ClassDB::bind_method( D_METHOD( "clear_part_color_override_by_index", "part_index" ), &SpriteStudioPlayer2D::clear_part_color_override_by_index );
+    ClassDB::bind_method( D_METHOD( "set_part_cell_override_by_index", "part_index", "cellmap_name", "cell_name", "priority" ), &SpriteStudioPlayer2D::set_part_cell_override_by_index, DEFVAL(OVERRIDE_PRIORITY_HOLD_UNTIL_NEXT_ANIMATION) );
+    ClassDB::bind_method( D_METHOD( "clear_part_cell_override_by_index", "part_index" ), &SpriteStudioPlayer2D::clear_part_cell_override_by_index );
+
+    // ---- Animation mixing: the track stack ---------------------------------
+    ClassDB::bind_method( D_METHOD( "set_track_animation", "track", "anim_name" ), &SpriteStudioPlayer2D::set_track_animation );
+    ClassDB::bind_method( D_METHOD( "get_track_count" ), &SpriteStudioPlayer2D::get_track_count );
+    ClassDB::bind_method( D_METHOD( "clear_track", "track" ), &SpriteStudioPlayer2D::clear_track );
+    ClassDB::bind_method( D_METHOD( "set_track_alpha", "track", "alpha" ), &SpriteStudioPlayer2D::set_track_alpha );
+    ClassDB::bind_method( D_METHOD( "get_track_alpha", "track" ), &SpriteStudioPlayer2D::get_track_alpha );
+    ClassDB::bind_method( D_METHOD( "set_track_blend", "track", "blend" ), &SpriteStudioPlayer2D::set_track_blend );
+    ClassDB::bind_method( D_METHOD( "get_track_blend", "track" ), &SpriteStudioPlayer2D::get_track_blend );
+    ClassDB::bind_method( D_METHOD( "set_track_sync", "track", "sync" ), &SpriteStudioPlayer2D::set_track_sync );
+    ClassDB::bind_method( D_METHOD( "get_track_sync", "track" ), &SpriteStudioPlayer2D::get_track_sync );
+    ClassDB::bind_method( D_METHOD( "set_track_frame", "track", "frame_no" ), &SpriteStudioPlayer2D::set_track_frame );
+    ClassDB::bind_method( D_METHOD( "get_track_frame", "track" ), &SpriteStudioPlayer2D::get_track_frame );
+    ClassDB::bind_method( D_METHOD( "set_track_speed", "track", "speed" ), &SpriteStudioPlayer2D::set_track_speed );
+    ClassDB::bind_method( D_METHOD( "get_track_speed", "track" ), &SpriteStudioPlayer2D::get_track_speed );
+    ClassDB::bind_method( D_METHOD( "set_track_frame_rate", "track", "fps" ), &SpriteStudioPlayer2D::set_track_frame_rate );
+    ClassDB::bind_method( D_METHOD( "get_track_frame_rate", "track" ), &SpriteStudioPlayer2D::get_track_frame_rate );
+    ClassDB::bind_method( D_METHOD( "set_track_frame_skip_enabled", "track", "enabled" ), &SpriteStudioPlayer2D::set_track_frame_skip_enabled );
+    ClassDB::bind_method( D_METHOD( "is_track_frame_skip_enabled", "track" ), &SpriteStudioPlayer2D::is_track_frame_skip_enabled );
+    ClassDB::bind_method( D_METHOD( "set_track_playback_direction", "track", "direction", "style" ), &SpriteStudioPlayer2D::set_track_playback_direction );
+    ClassDB::bind_method( D_METHOD( "get_track_playback_direction", "track" ), &SpriteStudioPlayer2D::get_track_playback_direction );
+    ClassDB::bind_method( D_METHOD( "get_track_playback_style", "track" ), &SpriteStudioPlayer2D::get_track_playback_style );
+    ClassDB::bind_method( D_METHOD( "set_track_loop_count", "track", "count" ), &SpriteStudioPlayer2D::set_track_loop_count );
+    ClassDB::bind_method( D_METHOD( "get_track_loop_count", "track" ), &SpriteStudioPlayer2D::get_track_loop_count );
+    ClassDB::bind_method( D_METHOD( "is_track_finished", "track" ), &SpriteStudioPlayer2D::is_track_finished );
+    ClassDB::bind_method( D_METHOD( "track_just_looped", "track" ), &SpriteStudioPlayer2D::track_just_looped );
+    ClassDB::bind_method( D_METHOD( "set_track_outgoing_event_threshold", "track", "threshold" ), &SpriteStudioPlayer2D::set_track_outgoing_event_threshold );
+    ClassDB::bind_method( D_METHOD( "get_track_outgoing_event_threshold", "track" ), &SpriteStudioPlayer2D::get_track_outgoing_event_threshold );
+    ClassDB::bind_method( D_METHOD( "crossfade", "track", "anim_name", "duration" ), &SpriteStudioPlayer2D::crossfade );
+    ClassDB::bind_method( D_METHOD( "fade_track", "track", "target_alpha", "duration" ), &SpriteStudioPlayer2D::fade_track );
+    ClassDB::bind_method( D_METHOD( "get_track_fade_progress", "track" ), &SpriteStudioPlayer2D::get_track_fade_progress );
+    ClassDB::bind_method( D_METHOD( "cancel_track_fade", "track" ), &SpriteStudioPlayer2D::cancel_track_fade );
+    ClassDB::bind_method( D_METHOD( "get_track_main_source", "track" ), &SpriteStudioPlayer2D::get_track_main_source );
+    ClassDB::bind_method( D_METHOD( "add_track_source", "track", "anim_name", "weight" ), &SpriteStudioPlayer2D::add_track_source );
+    ClassDB::bind_method( D_METHOD( "set_source_weight", "source", "weight" ), &SpriteStudioPlayer2D::set_source_weight );
+    ClassDB::bind_method( D_METHOD( "get_source_weight", "source" ), &SpriteStudioPlayer2D::get_source_weight );
+    ClassDB::bind_method( D_METHOD( "set_source_frame", "source", "frame_no" ), &SpriteStudioPlayer2D::set_source_frame );
+    ClassDB::bind_method( D_METHOD( "get_source_frame", "source" ), &SpriteStudioPlayer2D::get_source_frame );
+    ClassDB::bind_method( D_METHOD( "set_source_event_threshold", "source", "threshold" ), &SpriteStudioPlayer2D::set_source_event_threshold );
+    ClassDB::bind_method( D_METHOD( "get_source_event_threshold", "source" ), &SpriteStudioPlayer2D::get_source_event_threshold );
+
+    ADD_SIGNAL(
+        MethodInfo(
+            "user_data",
+            PropertyInfo(Variant::DICTIONARY, "payload")
+        )
+    );
+    // `signal` is a GDScript keyword, so a signal by that name cannot be connected
+    // to or awaited without fighting the parser. `_emitted` is the smallest suffix
+    // that keeps the name readable.
+    ADD_SIGNAL(
+        MethodInfo(
+            "signal_emitted",
+            PropertyInfo(Variant::STRING, "command"),
+            PropertyInfo(Variant::DICTIONARY, "value"),
+            PropertyInfo(Variant::DICTIONARY, "info")
+        )
+    );
+    ADD_SIGNAL(
+        MethodInfo(
+            "audio",
+            PropertyInfo(Variant::DICTIONARY, "payload")
+        )
+    );
+
+    // `current_animation` is an exported property, so the inspector, an AnimationPlayer track or a tool script can
+    // mount a different clip without any of the node's own callers touching it.
+    ADD_SIGNAL(MethodInfo("animation_changed", PropertyInfo(Variant::STRING, "anim_name")));
+    ADD_SIGNAL(MethodInfo("animation_started", PropertyInfo(Variant::STRING, "anim_name")));
+    ADD_SIGNAL(MethodInfo("animation_finished", PropertyInfo(Variant::STRING, "anim_name")));
+    ADD_SIGNAL(MethodInfo("animation_looped", PropertyInfo(Variant::STRING, "anim_name")));
+
+    // Emitted at the end of each processed tick, after the frame's world
+    // matrices are final. SpriteStudioPartAttachment2D connects to this to
+    // mirror a part's pose in the same frame it is rendered.
+    ADD_SIGNAL(MethodInfo("frame_updated", PropertyInfo(Variant::FLOAT, "frame_no")));
+
+    // Properties are registered statically so they land in ClassDB (visible to
+    // class_get_property_list and to binding generators). The hints that depend
+    // on the bound resource — the `current_animation` name list and the frame / section
+    // ranges — are injected per-instance by _validate_property. The order here
+    // is the inspector order; `cellmaps/*` still comes from _get_property_list
+    // because its entries depend on the resource's cell maps.
+    ADD_PROPERTY(
+        PropertyInfo(Variant::OBJECT, "ssab", PROPERTY_HINT_RESOURCE_TYPE, "SSABResource"),
+        "set_ssab_resource",
+        "get_ssab_resource"
+    );
+    // The accessors are deliberately asymmetric: `set_animation` and its read
+    // `get_current_animation`, which ADD_PROPERTY names independently -- so the
+    // property reads as Godot expects
+    // (`AnimationPlayer.current_animation` is this same thing) without inventing a
+    // `set_current_animation` that would be a second name for one operation.
+    ADD_PROPERTY(PropertyInfo(Variant::STRING, "current_animation", PROPERTY_HINT_ENUM, ""), "set_animation", "get_current_animation");
+    ADD_PROPERTY(PropertyInfo(Variant::BOOL, "autoplay"), "set_autoplay", "is_autoplay");
+    // Editor-only (never stored): the playhead is runtime state, but it stays in
+    // the property list so an AnimationPlayer can keyframe it.
+    ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "frame_no", PROPERTY_HINT_RANGE, "0,0,0.01", PROPERTY_USAGE_EDITOR), "set_frame_no", "get_frame_no");
+    ADD_PROPERTY(PropertyInfo(Variant::INT, "loop_count", PROPERTY_HINT_RANGE, "-1,9999,1,or_greater"), "set_loop_count", "get_loop_count");
+    ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "speed_scale", PROPERTY_HINT_RANGE, "0,4,0.01,or_greater"), "set_speed_scale", "get_speed_scale");
+
+    ADD_GROUP("Playback Options", "");
+    ADD_PROPERTY(PropertyInfo(Variant::BOOL, "frame_skip_enabled"), "set_frame_skip_enabled", "is_frame_skip_enabled");
+    ADD_PROPERTY(PropertyInfo(Variant::BOOL, "sub_frame_enabled"), "set_sub_frame_enabled", "is_sub_frame_enabled");
+    ADD_PROPERTY(PropertyInfo(Variant::INT, "animation_process_mode", PROPERTY_HINT_ENUM, "Physics,Idle,Manual"), "set_animation_process_mode", "get_animation_process_mode");
+
+    ADD_GROUP("Section", "");
+    ADD_PROPERTY(PropertyInfo(Variant::INT, "animation_section_start", PROPERTY_HINT_RANGE, "0,0,1"), "set_animation_section_start", "get_animation_section_start");
+    ADD_PROPERTY(PropertyInfo(Variant::INT, "animation_section_end", PROPERTY_HINT_RANGE, "0,0,1"), "set_animation_section_end", "get_animation_section_end");
+
+    ADD_GROUP("Offset", "");
+    ADD_PROPERTY(PropertyInfo(Variant::VECTOR2, "offset"), "set_offset", "get_offset");
+    ADD_PROPERTY(PropertyInfo(Variant::BOOL, "flip_h"), "set_flip_h", "is_flipped_h");
+    ADD_PROPERTY(PropertyInfo(Variant::BOOL, "flip_v"), "set_flip_v", "is_flipped_v");
+
+    ADD_GROUP("Audio", "");
+    ADD_PROPERTY(PropertyInfo(Variant::BOOL, "play_audio"), "set_play_audio", "is_play_audio");
+    ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "audio_volume", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_audio_volume", "get_audio_volume");
+    // The bus names come from the project's bus layout, in _validate_property.
+    ADD_PROPERTY(PropertyInfo(Variant::STRING_NAME, "audio_bus", PROPERTY_HINT_ENUM, ""), "set_audio_bus", "get_audio_bus");
+    ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "audio_backend", PROPERTY_HINT_RESOURCE_TYPE, "SpriteStudioAudioBackend"), "set_audio_backend", "get_audio_backend");
+
+    BIND_ENUM_CONSTANT(ANIMATION_PROCESS_PHYSICS);
+    BIND_ENUM_CONSTANT(ANIMATION_PROCESS_IDLE);
+    BIND_ENUM_CONSTANT(ANIMATION_PROCESS_MANUAL);
+
+    BIND_ENUM_CONSTANT(PLAYBACK_DIRECTION_FORWARD);
+    BIND_ENUM_CONSTANT(PLAYBACK_DIRECTION_BACKWARD);
+
+    BIND_ENUM_CONSTANT(PLAYBACK_STYLE_NORMAL);
+    BIND_ENUM_CONSTANT(PLAYBACK_STYLE_PING_PONG);
+
+    BIND_ENUM_CONSTANT(COLOR_BLEND_MIX);
+    BIND_ENUM_CONSTANT(COLOR_BLEND_MUL);
+    BIND_ENUM_CONSTANT(COLOR_BLEND_ADD);
+    BIND_ENUM_CONSTANT(COLOR_BLEND_SUB);
+
+    BIND_ENUM_CONSTANT(OVERRIDE_PRIORITY_OVERWRITE_ON_NEXT_KEYFRAME);
+    BIND_ENUM_CONSTANT(OVERRIDE_PRIORITY_HOLD_UNTIL_NEXT_ANIMATION);
+    BIND_ENUM_CONSTANT(OVERRIDE_PRIORITY_PERMANENT);
+
+    BIND_ENUM_CONSTANT(TRACK_BLEND_MIX);
+    BIND_ENUM_CONSTANT(TRACK_BLEND_ADDITIVE);
+
+    BIND_ENUM_CONSTANT(TRACK_SYNC_FREE);
+    BIND_ENUM_CONSTANT(TRACK_SYNC_START);
+}
+
+// Runtime-only properties. They stay reachable by name (`player.frame_rate = 30`)
+// but are deliberately absent from the property list, so they are neither shown
+// in the inspector nor stored in the scene. Except the cellmaps/* entries,
+// everything the inspector shows is registered statically in _bind_methods.
+bool SpriteStudioPlayer2D::_set(const StringName& p_name, const Variant& p_property) {
+    String name = p_name;
+    if (name == "frame_rate") {
+        setFrameRate(p_property);
+        return true;
+    } else if (name == "playback_direction") {
+        setPlaybackDirection((PlaybackDirection)(int)p_property, getPlaybackStyle());
+        return true;
+    } else if (name == "playback_style") {
+        setPlaybackDirection(getPlaybackDirection(), (PlaybackStyle)(int)p_property);
+        return true;
+    }
+
+    if (name.begins_with("cellmaps/")) {
+        String cellmap_name = name.trim_prefix("cellmaps/");
+        set_cellmap_texture(cellmap_name, p_property);
+        return true;
+    }
+
+    return false;
+}
+
+bool SpriteStudioPlayer2D::_get(const StringName& p_name, Variant& r_property) const {
+    String name = p_name;
+    if (name == "frame_rate") {
+        r_property = getFrameRate();
+        return true;
+    } else if (name == "playback_direction") {
+        r_property = getPlaybackDirection();
+        return true;
+    } else if (name == "playback_style") {
+        r_property = getPlaybackStyle();
+        return true;
+    }
+
+    if (name.begins_with("cellmaps/")) {
+        String cellmap_name = name.trim_prefix("cellmaps/");
+        r_property = get_cellmap_texture(cellmap_name);
+        return true;
+    }
+
+    return false;
+}
+
+void SpriteStudioPlayer2D::_get_property_list(List<PropertyInfo>* p_list) const {
+    // One entry per cell map in the bound resource. Unlike the rest of the
+    // inspector these cannot be registered statically, because both their count
+    // and their names come from the resource.
+    Ref<SSABResource> res = _internal->getSSABResource();
+    if (res.is_null()) {
+        return;
+    }
+
+    PackedStringArray cellmap_names = res->get_cellmap_names();
+    if (cellmap_names.size() == 0) {
+        return;
+    }
+
+    p_list->push_back(PropertyInfo(Variant::NIL, "CellMap Overrides", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_GROUP));
+    for (int i = 0; i < cellmap_names.size(); i++) {
+        p_list->push_back(PropertyInfo(Variant::OBJECT, "cellmaps/" + cellmap_names[i], PROPERTY_HINT_RESOURCE_TYPE, "Texture2D"));
+    }
+}
+
+void SpriteStudioPlayer2D::_validate_property(PropertyInfo& p_property) const {
+    if (p_property.name == StringName("current_animation")) {
+        // Turn the statically registered enum hint into the animation names of
+        // the bound resource. Left empty when no resource is assigned.
+        Ref<SSABResource> res = _internal->getSSABResource();
+        if (res.is_valid()) {
+            PackedStringArray anim_names = res->get_animation_names();
+            p_property.hint_string = String(",").join(anim_names);
+        }
+        return;
+    }
+
+    if (p_property.name == StringName("audio_bus")) {
+        // The list AudioStreamPlayer.bus offers: the buses of the current layout.
+        AudioServer* audio = AudioServer::get_singleton();
+        PackedStringArray buses;
+        for (int i = 0; i < audio->get_bus_count(); i++) {
+            buses.push_back(audio->get_bus_name(i));
+        }
+        p_property.hint_string = String(",").join(buses);
+        return;
+    }
+
+    // The playhead stays inside the section, and the section's ends inside the
+    // animation; only the instance knows either. Before an animation is set up
+    // both read 0.
+    if (p_property.name == StringName("frame_no")) {
+        p_property.hint_string = vformat("%d,%d,0.01", getAnimationSectionStart(), getAnimationSectionEnd());
+    } else if (p_property.name == StringName("animation_section_start") ||
+               p_property.name == StringName("animation_section_end")) {
+        const ss::format::AnimationData* animation = _internal->getCurrentAnimationData();
+        p_property.hint_string = animation ? vformat("%d,%d,1", animation->start_frame(), animation->end_frame()) : String("0,0,1");
+        // Stored only when narrowed: an end saved untouched would cut off the
+        // frames a later reconvert adds, with no error.
+        if (animation) {
+            const bool whole = p_property.name == StringName("animation_section_start")
+                    ? getAnimationSectionStart() == animation->start_frame()
+                    : getAnimationSectionEnd() == animation->end_frame();
+            if (whole) p_property.usage &= ~PROPERTY_USAGE_STORAGE;
+        }
+    }
+}
+
+#ifdef SPRITESTUDIO_GODOT_EXTENSION
+PackedStringArray SpriteStudioPlayer2D::_get_configuration_warnings() const {
+    PackedStringArray warnings;
+#else
+PackedStringArray SpriteStudioPlayer2D::get_configuration_warnings() const {
+    PackedStringArray warnings = Node2D::get_configuration_warnings();
+#endif
+    if (getSSABResource().is_null()) {
+        warnings.push_back(tr("Assign an SSABResource to the \"ssab\" property to play an animation."));
+    } else if (getCurrentAnimation().is_empty()) {
+        warnings.push_back(tr("Select an animation in the \"current_animation\" property."));
+    }
+    // The node draws nothing itself -- every part draws on a canvas item of its
+    // own, with the plugin's shader -- so a material set here reaches nothing.
+    if (get_material().is_valid()) {
+        warnings.push_back(tr("The \"material\" property has no effect on this node: every part draws with the plugin's own shader. To run a shader over the whole animation, make this node a child of a CanvasGroup and give the CanvasGroup the material."));
+    }
+    return warnings;
+}
+
+void SpriteStudioPlayer2D::_notification(int p_notification) {
+    switch (p_notification) {
+        case NOTIFICATION_READY:
+            if (!Engine::get_singleton()->is_editor_hint()) {
+                if (_autoplay) {
+                    play();
+                }
+            }
+            break;
+        case NOTIFICATION_ENTER_TREE:
+            // Re-parent the InternalPlayer's root canvas item to ours so the
+            // Node2D's transform / visibility / Z-order propagate. Also done
+            // here so editor reloads (which destroy / reattach the canvas)
+            // don't leave the InternalPlayer floating.
+            _internal->setParentCanvasItem(get_canvas_item());
+            _push_host_viewport();
+            _resolve_texture_settings();
+            _push_self_modulate();
+            _push_canvas_item_defaults();
+            if (_process_mode == ANIMATION_PROCESS_PHYSICS) {
+                set_physics_process_internal(true);
+            } else {
+                set_process_internal(true);
+            }
+            break;
+        case NOTIFICATION_EXIT_TREE:
+            _internal->setParentCanvasItem(RID());
+            _internal->setHostViewport(RID());
+            // The pooled AudioStreamPlayer children leave the tree with us and
+            // stop; reset the controller's bookkeeping to match.
+            if (_audio_controller) _audio_controller->stop_all();
+            break;
+        case NOTIFICATION_INTERNAL_PROCESS:
+            // Pushed whichever mode is running: MANUAL does not advance the
+            // animation here, but it still has to report its on-screen scale
+            // for the mask coverage pass, and self_modulate and the light mask
+            // still have to reach the parts.
+            _push_coverage_screen_scale();
+            _push_self_modulate();
+            _push_canvas_item_defaults();
+            if (_process_mode == ANIMATION_PROCESS_IDLE) {
+                _internal->update(get_process_delta_time());
+                // Post-update: world matrices are final this tick, so part
+                // attachments can mirror their parts in the same frame.
+                emit_signal(SNAME("frame_updated"), _internal->getFrameNo());
+            } else {
+                // MANUAL. `advance()` is playback, and an override is not, so a
+                // project that drives its own frames still gets the override on
+                // screen without having to step the animation to see it.
+                _internal->redraw_pending_overrides();
+            }
+            // Audio voices advance independently of the animation's play/pause
+            // state (fire-and-forget), so tick every frame the node processes.
+            if (_audio_controller) _audio_controller->tick();
+            break;
+        case NOTIFICATION_INTERNAL_PHYSICS_PROCESS:
+            if (_process_mode == ANIMATION_PROCESS_PHYSICS) {
+                _push_coverage_screen_scale();
+                _push_self_modulate();
+                _push_canvas_item_defaults();
+                _internal->update(get_physics_process_delta_time());
+                emit_signal(SNAME("frame_updated"), _internal->getFrameNo());
+            }
+            if (_audio_controller) _audio_controller->tick();
+            break;
+        case NOTIFICATION_DRAW:
+            // The InternalPlayer draws on canvas items of its own, nested under
+            // ours, so there is nothing to draw here. A redraw is also how a
+            // texture filter or repeat change -- ours or an ancestor's -- arrives.
+            _resolve_texture_settings();
+            _push_canvas_item_defaults();
+            break;
+    }
+}

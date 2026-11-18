@@ -1,0 +1,42 @@
+# 🤖 CLI ツールによるコンバートと自動化
+
+Godot エディタの「SS Importer」ドックを使った直感的なインポート方法は [アセットのインポートとエディタ連携](usage_asset_pipeline.md) を参照してください。
+
+このドキュメントでは、Godot エディタを起動せずにコマンドラインから変換を行う方法を解説します。これは CI/CD (継続的インテグレーション) やビルドパイプラインに変換処理を組み込みたい場合、あるいは大量のアセットを一括変換したい場合に非常に便利です。
+
+## SpriteStudio-SDK の `ssconverter-cli` を使う
+
+SpriteStudio プロジェクト (`.sspj`) から SpriteStudio のランタイムバイナリ (`.ssab` / `.ssqb`) への変換は、SDK に同梱されている `ssconverter-cli` という独立したコマンドラインツールを使用して行われます（エディタのインポータは同じ変換を `libssconverter` で行います）。
+
+### 1. ツールの取得
+
+[SpriteStudio-SDK の Releases](https://github.com/cri-middleware/SpriteStudio-SDK/releases) から、SS Importer ドックの下部の **converter:** 行と同じバージョンのリリースを選び、該当プラットフォーム (Windows / macOS / Linux) 向けの `ssconverter-cli` バイナリをダウンロードします。異なるスキーマ版で作られた `.ssab` は読み込めません。
+
+### 2. コマンドラインからの実行
+
+ターミナル（またはコマンドプロンプト）を開き、`.sspj` ファイルへのパスを引数に渡して実行します。
+
+**Windows:**
+```powershell
+.\ssconverter-cli.exe path\to\your.sspj
+```
+
+**macOS / Linux:**
+```bash
+./ssconverter-cli path/to/your.sspj
+```
+
+### 3. 生成物の配置
+
+変換結果は、元の `.sspj` と同じディレクトリに `<sspj 名>/` というフォルダが作成され、その配下に `.ssab` (アニメパック単位) および `.ssqb` (シーケンス単位) として出力されます。参照しているテクスチャとサウンドも同じフォルダに置かれます。
+
+生成されたファイルを Godot プロジェクトの `res://` 配下の任意のディレクトリにコピーすることで、Godot 上で `SSABResource` / `SSQBResource` として読み込めるようになります。
+
+> [!IMPORTANT]
+> コピーするのは **`<sspj 名>/` フォルダごと**です。`.ssab` は参照するテクスチャ・サウンド・Instance パーツの参照先を、自身のディレクトリを基準にしたパスで解決します。中身を分けて配置すると解決に失敗します。詳しくは [生成アセットの構成と配信](generated_assets.md#依存関係) を参照してください。
+
+---
+
+## 高度なオプション
+
+`ssconverter-cli` には、変換時の挙動を制御するためのオプションが用意されています。詳細なオプション一覧や仕様については、SDK リポジトリの [cli/README.ja.md](https://github.com/cri-middleware/SpriteStudio-SDK/blob/HEAD/cli/README.ja.md) を参照してください。

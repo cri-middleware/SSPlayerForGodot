@@ -1,21 +1,35 @@
 #!/usr/bin/env python
 import os
+import re
 import sys
-import subprocess
 
+# --- Configuration & Constants ---
+LIB_NAME = "SSGodot"
+DEFAULT_PROJECT_DIR = os.path.join("examples", "dev_gdextension")
+
+# --- Helper Functions ---
 def normalize_path(val, env):
     return val if os.path.isabs(val) else os.path.join(env.Dir("#").abspath, val)
-
 
 def validate_parent_dir(key, val, env):
     if not os.path.isdir(normalize_path(os.path.dirname(val), env)):
         raise UserError("'%s' is not a directory: %s" % (key, os.path.dirname(val)))
 
-
-libname = "SSGodot"
-projectdir = os.path.join("examples", "feature_test_gdextension")
-
+# --- Environment Setup ---
 localEnv = Environment(tools=["default"], PLATFORM="")
+
+# Derived-file cache: share compiled objects across builds/targets when
+# SCONS_CACHE points at a directory (the CI wires it to an actions/cache
+# path). SCons does not expand ~, and godot-cpp's SConstruct hands
+# SCONS_CACHE to CacheDir as is, so the expanded path is written back.
+scons_cache = os.environ.get("SCONS_CACHE")
+if scons_cache:
+    os.environ["SCONS_CACHE"] = os.path.expanduser(scons_cache)
+    CacheDir(os.environ["SCONS_CACHE"])
+
+# Import shared source definitions
+sys.path.append(os.path.join(str(Dir("#").abspath), "ss_player"))
+import sources
 
 customs = ["custom.py"]
 customs = [os.path.abspath(path) for path in customs]
@@ -36,6 +50,13 @@ opts.Add(
         validator=validate_parent_dir,
     )
 )
+opts.Add(
+    PathVariable(
+        key="target_path",
+        help="Path to the Godot project where the extension will be installed",
+        default=DEFAULT_PROJECT_DIR,
+    )
+)
 opts.Update(localEnv)
 
 Help(opts.GenerateHelpText(localEnv))
@@ -43,111 +64,174 @@ Help(opts.GenerateHelpText(localEnv))
 env = localEnv.Clone()
 env["compiledb"] = False
 
+# --- Compilation Database ---
 env.Tool("compilation_db")
 compilation_db = env.CompilationDatabase(
     normalize_path(localEnv["compiledb_file"], localEnv)
 )
 env.Alias("compiledb", compilation_db)
 
+# --- godot-cpp Validation ---
 submodule_initialized = False
 dir_name = 'godot-cpp'
-if os.path.isdir(dir_name):
-    if os.listdir(dir_name):
-        submodule_initialized = True
+if os.path.isdir(dir_name) and os.listdir(dir_name):
+    submodule_initialized = True
 
 if not submodule_initialized:
-    print("""godot-cpp is not available within this folder, as Git submodules haven't been initialized.
-Run the following command to download godot-cpp:
+    print("""godot-cpp is not available within this folder. It is not a submodule; clone it here:
 
-    git submodule update --init --recursive""")
+    git clone https://github.com/godotengine/godot-cpp.git -b master""")
     sys.exit(1)
 
+# --- Initialize godot-cpp ---
 env = SConscript("godot-cpp/SConstruct", {"env": env, "customs": customs})
 
+# --- Source Files ---
+# Extension sources
+sources_list = Glob("ss_player/*.cpp")
+
+# FlatBuffers is header-only here -- see the note in ss_player/sources.py.
+
+# Version header: stamp VERSION.txt + git hash into ss_player/gen/ss_version.gen.h
+# (gitignored). Shared with the custom module build via ss_player/sources.py.
+sources.generate_version_header()
+
+# --- Compilation Flags & Includes ---
 env.Append(CPPDEFINES = "SPRITESTUDIO_GODOT_EXTENSION")
-env.Append(CPPDEFINES = "_NOTUSE_STBI")
-env.Append(CPPDEFINES = "_NOTUSE_TEXTURE_FULLPATH")
-env.Append(CPPDEFINES = "_NOTUSE_EXCEPTION")
-env.Append(CPPPATH=["src/"])
-env.Append(
-	CPPPATH=[
-		"gd_spritestudio/SpriteStudio6-SDK/Common/Loader",
-		"gd_spritestudio/SpriteStudio6-SDK/Common/Animator",
-		"gd_spritestudio/SpriteStudio6-SDK/Common/Helper",
-	]
-)
+env.Append(CPPPATH=sources.get_include_paths("ss_player"))
 
-if env["platform"] == 'macos':
-    env.Append(LINKFLAGS=["-framework", "CoreFoundation"])
+if env["platform"] in ["macos", "linux", "ios", "android"]:
+    env.Append(CCFLAGS=["-fvisibility=hidden"])
+    env.Append(CXXFLAGS=["-fvisibility=hidden"])
 
-# Set iOS minimum deployment target
-if env["platform"] == "ios":
-    env.Append(CCFLAGS=["-miphoneos-version-min=12.0"])
-    env.Append(LINKFLAGS=["-miphoneos-version-min=12.0"])
+# --- Libraries & Library Paths ---
+extension_path = env.Dir('.').abspath
+platform = env['platform']
+arch = env['arch']
 
-sources = Glob("gd_spritestudio/*.cpp")
-sources.extend(Glob("gd_spritestudio/SpriteStudio6-SDK/Common/Loader/tinyxml2/*.cpp"))
-sources.extend(Glob("gd_spritestudio/SpriteStudio6-SDK/Common/Loader/*.cpp"))
-sources.extend(Glob("gd_spritestudio/SpriteStudio6-SDK/Common/Animator/*.cpp"))
-sources.extend(Glob("gd_spritestudio/SpriteStudio6-SDK/Common/Helper/DebugPrint.cpp"))
-sources.extend(Glob("gd_spritestudio/SpriteStudio6-SDK/Common/Helper/IsshTexture.cpp"))
-sources.extend(Glob("gd_spritestudio/SpriteStudio6-SDK/Common/Helper/stb_image.c"))
+runtime_libpath = sources.get_runtime_lib_path(os.path.join(extension_path, "ss_player"), platform, arch)
 
+env.Append(LIBPATH=[runtime_libpath])
+
+if env['target'] == 'editor':
+    env.Append(LIBS=["ssconverter"])
+    if platform == "windows":
+        env.Append(LINKFLAGS=["Userenv.lib", "Bcrypt.lib", "Ntdll.lib", "Ws2_32.lib", "Synchronization.lib"])
+        env.Append(LINKFLAGS=["/FORCE:MULTIPLE", "/IGNORE:4006", "/WX:NO"])
+    elif platform == "macos" and env["debug_symbols"]:
+        # The same pair /FORCE:MULTIPLE lets through on Windows: ssruntime's own
+        # panic handler and the one in ssconverter's std. ld64 rejects them as
+        # duplicates unless it dead-strips, and godot-cpp passes -dead_strip
+        # only while debug_symbols is off.
+        env.Append(LINKFLAGS=["-Wl,-dead_strip"])
+    elif platform == "linux":
+        # The same pair, plus the allocator shims, which GNU ld rejects as
+        # duplicates outright. This is its /FORCE:MULTIPLE.
+        env.Append(LINKFLAGS=["-Wl,--allow-multiple-definition"])
+
+if platform == "ios":
+    if env.get("ios_simulator", False):
+        slice_dir = "ios-arm64_x86_64-simulator"
+    else:
+        slice_dir = "ios-arm64"
+    xcf_libpath = os.path.join(runtime_libpath, "libssruntime.xcframework", slice_dir)
+    env.Append(LIBPATH=[xcf_libpath])
+
+env.Append(LIBS=["ssruntime"])
+
+# Platform specific frameworks
+if platform == 'macos':
+    env.Append(LINKFLAGS=["-framework", "CoreFoundation", "-framework", "CoreServices"])
+
+if platform == "ios":
+    # godot-cpp's ios tool already selects the iphoneos/iphonesimulator SDK and
+    # archs from `ios_simulator`; match its deployment-target flag here. A
+    # hardcoded -miphoneos-version-min forces a device target and breaks the
+    # simulator build (object built for 'iOS' vs 'iOS-simulator' link mismatch).
+    if env["ios_simulator"]:
+        ios_flags = ["-mios-simulator-version-min=12.0"]
+    else:
+        ios_flags = ["-miphoneos-version-min=12.0"]
+    env.Append(CCFLAGS=ios_flags)
+    env.Append(LINKFLAGS=ios_flags)
+
+# --- DocData Generation ---
 if env["target"] in ["editor", "template_debug"]:
     try:
-        doc_data = env.GodotCPPDocData("src/gen/doc_data.gen.cpp", source=Glob("doc_classes/*.xml"))
-        sources.append(doc_data)
+        # Output to ss_player/gen.
+        # XML lives in ss_player/doc_classes so the same files feed the custom
+        # module build (Godot auto-collects <module>/doc_classes via config.py).
+        doc_data = env.GodotCPPDocData("ss_player/gen/doc_data.gen.cpp", source=Glob("ss_player/doc_classes/*.xml"))
+        sources_list.append(doc_data)
     except AttributeError:
         print("Not including class reference as we're targeting a pre-4.3 baseline.")
 
-file = "lib{}{}{}".format(libname, env["suffix"], env["SHLIBSUFFIX"])
-filepath = ""
+# --- Shared Library Target ---
+target_suffix = env["suffix"]
+lib_suffix = env["SHLIBSUFFIX"]
+file_name = "lib{}{}{}".format(LIB_NAME, target_suffix, lib_suffix)
+framework_path = ""
 
-if env["platform"] == "macos" or env["platform"] == "ios":
-    filepath = "lib{}.{}.{}.framework/".format(libname, env["platform"], env["target"])
-    file = "lib{}.{}.{}".format(libname, env["platform"], env["target"])
-    env.Append(LINKFLAGS=["-Wl,-install_name,@rpath/{}{}".format(filepath, file)])
+if platform in ["macos", "ios"]:
+    framework_path = "lib{}.{}.{}.framework/".format(LIB_NAME, platform, env["target"])
+    file_name = "lib{}.{}.{}".format(LIB_NAME, platform, env["target"])
+    env.Append(LINKFLAGS=["-Wl,-install_name,@rpath/{}{}".format(framework_path, file_name)])
 
-libraryfile = "bin/{}/{}{}".format(env["platform"], filepath, file)
-library = env.SharedLibrary(
-    libraryfile,
-    source=sources,
-)
+library_output = "bin/{}/{}{}".format(platform, framework_path, file_name)
+library = env.SharedLibrary(library_output, source=sources_list)
 
-if env["platform"] == "macos" or env["platform"] == "ios":
+# --- macOS / iOS Framework Bundles ---
+plist_target = None
+if platform in ["macos", "ios"]:
+    # CFBundleShortVersionString and CFBundleVersion take up to three
+    # period-separated integers, so a prerelease's suffix is left out.
+    version = re.match(r"\d+(?:\.\d+){0,2}", sources.read_version()).group(0)
+
     plist_subst = {
-        "${BUNDLE_LIBRARY}": file,
+        "${BUNDLE_LIBRARY}": file_name,
         "${BUNDLE_NAME}": "ssplayer-godot",
-        "${BUNDLE_IDENTIFIER}": "jp.co.cri-mw.spritestudio.ssplayer-godot.{}".format(env["target"]),
-        "${BUNDLE_VERSION}": subprocess.check_output(['git', 'rev-parse', '--abbrev-ref', 'HEAD']).decode('utf-8').strip().split('-')[0] + '.0',
+        # CFBundleIdentifier allows only alphanumerics, '-' and '.', so sanitize the
+        # target name ("template_debug" -> "template-debug"); underscores make Xcode
+        # reject the embedded framework on iOS ("invalid CFBundleIdentifier").
+        "${BUNDLE_IDENTIFIER}": "jp.co.cri-mw.spritestudio.ssplayer-godot.{}".format(env["target"].replace("_", "-")),
+        "${BUNDLE_VERSION}": version,
         "${MIN_MACOS_VERSION}": "10.12",
         "${MIN_IOS_VERSION}": "12.0"
     }
 
-    if env["platform"] == "macos":
-        plist_file = "bin/macos/{}Resources/Info.plist".format(filepath)
-        plist = env.Substfile(
-            target=plist_file,
-            source="misc/Info.macos.plist",
-            SUBST_DICT=plist_subst
-        )
-    elif env["platform"] == "ios":
-        plist_file = "bin/ios/{}Info.plist".format(filepath)
-        plist = env.Substfile(
-            target=plist_file,
-            source="misc/Info.ios.plist",
-            SUBST_DICT=plist_subst
-        )
+    if platform == "macos":
+        plist_src = "misc/Info.macos.plist"
+        plist_file = "bin/macos/{}Resources/Info.plist".format(framework_path)
+    else: # ios
+        plist_src = "misc/Info.ios.plist"
+        plist_file = "bin/ios/{}Info.plist".format(framework_path)
 
-    env.Depends(library, plist)
+    plist_target = env.Substfile(target=plist_file, source=plist_src, SUBST_DICT=plist_subst)
+    env.Depends(library, plist_target)
 
-copy = env.InstallAs("{}/{}".format(projectdir, libraryfile), library)
-default_args = [library, copy]
+# --- Installation & Default Target ---
+project_dir = env["target_path"]
+addons_dir = "addons/spritestudio"
+install_targets = [library]
 
-if env["platform"] == "macos" or env["platform"] == "ios":
-    copy_plist = env.InstallAs("{}/{}".format(projectdir, plist_file), plist_file)
-    default_args.append(copy_plist)
+# Copy library to project (following addons/spritestudio structure)
+library_install_path = "{}/{}/{}".format(project_dir, addons_dir, library_output)
+copy_lib = env.InstallAs(library_install_path, library)
+install_targets.append(copy_lib)
+
+# Copy Plist if applicable
+if plist_target:
+    plist_install_path = "{}/{}/{}".format(project_dir, addons_dir, plist_file)
+    copy_plist = env.InstallAs(plist_install_path, plist_target)
+    install_targets.append(copy_plist)
+
+# Copy .gdextension file to addons/spritestudio
+gdextension_src = "misc/spritestudio.gdextension"
+gdextension_dest = "{}/{}/spritestudio.gdextension".format(project_dir, addons_dir)
+copy_gdextension = env.InstallAs(gdextension_dest, gdextension_src)
+install_targets.append(copy_gdextension)
 
 if localEnv.get("compiledb", False):
-    default_args += [compilation_db]
-Default(*default_args)
+    install_targets.append(compilation_db)
+
+Default(*install_targets)
