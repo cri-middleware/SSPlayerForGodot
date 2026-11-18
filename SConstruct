@@ -20,10 +20,12 @@ localEnv = Environment(tools=["default"], PLATFORM="")
 
 # Derived-file cache: share compiled objects across builds/targets when
 # SCONS_CACHE points at a directory (the CI wires it to an actions/cache
-# path). ~ is expanded here because SCons does not do it itself.
+# path). SCons does not expand ~, and godot-cpp's SConstruct hands
+# SCONS_CACHE to CacheDir as is, so the expanded path is written back.
 scons_cache = os.environ.get("SCONS_CACHE")
 if scons_cache:
-    CacheDir(os.path.expanduser(scons_cache))
+    os.environ["SCONS_CACHE"] = os.path.expanduser(scons_cache)
+    CacheDir(os.environ["SCONS_CACHE"])
 
 # Import shared source definitions
 sys.path.append(os.path.join(str(Dir("#").abspath), "ss_player"))
