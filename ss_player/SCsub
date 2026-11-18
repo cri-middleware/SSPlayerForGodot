@@ -47,6 +47,10 @@ if env['target'] == 'editor':
     if platform == "windows":
         env.Append(LINKFLAGS=["Userenv.lib", "Bcrypt.lib", "Ntdll.lib", "Ws2_32.lib"])
         env.Append(LINKFLAGS=["/FORCE:MULTIPLE", "/IGNORE:4006"])
+    elif platform == "linux":
+        # ssruntime's panic handler and allocator shims against the ones in
+        # ssconverter's std, which GNU ld rejects as duplicates.
+        env.Append(LINKFLAGS=["-Wl,--allow-multiple-definition"])
 
 # On Apple embedded platforms (iOS) the engine is archived into a single static
 # library: platform/ios/SCsub feeds env["LIBS"] as *input files* to
