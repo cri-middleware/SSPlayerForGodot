@@ -116,7 +116,7 @@ env.Append(LIBPATH=[runtime_libpath])
 if env['target'] == 'editor':
     env.Append(LIBS=["ssconverter"])
     if platform == "windows":
-        env.Append(LINKFLAGS=["Userenv.lib", "Bcrypt.lib", "Ntdll.lib", "Ws2_32.lib"])
+        env.Append(LINKFLAGS=["Userenv.lib", "Bcrypt.lib", "Ntdll.lib", "Ws2_32.lib", "Synchronization.lib"])
         env.Append(LINKFLAGS=["/FORCE:MULTIPLE", "/IGNORE:4006", "/WX:NO"])
     elif platform == "macos" and env["debug_symbols"]:
         # The same pair /FORCE:MULTIPLE lets through on Windows: ssruntime's own
