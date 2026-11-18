@@ -1,10 +1,5 @@
 # 🕹️ SpriteStudio Player for Godot
 
-This `develop` branch is a work-in-progress version.  
-The stable version can be obtained from the [main branch](https://github.com/cri-middleware/SSPlayerForGodot/tree/main) or from [Releases](https://github.com/cri-middleware/SSPlayerForGodot/releases).  
-No warranty or support is provided for this branch, and we cannot respond to feature requests or bug reports.  
-Interfaces may change without notice.  
-
 A plugin for playing back animations created with [SpriteStudio](https://www.webtech.co.jp/spritestudio/) inside [Godot Engine](https://godotengine.org/).
 Drag a `.sspj` onto the **SS Importer** dock, then drop the converted `.ssab` into the 2D viewport — no code to reach the first frame.
 

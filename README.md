@@ -4,8 +4,6 @@
 
 **Professional 2D animations for your Godot games. A plugin that balances intuitive usability with extreme performance.**
 
-> **Note:** This `develop` branch is a work-in-progress version. The stable version can be obtained from the [main branch](https://github.com/cri-middleware/SSPlayerForGodot/tree/main) or from [Releases](https://github.com/cri-middleware/SSPlayerForGodot/releases). The APIs and workflows in this branch may change without notice, and no warranty or support is provided (we cannot respond to feature requests or bug reports).
-
 A high-performance extension plugin (GDExtension / Custom Module) for playing animations (`.ssab`) created with **[SpriteStudio](https://www.webtech.co.jp/spritestudio/)** on [Godot Engine](https://godotengine.org/). By combining Godot's powerful features with the expressive capabilities of a dedicated animation tool, it fully supports the development of rich 2D games.
 
 ## ✨ Why use SpriteStudio with Godot?
