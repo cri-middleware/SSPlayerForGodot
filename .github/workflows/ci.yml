@@ -54,7 +54,12 @@ jobs:
             pr-target: editor
             pr-options: ''
             module-target: editor
-            module-options: ''
+            # On this runner the engine's embree compiles with __AVX__ defined,
+            # which leaves out the BVH4 kernels its factory links against
+            # (godotengine/godot#106938). -mno-avx keeps it on SSE, as the
+            # engine's own flags intend; build.sh cuts a value at its first =,
+            # so -march=... cannot be passed.
+            module-options: ccflags=-mno-avx
 
           - name: 🌐 Web (wasm32)
             platform: web
