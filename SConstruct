@@ -124,6 +124,10 @@ if env['target'] == 'editor':
         # duplicates unless it dead-strips, and godot-cpp passes -dead_strip
         # only while debug_symbols is off.
         env.Append(LINKFLAGS=["-Wl,-dead_strip"])
+    elif platform == "linux":
+        # The same pair, plus the allocator shims, which GNU ld rejects as
+        # duplicates outright. This is its /FORCE:MULTIPLE.
+        env.Append(LINKFLAGS=["-Wl,--allow-multiple-definition"])
 
 if platform == "ios":
     if env.get("ios_simulator", False):
