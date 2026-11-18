@@ -12,12 +12,16 @@ Import("env_modules")
 
 env_ss = env_modules.Clone()
 
+# The engine build names the Linux platform linuxbsd; godot-cpp, and with it
+# the runtime library directories, call it linux.
+platform = "linux" if env["platform"] == "linuxbsd" else env["platform"]
+
 # Version header: stamp VERSION.txt + git hash into ss_player/gen/ss_version.gen.h
 # (gitignored). Shared with the GDExtension build via ss_player/sources.py.
 sources.generate_version_header()
 
 # --- Compilation Flags ---
-if env_ss.get("platform") in ["macos", "linux", "ios", "android"]:
+if platform in ["macos", "linux", "ios", "android"]:
     env_ss.Append(CCFLAGS=["-fvisibility=hidden"])
     env_ss.Append(CXXFLAGS=["-fvisibility=hidden"])
 
@@ -35,7 +39,6 @@ env_ss.Append(CPPPATH=sources.get_include_paths())
 
 # --- Libraries & Library Paths ---
 module_path = env.Dir('.').abspath
-platform = env['platform']
 arch = env['arch']
 
 runtime_libpath = sources.get_runtime_lib_path(module_path, platform, arch)
