@@ -72,7 +72,7 @@ git push origin "${BRANCH:?}" &&
 gh run watch "${RUN:?}" --exit-status
 ```
 
-A run from a `release/` branch or a `v*` tag needs the signing secrets: without one, the macOS or iOS job fails at its first step and names what is missing. No change on the branch fixes that: the organization's signing secrets are not reaching this repository. An organization owner decides which repositories they reach, and on GitHub Free they cannot reach a private one. Dispatch again once they do; in step 5, delete the draft first. A run from any other branch skips signing or notarization instead, says so in the log, and passes.
+A run from a `release/` branch or a `v*` tag needs the signing secrets: without one, the macOS or iOS job fails at its first step and names what is missing. No change on the branch fixes that: the organization's signing secrets are not reaching this repository. An organization owner decides which repositories they reach. Dispatch again once they do; in step 5, delete the draft first. A run from any other branch skips signing or notarization instead, says so in the log, and passes.
 
 One thing no CI runs, so run it on the branch: the headless test suite (the Test section of [CONTRIBUTING.md](./CONTRIBUTING.md)). It needs no person once the toolchain is in place, but its verdict is its `RESULT` line, the marker after it and its `ENGINE` line, not its exit code.
 
@@ -300,7 +300,7 @@ git push origin "${BRANCH:?}" &&
 gh run watch "${RUN:?}" --exit-status
 ```
 
-`release/` ブランチや `v*` タグからの実行には署名の Secret が必要です。欠けていると、macOS か iOS のジョブが最初のステップで失敗し、足りない Secret の名前を出します。ブランチをどう変えてもこれは直りません。組織の署名用 Secret がこのリポジトリに届いていません。どのリポジトリに届けるかは組織のオーナーが決めますが、GitHub Free では private のリポジトリには届けられません。届くようになったら実行し直してください。手順 5 では先に下書きを消します。ほかのブランチからの実行では、署名や公証を飛ばし、その旨をログに出して成功します。
+`release/` ブランチや `v*` タグからの実行には署名の Secret が必要です。欠けていると、macOS か iOS のジョブが最初のステップで失敗し、足りない Secret の名前を出します。ブランチをどう変えてもこれは直りません。組織の署名用 Secret がこのリポジトリに届いていません。どのリポジトリに届けるかは組織のオーナーが決めます。届くようになったら実行し直してください。手順 5 では先に下書きを消します。ほかのブランチからの実行では、署名や公証を飛ばし、その旨をログに出して成功します。
 
 どの CI も実行しないものが 1 つあるので、ブランチ上で実行してください。ヘッドレスのテストスイート（[CONTRIBUTING.md](./CONTRIBUTING.md) のテストの節）です。ツールチェーンが揃っていれば人の手は要りませんが、判定は終了コードではなく、`RESULT` の行、その後のマーカー、`ENGINE` の行で行います。
 
