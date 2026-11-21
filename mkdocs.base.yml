@@ -16,6 +16,12 @@ theme:
   icon:
     logo: simple/godotengine
   palette:
+    - media: "(prefers-color-scheme)"
+      primary: blue grey
+      accent: indigo
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
     - media: "(prefers-color-scheme: light)"
       scheme: default
       primary: blue grey
@@ -29,7 +35,7 @@ theme:
       accent: indigo
       toggle:
         icon: material/brightness-4
-        name: Switch to light mode
+        name: Switch to system preference
   features:
     - navigation.tabs
     - navigation.sections
