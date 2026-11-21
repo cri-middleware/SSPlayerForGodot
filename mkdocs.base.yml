@@ -50,23 +50,6 @@ theme:
     - content.action.copy
     - content.tabs.link
 
-plugins:
-  - search
-  - redirects
-  - llmstxt:
-      full_output: llms-full.txt
-      markdown_description: |
-        Godot player, editor-first: `setup/install` and `workflow/usage_basic` get a first
-        animation on screen. The class reference is `api/player` (the `SpriteStudioPlayer2D`
-        node) and `api/resource`; `workflow/usage_scripting` is the GDScript guide to playback
-        control and signals. `workflow/verify_playback` checks from the command line, without the
-        editor, that an animation loads and plays, and can write a PNG of a frame.
-        `troubleshooting` is organised by cause rather than symptom, and `limitations` lists
-        what is not supported.
-      sections:
-        Docs:
-          - "*.md"
-
 markdown_extensions:
   - toc:
       permalink: true
