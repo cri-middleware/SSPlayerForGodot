@@ -21,8 +21,8 @@ Comprehensive documentation is available in the `docs/` folder — the data-flow
 - [**Documentation site (hosted)**](https://cri-middleware.github.io/SSPlayerForGodot/)
 - [**Documentation (English)**](./docs/en/index.md)
 - [**ドキュメント (日本語)**](./docs/ja/index.md)
-- [**For AI assistants**](https://cri-middleware.github.io/SSPlayerForGodot/llms.txt) — these docs as Markdown: `llms.txt` indexes the pages and `llms-full.txt` holds all of them in one file
-- [**SpriteStudio Docs (portal)**](https://cri-middleware.github.io/SpriteStudio-Docs/) — the SDK and every official player in one place
+- [**For AI assistants**](https://cri-middleware.github.io/SSPlayerForGodot/llms.txt) — these docs as Markdown: `llms.txt` indexes the pages and `llms-full.txt` holds all of them in one file; the installed addon carries the same pages in `addons/spritestudio/`
+- [**SpriteStudio Docs (portal)**](https://cri-middleware.github.io/SpriteStudio-Docs/) — the SDK and every official player in one place, with a [plugin](https://cri-middleware.github.io/SpriteStudio-Docs/ai/) that tells your coding assistant about SpriteStudio
 
 ### Quick Links (English)
 - [Installation](./docs/en/setup/install.md)
