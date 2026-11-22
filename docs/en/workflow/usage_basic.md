@@ -19,7 +19,7 @@ This action automatically creates a `SpriteStudioPlayer2D` node and assigns the 
 > <video autoplay loop muted playsinline width="100%">
 >   <source src="../assets/3-setup_drag_and_drop.webm" type="video/webm">
 > </video>
-> <img src="../assets/3-setup_drag_and_drop.webp" width="100%" style="display: none;" loading="lazy">
+> <img src="../assets/3-setup_drag_and_drop.webp" alt="Ringo.ssab dragged from the FileSystem dock into the 2D viewport is placed as a SpriteStudioPlayer2D node, then three knight .ssab files dragged together are placed at once." width="100%" style="display: none;" loading="lazy">
 
 ---
 
@@ -45,7 +45,7 @@ Once the node is selected, you can adjust various settings from Godot's Inspecto
 > <video autoplay loop muted playsinline width="100%">
 >   <source src="../assets/4-inspector_preview-1.webm" type="video/webm">
 > </video>
-> <img src="../assets/4-inspector_preview-1.webp" width="100%" style="display: none;" loading="lazy">
+> <img src="../assets/4-inspector_preview-1.webp" alt="The animation dropdown in the Inspector lists the animations in Ringo.ssab and choosing run switches to it; the SpriteStudio bottom panel then plays it while Speed Scale and Sub Frame Enabled are changed." width="100%" style="display: none;" loading="lazy">
 
 2. **In-Editor Preview**
    With the node selected, the **SpriteStudio** bottom panel appears. Use its transport controls (play from start / play from current / stop, the frame scrubber, and the **Loop** and **Speed** controls next to them) to **play the animation directly in the editor without running the game**. Keyboard shortcuts mirror the AnimationPlayer editor: **D** play from current, **Shift+D** play from start, **S** stop (active while the panel is visible).
@@ -56,7 +56,7 @@ Once the node is selected, you can adjust various settings from Godot's Inspecto
 > <video autoplay loop muted playsinline width="100%">
 >   <source src="../assets/4-inspector_preview-2.webm" type="video/webm">
 > </video>
-> <img src="../assets/4-inspector_preview-2.webp" width="100%" style="display: none;" loading="lazy">
+> <img src="../assets/4-inspector_preview-2.webp" alt="Ringo plays from the SpriteStudio bottom panel; dragging Speed Scale down to 0.05 slows it to a crawl, Sub Frame Enabled is switched off and on, and the speed is put back." width="100%" style="display: none;" loading="lazy">
 
 ---
 
