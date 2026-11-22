@@ -21,7 +21,7 @@ SpriteStudio Player for Godot では、アニメーションを再生するだ�
 > <video autoplay loop muted playsinline width="100%">
 >   <source src="../assets/1-sspj_import.webm" type="video/webm">
 > </video>
-> <img src="../assets/1-sspj_import.webp" width="100%" style="display: none;" loading="lazy">
+> <img src="../assets/1-sspj_import.webp" alt="ファイルマネージャーから「SS Importer」ドックへドラッグした .sspj がコンバートされ、ファイルシステムドックの res://ssab_generated/ に .ssab が並び、その 1 つを 2D ビューポートへドラッグするとキャラクターが置かれる。" width="100%" style="display: none;" loading="lazy">
 
 > [!TIP]
 > 手元に `.sspj` がまだ無い状態で試したい場合は、[SpriteStudio 公式のサンプルデータ](https://www.webtech.co.jp/help/ja/spritestudio7/download/sample/)がそのまま使えます。キャラクターなら [Ringo](https://www.webtech.co.jp/help/ja/spritestudio7/download/sample/#ringo)、エフェクトを含むものなら [パーティクル](https://www.webtech.co.jp/help/ja/spritestudio7/download/sample/#Perticle_sample) が手頃です。ダウンロードした `.sspj` を、上と同じ手順で「SS Importer」ドックへドロップしてください。
@@ -59,7 +59,7 @@ SpriteStudio 側でアニメーションを修正して保存したら、Godot �
 > <video autoplay loop muted playsinline width="100%">
 >   <source src="../assets/2-fast_iteration_inspector.webm" type="video/webm">
 > </video>
-> <img src="../assets/2-fast_iteration_inspector.webp" width="100%" style="display: none;" loading="lazy">
+> <img src="../assets/2-fast_iteration_inspector.webp" alt="インスペクターの Open SSPJ で Ringo を SpriteStudio で開き、頭のりんごを大きくして保存し、Godot に戻って Reconvert を押すと、再生中のプレビューのりんごが大きくなる。" width="100%" style="display: none;" loading="lazy">
 
 > [!TIP]
 > 出力フォルダに生成される各ファイルの役割と依存関係、SpriteStudio 側の編集の種類ごとにどのファイルを配信し直す必要があるか、エクスポートモードの選び方と `.pck` での追加配信は [生成アセットの構成と配信](generated_assets.md) にまとめています。
