@@ -51,7 +51,7 @@ Godot の 2D キャンバスにはステンシルバッファが無いため、�
 > [!WARNING]
 > - **シングルスレッド（`nothread`）のみ対応。** Web ではスレッドなしで動作します。利点として、クロスオリジン分離（COOP/COEP）ヘッダーが不要なため、単純な HTTP サーバーでエクスポート成果物を動かせます。エクスポートプリセットの **Thread Support** はオフのままにしてください。
 > - **WebAssembly SIMD が必須。** ランタイムは WebAssembly SIMD 命令を用いてビルドされており、**SIMD 非対応のブラウザでは動作しません**。配信先のブラウザ要件として SIMD 対応を前提としてください。
-> - **Web で GDExtension を使うには dlink 対応のエンジンテンプレートが必要。** 公式の Godot Web エクスポートテンプレートは GDExtension ライブラリに対応していません。`dlink_enabled=yes` でビルドしたエンジンテンプレートを用意し、エクスポートプリセットで **「Extensions Support」** を有効にする必要があります。これを行わないと、書き出したページが *「GDExtension libraries are not supported by this engine version.」* で失敗します。手順は [プロジェクトのエクスポート → Web](workflow/export.md#web) を参照してください。（**カスタムモジュール**形態はコードをエンジン本体へ組み込むため、この対応は不要です。）
+> - **Web で GDExtension を使うには Extensions Support が必要。** Web エクスポートプリセットで **Extensions Support** を ON にしてください。これが選ぶテンプレートは Godot 公式のエクスポートテンプレートに含まれています。OFF のままだと、書き出したページが *「GDExtension libraries are not supported by this engine version.」* で失敗します。[プロジェクトのエクスポート → Web](workflow/export.md#web) を参照してください。（**カスタムモジュール**形態はコードをエンジン本体へ組み込むため、この対応は不要です。）
 
 ## モーションブレンド
 

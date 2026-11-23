@@ -242,39 +242,8 @@ python3 -m http.server 8000
 ```
 サーバー起動後、ブラウザで `http://localhost:8000` にアクセスすると動作確認ができます。（本プラグインは Web においては `nothread` での動作となるため、特殊なCORSヘッダーなしの単純なHTTPサーバーで起動可能です）
 
-#### Web での GDExtension（Extensions Support / `dlink`）
-
-公式の Godot Web エクスポートテンプレートは GDExtension ライブラリに **対応していません**。**GDExtension** 形態を素のテンプレートで Web エクスポートすると、起動時に次のエラーで失敗します。
-
-> GDExtension libraries are not supported by this engine version. Enable "Extensions Support" for your export preset and/or build your custom template with "dlink_enabled=yes".
-
-Web で GDExtension を読み込むには、動的リンクを有効にした（`dlink_enabled=yes`）エンジンテンプレートが必要です。`godot/` のチェックアウトから、拡張の `threads` モードに合わせてビルドします（本プラグインは `nothread` 版を提供するため `threads=no`）。
-
-```bash
-# dlink 対応の Web テンプレートをソースからビルド（nothreads）
-cd godot
-scons platform=web target=template_debug   dlink_enabled=yes threads=no
-scons platform=web target=template_release dlink_enabled=yes threads=no
-# → godot/bin/godot.web.template_debug.wasm32.nothreads.dlink.zip
-# → godot/bin/godot.web.template_release.wasm32.nothreads.dlink.zip
-```
-
-続いて、ビルドしたテンプレートをインストールし、Godot が名前で解決できるようにします。
-
-```bash
-./scripts/install-template.sh web
-# インストール先 → <export_templates>/<version>/web_dlink_nothreads_debug.zip
-#                                              web_dlink_nothreads_release.zip
-```
-
-インストール後は、Web プリセットで **Extensions Support** を ON にするだけでエクスポートできます。Godot が名前一致で `..._dlink_...` テンプレートを自動選択するため、`custom_template` の指定は不要です。プリセット側の操作（利用者視点）は [プロジェクトのエクスポート → Web](../workflow/export.md#web) を参照してください。
-
-> Godot のテンプレートフォルダにインストールしたくない場合は、代わりに `Web` プリセットの `custom_template/debug` / `custom_template/release` にビルドした `*.dlink.zip` を直接指定することもできます。
-
-dlink テンプレートはエンジンを小さなメインモジュールと大きな `godot.side.wasm` に分割します。エクスポート後に `index.wasm` と並んで `index.side.wasm` が出力されていれば、dlink テンプレートが使われた証拠です。
-
 > [!NOTE]
-> `dlink` / *Extensions Support* が必要なのは **GDExtension** 形態のみです。**カスタムモジュール** 形態はプラグインをエンジンにコンパイルするため、その Web テンプレートは `release-web.sh`（内部で `build.sh`）が生成する通常の（非 `dlink`）`web_nothreads_{debug,release}.zip` で、同じ手順でインストールします。`dlink_enabled` もプリセットの *Extensions Support* も不要です。
+> これは**カスタムモジュール**形態の Web テンプレートです。`release-web.sh`（内部で `build.sh`）が生成し `install-template.sh web` がインストールする通常の `web_nothreads_{debug,release}.zip` を使い、プリセットの *Extensions Support* は使いません。**GDExtension** 形態は公式のテンプレートで Web にエクスポートできます。[GDExtension のエクスポートと動作確認](#gdextension-のエクスポートと動作確認) を参照してください。
 
 ### Androidプラットフォームのエクスポートと動作確認
 
@@ -410,6 +379,17 @@ GDExtension（例: `dev_gdextension`）の場合、**エンジン本体の再ビ
      adb shell am start -n com.crimw.devgdext/com.godot.game.GodotAppLauncher
      adb logcat -s godot
      ```
+
+   **Web の注意点:**
+   - Web 用プラグインライブラリを `./scripts/release-gdextension-web.sh` でビルドします。Android と同じく**ホスト用**プラグインもビルドしてください。エクスポート時の `.ssab` の読み込みはホストマシン上で行われます。
+   - Web プリセットで **Extensions Support** を ON にし、**Thread Support** は OFF のままにします。この組み合わせで選ばれる `web_dlink_nothreads_{debug,release}.zip` は、公式のエクスポートテンプレートに含まれています。
+   - あとは [Webプラットフォームのエクスポートと動作確認](#webプラットフォームのエクスポートと動作確認) と同じように書き出して配信します。
+     ```bash
+     mkdir -p build_web
+     godot --path ./examples/dev_gdextension/ --headless --export-debug "Web" "$(pwd)/build_web/index.html"
+     python3 -m http.server 8000 -d build_web
+     ```
+     `index.wasm` と並んで `index.side.wasm` が出力されていれば、動的リンク用のテンプレートが使われています。
 
 ## GDExtension のデバッグ方法
 

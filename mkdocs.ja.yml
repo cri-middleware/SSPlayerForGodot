@@ -42,7 +42,7 @@ plugins:
           - workflow/ui_buttons.md: "`SpriteStudioButton` でアニメーションを Godot のボタンにする。状態ごとにラベルから再生する区間（`normal`・`hover`・`pressed`・`disabled`・`focused`、トグルの `selected_`）、`state_clips`、絵の収め方、`hit_parts` による絵の上でだけのクリック、`reduced_motion`、`accessibility_name`。"
           - workflow/audio.md: "サウンドキーの再生。組み込みの再生とそのプロパティ（`play_audio`、`audio_volume`、`audio_bus`）、撃ちっぱなし（fire-and-forget）の性質（順方向のみ、シークでは鳴らない、再発火は重なる）、`audio` シグナルとその payload での観測、`SpriteStudioAudioBackend` による自前のオーディオ基盤への振り分け。"
           - workflow/animation_player.md: "`AnimationPlayer` から `SpriteStudioPlayer2D` を動かす方法。**Gen AnimLib** での `_anims.res` の生成、`Root Node` の設定、アニメーションを変えたあとの作り直し、Call Method トラック・`AnimationTree` のステートマシン・カットシーン。"
-          - workflow/export.md: "この Player がエクスポートに加える手順。モバイル向けの ETC2/ASTC の設定、Web の **Extensions Support**・dlink 対応のエクスポートテンプレート・シングルスレッド（`nothread`）・SIMD の要件、起動時の GDExtension 非対応のエラー。カスタムモジュール版は Web の手順が要らない。"
+          - workflow/export.md: "この Player がエクスポートに加える手順。モバイル向けの ETC2/ASTC の設定、Web の **Extensions Support**・シングルスレッド（`nothread`）・SIMD の要件、起動時の GDExtension 非対応のエラー。カスタムモジュール版は Web の手順が要らない。"
           - workflow/generated_assets.md: "変換が書き出すファイル（`.ssab`、`.ssqb`、画像、`sound/`）と、SpriteStudio での編集ごとに変わるファイル、ファイル同士の依存関係、エクスポートモードとそれぞれで同梱されるもの、再コンバートで上書きされるものと古いまま残るもの、`.pck` での追加配信（画像だけの差し替えを含む）。"
           - workflow/import.md: "エディタを使わない変換。CI や一括変換向け。SDK のリリースから、インポータの converter と同じ版の `ssconverter-cli` を取得して `.sspj` に実行し、出力フォルダごと `res://` へコピーする。"
           - workflow/verify_playback.md: "エディタを開かずに、スクリプトから `.ssab` が読み込めて再生されることを確かめる方法。`SMOKE PASS` の行で判定する `--headless` のスモークテスト、フレームの PNG を保存するスナップショットのスクリプト、最初の `--import`、終了ステータスが当てにならない理由。CI やコーディングアシスタント向け。"
@@ -50,7 +50,7 @@ plugins:
           - api/player.md: "再生ノードの主なメソッドとプロパティ。再生区間とラベルの参照、パーツの参照（`get_part_quad()`、`hit_test_part()`）、オーサリング時のキャンバス、パーツオーバーライドとその定数、トラックとクロスフェードのメソッド、シグナルと payload のフィールド、サウンドのメンバー、`AnimationPlayer` からの `frame_no` の駆動。"
           - api/resource.md: "`SSABResource` と `SSQBResource`。1 つのリソースを複数のプレイヤーで共有すること、`load_from_file()` と `data`、アニメーション・セルマップ・セルの名前、アニメーション名で引く `get_canvas_rect()`、`get_sound_stream()` と `get_sound_info()`。`.ssqb` は読み込めるが、再生するノードはない。"
           - troubleshooting.md: "原因別の構成。「新規ノードを作成」の一覧にノードが無い、何も描画されない（存在しないアニメーション名、不正な `.ssab`、テクスチャが無い、画面外）、特定のパーツだけ欠ける、再生の挙動がおかしい（`animation_finished` が来ない、上書きが反映されない、シーク後にイベントが飛ぶ）、音が鳴らない、エディタ連携が動かない、Web エクスポートのエラー。"
-          - limitations.md: "対応していないもの、一部だけ対応しているもの。テキストパーツと 9 スライスパーツ、Mix にフォールバックする合成モード、96 個までのマスク、`Sprite2D` との違い（2D エディタでの選択、ノードのマテリアル）、プラットフォームごとの注意、Web（シングルスレッド、SIMD、dlink）、シークと逆再生の制約。全 Player に共通する制約はポータルにある。"
+          - limitations.md: "対応していないもの、一部だけ対応しているもの。テキストパーツと 9 スライスパーツ、Mix にフォールバックする合成モード、96 個までのマスク、`Sprite2D` との違い（2D エディタでの選択、ノードのマテリアル）、プラットフォームごとの注意、Web（シングルスレッド、SIMD、Extensions Support）、シークと逆再生の制約。全 Player に共通する制約はポータルにある。"
           - migration_from_v1.md: "v1.x からの移行。`.sspj` をプロジェクトの外へ出して `.ssab` に変換すること、`GdNodeSsPlayer` から `SpriteStudioPlayer2D` への置き換え、`set_loop()` から `set_loop_count()` への変更、名前が変わった・廃止されたメソッド、変わったシグナル。"
         Player・SDK 開発者向けガイド:
           - development/build.md: "GDExtension とカスタムモジュール入りエンジンのビルド。ソースの取得、`download-sdk` と `build-runtime`、`build-extension`、`build.sh`、プラットフォームごとのリリーススクリプト、変更した版をプロジェクトで使う方法、デバッグ、Web・Android・iOS でのエクスポートの確認、スクリプトから実際のホストで確かめる方法、SDK 開発者向けの手順。"

@@ -256,39 +256,8 @@ python3 -m http.server 8000
 After starting the server, access `http://localhost:8000` in your browser to verify it works.
 (Since this plugin operates with `nothread` on the Web, it can be launched with a simple HTTP server without requiring special CORS headers.)
 
-#### GDExtension on the Web (Extensions Support / `dlink`)
-
-The official Godot Web export templates do **not** support GDExtension libraries. If you export the **GDExtension** build variant for the Web with a stock template, the page fails at startup with:
-
-> GDExtension libraries are not supported by this engine version. Enable "Extensions Support" for your export preset and/or build your custom template with "dlink_enabled=yes".
-
-To load a GDExtension on the Web, you need an engine template built with dynamic linking enabled (`dlink_enabled=yes`). Build one from the `godot/` checkout, matching the `threads` mode of your extension (this plugin ships `nothread`, so use `threads=no`):
-
-```bash
-# Build dlink-enabled Web templates from source (nothreads)
-cd godot
-scons platform=web target=template_debug   dlink_enabled=yes threads=no
-scons platform=web target=template_release dlink_enabled=yes threads=no
-# → godot/bin/godot.web.template_debug.wasm32.nothreads.dlink.zip
-# → godot/bin/godot.web.template_release.wasm32.nothreads.dlink.zip
-```
-
-Then install the built templates so Godot can resolve them by name:
-
-```bash
-./scripts/install-template.sh web
-# installs → <export_templates>/<version>/web_dlink_nothreads_debug.zip
-#                                          web_dlink_nothreads_release.zip
-```
-
-Once these are installed, exporting only requires turning on **Extensions Support** in the Web preset — Godot auto-selects the matching `..._dlink_...` template by name, so no `custom_template` is needed. The preset side (from a plugin user's perspective) is covered in [Exporting Your Project → Web](../workflow/export.md#web).
-
-> If you would rather not install them into Godot's templates folder, you can instead point `custom_template/debug` / `custom_template/release` in the `Web` preset directly at the built `*.dlink.zip` files.
-
-A dlink template splits the engine into a small main module plus a large `godot.side.wasm`; after export you will see a corresponding `index.side.wasm` alongside `index.wasm`, which confirms the dlink template was used.
-
 > [!NOTE]
-> `dlink` / *Extensions Support* is required only for the **GDExtension** build variant. The **custom module** variant compiles the plugin into the engine, so its Web template is the ordinary (non-`dlink`) `web_nothreads_{debug,release}.zip` produced by `release-web.sh` (via `build.sh`) and installed the same way — with no `dlink_enabled` and no *Extensions Support* in the preset.
+> This is the **custom module**'s Web template: the ordinary `web_nothreads_{debug,release}.zip` that `release-web.sh` (via `build.sh`) produces and `install-template.sh web` installs, with no *Extensions Support* in the preset. A **GDExtension** build exports for the Web with the official templates; see [GDExtension Export and Testing](#gdextension-export-and-testing).
 
 ### Android Platform Export and Testing
 
@@ -427,6 +396,17 @@ For GDExtensions (e.g., `dev_gdextension`), **rebuilding the engine itself or in
      adb shell am start -n com.crimw.devgdext/com.godot.game.GodotAppLauncher
      adb logcat -s godot
      ```
+
+   **Web note:**
+   - Build the Web plugin libraries with `./scripts/release-gdextension-web.sh`, and the **host** plugin as for Android: the export loads the `.ssab` resources on the host machine.
+   - In the Web preset, turn on **Extensions Support** and leave **Thread Support** off. The official export templates include the `web_dlink_nothreads_{debug,release}.zip` that this pair selects.
+   - Then export and serve it, as in [Web Platform Export and Testing](#web-platform-export-and-testing):
+     ```bash
+     mkdir -p build_web
+     godot --path ./examples/dev_gdextension/ --headless --export-debug "Web" "$(pwd)/build_web/index.html"
+     python3 -m http.server 8000 -d build_web
+     ```
+     An `index.side.wasm` next to `index.wasm` confirms the export used the template for dynamic linking.
 
 ## Debugging the GDExtension
 
