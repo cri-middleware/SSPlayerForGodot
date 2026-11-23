@@ -1,6 +1,6 @@
 # 🕹️ SpriteStudio Player for Godot
 
-A plugin for playing back animations created with [SpriteStudio](https://www.webtech.co.jp/spritestudio/) inside [Godot Engine](https://godotengine.org/).
+A plugin for playing back animations created with [SpriteStudio](https://www.webtech.co.jp/eng/spritestudio/) inside [Godot Engine](https://godotengine.org/).
 Drag a `.sspj` onto the **SS Importer** dock, then drop the converted `.ssab` into the 2D viewport — no code to reach the first frame.
 
 !!! tip "No SpriteStudio data of your own yet?"
@@ -8,6 +8,7 @@ Drag a `.sspj` onto the **SS Importer** dock, then drop the converted `.ssab` in
     Japanese only, but the downloads themselves are language-neutral.
     [Ringo](https://www.webtech.co.jp/help/ja/spritestudio7/download/sample/#ringo) is a good character sample, and
     [Particle](https://www.webtech.co.jp/help/ja/spritestudio7/download/sample/#Perticle_sample) is a good one if you want effects.
+    To make your own, you use SpriteStudio itself — see [its site](https://www.webtech.co.jp/eng/spritestudio/).
 
 ## Table of Contents
 

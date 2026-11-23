@@ -4,7 +4,7 @@
 
 **Professional 2D animations for your Godot games. A plugin that balances intuitive usability with extreme performance.**
 
-A high-performance extension plugin (GDExtension / Custom Module) for playing animations (`.ssab`) created with **[SpriteStudio](https://www.webtech.co.jp/spritestudio/)** on [Godot Engine](https://godotengine.org/). By combining Godot's powerful features with the expressive capabilities of a dedicated animation tool, it fully supports the development of rich 2D games.
+A high-performance extension plugin (GDExtension / Custom Module) for playing animations (`.ssab`) created with **[SpriteStudio](https://www.webtech.co.jp/eng/spritestudio/)** on [Godot Engine](https://godotengine.org/). By combining Godot's powerful features with the expressive capabilities of a dedicated animation tool, it fully supports the development of rich 2D games.
 
 ## ✨ Why use SpriteStudio with Godot?
 
@@ -53,7 +53,7 @@ You need Godot 4.7 or later from the [official site](https://godotengine.org/dow
 
 3. **Play**: Drag `res://ssab_generated/Ringo/Ringo.ssab` from the FileSystem dock into the 2D viewport. That places a `SpriteStudioPlayer2D` node with the pack in its `Ssab` property and its first animation selected. Press **Play from start** in the **SpriteStudio** bottom panel to see it play in the editor, or run the scene.
 
-No `.sspj` of your own yet? SpriteStudio's [official sample data](https://www.webtech.co.jp/help/ja/spritestudio7/download/sample/) works as-is — the page is in Japanese, the downloads are not. [Ringo](https://www.webtech.co.jp/help/ja/spritestudio7/download/sample/#ringo) is a good character to start with, and [Particle](https://www.webtech.co.jp/help/ja/spritestudio7/download/sample/#Perticle_sample) a good one for effects.
+No `.sspj` of your own yet? SpriteStudio's [official sample data](https://www.webtech.co.jp/help/ja/spritestudio7/download/sample/) works as-is — the page is in Japanese, the downloads are not. [Ringo](https://www.webtech.co.jp/help/ja/spritestudio7/download/sample/#ringo) is a good character to start with, and [Particle](https://www.webtech.co.jp/help/ja/spritestudio7/download/sample/#Perticle_sample) a good one for effects. To make your own, you use SpriteStudio itself — see [its site](https://www.webtech.co.jp/eng/spritestudio/).
 
 **Read next:** [Installation](./docs/en/setup/install.md) · [Basic Usage](./docs/en/workflow/usage_basic.md) · [Limitations & Scope](./docs/en/limitations.md) · [Troubleshooting](./docs/en/troubleshooting.md) · [Migration from v1.x](./docs/en/migration_from_v1.md)
 
