@@ -24,13 +24,6 @@
 - [**AI アシスタント向け**](https://cri-middleware.github.io/SSPlayerForGodot/ja/llms.txt) — このドキュメントを Markdown で提供します。`llms.txt` はページの目次、`llms-full.txt` は全ページを 1 ファイルにまとめたものです。インストールしたアドオンにも、同じページが `addons/spritestudio/` に入っています
 - [**SpriteStudio Docs（ポータル）**](https://cri-middleware.github.io/SpriteStudio-Docs/ja/) — SDK と全公式 Player の入口。コーディングアシスタントに SpriteStudio を教える[プラグイン](https://cri-middleware.github.io/SpriteStudio-Docs/ja/ai/)もあります
 
-### クイックリンク (日本語)
-- [インストール](./docs/ja/setup/install.md)
-- [基本的な使い方](./docs/ja/workflow/usage_basic.md)
-- [制約と適用範囲](./docs/ja/limitations.md)
-- [トラブルシューティング](./docs/ja/troubleshooting.md)
-- [v1.x からのマイグレーション](./docs/ja/migration_from_v1.md)
-
 ## 🚀 GDExtension を用いたクイックスタート
 
 **ゲームで使う場合**はこのまま下へ。アドオンを入れる → `.sspj` をエディタに D&D → ノードを置く。その先（スクリプト制御、シグナル、パーツ単位の上書き）も同じ道の続きで、[ドキュメント](./docs/ja/index.md)にあります。
@@ -38,7 +31,7 @@
 
 [公式サイト](https://godotengine.org/download/) から 4.7 以降の Godot エディタを用意してください。対応するのは **SpriteStudio 7.6 以上**で作成されたプロジェクトです。
 
-1. **配置**: [最新の Release](https://github.com/cri-middleware/SSPlayerForGodot/releases/latest) を開き、**Assets** から `ssplayer-godot-extension-4.7.zip` をダウンロードします（タグが `v1` で始まる Release は 1.x 系のプラグインで、`SSABResource` も `SpriteStudioPlayer2D` もありません）。展開して `addons` フォルダをご自身の Godot プロジェクトのルートにコピーし、エディタを再起動します。
+1. **配置**: [最新の Release](https://github.com/cri-middleware/SSPlayerForGodot/releases/latest) を開き、**Assets** から `ssplayer-godot-extension-4.7.zip` をダウンロードします。展開して `addons` フォルダをご自身の Godot プロジェクトのルートにコピーし、エディタを再起動します。
 2. **インポート**: `.sspj` をファイルマネージャーから **SS Importer** ドックへドラッグ＆ドロップします。ドックの既定の出力先 `res://ssab_generated/` の下に、`.sspj` と同じ名前のフォルダで変換されます（[アセットのインポートとエディタ連携](./docs/ja/workflow/usage_asset_pipeline.md) を参照）。
 
    ```
@@ -56,11 +49,11 @@
    └── project.godot
    ```
 
-3. **再生**: ファイルシステムドックから `res://ssab_generated/Ringo/Ringo.ssab` を 2D ビューポートへドラッグ＆ドロップします。`Ssab` プロパティにそのパックが入り、先頭のアニメーションが選ばれた `SpriteStudioPlayer2D` ノードが置かれるので、シーンを実行すると再生されます。
+3. **再生**: ファイルシステムドックから `res://ssab_generated/Ringo/Ringo.ssab` を 2D ビューポートへドラッグ＆ドロップします。`Ssab` プロパティにそのパックが入り、先頭のアニメーションが選ばれた `SpriteStudioPlayer2D` ノードが置かれます。**SpriteStudio** ボトムパネルの **Play from start** ボタンを押すとエディタ上で再生され、シーンを実行しても再生されます。
 
 SpriteStudio のデータが手元に無くても始められます。[公式のサンプルデータ](https://www.webtech.co.jp/help/ja/spritestudio7/download/sample/)がそのまま使えます。キャラクターなら [Ringo](https://www.webtech.co.jp/help/ja/spritestudio7/download/sample/#ringo)、エフェクトを含むものなら [パーティクル](https://www.webtech.co.jp/help/ja/spritestudio7/download/sample/#Perticle_sample) が手頃です。
 
-**次に読む:** [インストール](./docs/ja/setup/install.md) · [基本的な使い方](./docs/ja/workflow/usage_basic.md) · [制約と適用範囲](./docs/ja/limitations.md)
+**次に読む:** [インストール](./docs/ja/setup/install.md) · [基本的な使い方](./docs/ja/workflow/usage_basic.md) · [制約と適用範囲](./docs/ja/limitations.md) · [トラブルシューティング](./docs/ja/troubleshooting.md) · [v1.x からのマイグレーション](./docs/ja/migration_from_v1.md)
 
 ## 🔗 関連リポジトリ
 

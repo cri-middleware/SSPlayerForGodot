@@ -3,7 +3,7 @@
 This page explains the basic workflow for placing and playing SpriteStudio animations in your Godot scene.
 
 > [!NOTE]
-> This page assumes that **an `.ssab` file has already been imported into your Godot project**. If you do not have an `.ssab` yet, first see [Asset Import and Editor Integration](usage_asset_pipeline.md) (editor-based import) or [CLI Conversion and Automation](import.md) (CLI-based import).
+> Import first: [Asset Import and Editor Integration](usage_asset_pipeline.md) turns your `.sspj` into the `.ssab` this page places.
 
 ## Fastest Setup: Auto Node Creation via Drag & Drop
 
@@ -67,25 +67,10 @@ Once the node is selected, you can adjust various settings from Godot's Inspecto
 | `Ssab`            | Resource | The target `SSABResource` (`.ssab` file) to play                    |
 | `Current Animation`        | String   | The name of the currently selected animation                        |
 | `Autoplay`                 | bool     | Whether to play automatically when the game starts                  |
-| `Offset`                   | Vector2  | Drawing offset. Useful to shift visuals without changing the Node Transform |
-| `Flip H / Flip V`          | bool     | Horizontal / Vertical flip of the animation                         |
-| `Frame No`                 | float    | The current frame position                                          |
 | `Speed Scale`              | float    | Playback speed multiplier (Default: 1.0)                            |
 | `Loop Count`               | int      | Number of loops (`-1` for infinite loop)                            |
-| `Animation Section Start`  | int      | Start frame for partial playback. It cannot go past `Animation Section End`: move the end first |
-| `Animation Section End`    | int      | End frame for partial playback. It cannot go before `Animation Section Start`: move the start first |
-| `Frame Skip Enabled`       | bool     | Whether to skip frames when the draw interval exceeds the frame interval |
-| `Sub Frame Enabled`        | bool     | Whether to enable sub-frame interpolation                           |
-| `Animation Process Mode`   | int      | Whether to sync with `_physics_process` (Physics) or `_process` (Idle), or to leave stepping to `advance()` (Manual) |
-| `Play Audio`               | bool     | Whether the built-in player sounds the animation's audio parts (see [Audio Playback](audio.md)) |
-| `Audio Volume`             | float    | Linear volume `[0, 1]` for the built-in audio playback |
-| `Audio Bus`                | StringName | Bus the built-in audio playback plays on (Default: `Master`) |
-| `Audio Backend`            | Resource | Optional `SpriteStudioAudioBackend` that replaces the built-in audio playback |
 
-> [!NOTE]
-> **What an animation change keeps.** Everything you set: `Loop Count`, `Speed Scale`, `Frame Skip Enabled`, `Sub Frame Enabled`, a `frame_rate` override, and the playback **direction and style** all survive `set_animation()`. Only the **playback section** resets, to the new clip's own range.
->
-> The direction, style and `frame_rate` are set from a script (`player.playback_direction`, `player.frame_rate`) and are not saved with the scene.
+The rest of the Inspector's properties are described in the [SpriteStudioPlayer2D reference](../api/player.md).
 
 ---
 

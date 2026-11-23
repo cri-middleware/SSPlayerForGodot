@@ -37,6 +37,11 @@ func _process(delta):
 >
 > **`play()` is not a resume.** It rewinds to the start of the section and re-arms the loop counter. Lift a hold with `resume()`, and carry on from a stop with `play(get_frame_no())`.
 
+> [!NOTE]
+> **What an animation change keeps.** Everything you set: `Loop Count`, `Speed Scale`, `Frame Skip Enabled`, `Sub Frame Enabled`, a `frame_rate` override, and the playback **direction and style** all survive `set_animation()`. Only the **playback section** resets, to the new clip's own range.
+>
+> The direction, style and `frame_rate` are set from a script (`player.playback_direction`, `player.frame_rate`) and are not saved with the scene.
+
 ---
 
 ## Implementing Event-Driven Logic with Signals

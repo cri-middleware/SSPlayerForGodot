@@ -24,13 +24,6 @@ Comprehensive documentation is available in the `docs/` folder — the data-flow
 - [**For AI assistants**](https://cri-middleware.github.io/SSPlayerForGodot/llms.txt) — these docs as Markdown: `llms.txt` indexes the pages and `llms-full.txt` holds all of them in one file; the installed addon carries the same pages in `addons/spritestudio/`
 - [**SpriteStudio Docs (portal)**](https://cri-middleware.github.io/SpriteStudio-Docs/) — the SDK and every official player in one place, with a [plugin](https://cri-middleware.github.io/SpriteStudio-Docs/ai/) that tells your coding assistant about SpriteStudio
 
-### Quick Links (English)
-- [Installation](./docs/en/setup/install.md)
-- [Basic Usage](./docs/en/workflow/usage_basic.md)
-- [Limitations & Scope](./docs/en/limitations.md)
-- [Troubleshooting](./docs/en/troubleshooting.md)
-- [Migration from v1.x](./docs/en/migration_from_v1.md)
-
 ## 🚀 Quick Start with GDExtension
 
 **Using it in your game?** Read on — install the add-on, drag a `.sspj` onto the editor, place a node.
@@ -40,7 +33,7 @@ Everything after that (scripting, signals, per-part overrides) is the same path 
 
 You need Godot 4.7 or later from the [official site](https://godotengine.org/download/). Projects have to be authored in **SpriteStudio 7.6 or later**.
 
-1. **Install**: Open the [latest Release](https://github.com/cri-middleware/SSPlayerForGodot/releases/latest) and download `ssplayer-godot-extension-4.7.zip` from its **Assets** — the Releases whose tag starts with `v1` are the 1.x plugin, which has neither `SSABResource` nor `SpriteStudioPlayer2D`. Extract it, copy its `addons` folder into your Godot project root, and restart the editor.
+1. **Install**: Open the [latest Release](https://github.com/cri-middleware/SSPlayerForGodot/releases/latest) and download `ssplayer-godot-extension-4.7.zip` from its **Assets**. Extract it, copy its `addons` folder into your Godot project root, and restart the editor.
 2. **Import**: Drag your `.sspj` from your file manager onto the **SS Importer** dock. It is converted into a folder named after it under `res://ssab_generated/`, the dock's default output folder (see [Asset Import and Editor Integration](./docs/en/workflow/usage_asset_pipeline.md)).
 
    ```
@@ -58,11 +51,11 @@ You need Godot 4.7 or later from the [official site](https://godotengine.org/dow
    └── project.godot
    ```
 
-3. **Play**: Drag `res://ssab_generated/Ringo/Ringo.ssab` from the FileSystem dock into the 2D viewport. That places a `SpriteStudioPlayer2D` node with the pack in its `Ssab` property and its first animation selected; run the scene to see it play.
+3. **Play**: Drag `res://ssab_generated/Ringo/Ringo.ssab` from the FileSystem dock into the 2D viewport. That places a `SpriteStudioPlayer2D` node with the pack in its `Ssab` property and its first animation selected. Press **Play from start** in the **SpriteStudio** bottom panel to see it play in the editor, or run the scene.
 
 No `.sspj` of your own yet? SpriteStudio's [official sample data](https://www.webtech.co.jp/help/ja/spritestudio7/download/sample/) works as-is — the page is in Japanese, the downloads are not. [Ringo](https://www.webtech.co.jp/help/ja/spritestudio7/download/sample/#ringo) is a good character to start with, and [Particle](https://www.webtech.co.jp/help/ja/spritestudio7/download/sample/#Perticle_sample) a good one for effects.
 
-**Read next:** [Installation](./docs/en/setup/install.md) · [Basic Usage](./docs/en/workflow/usage_basic.md) · [Limitations & Scope](./docs/en/limitations.md)
+**Read next:** [Installation](./docs/en/setup/install.md) · [Basic Usage](./docs/en/workflow/usage_basic.md) · [Limitations & Scope](./docs/en/limitations.md) · [Troubleshooting](./docs/en/troubleshooting.md) · [Migration from v1.x](./docs/en/migration_from_v1.md)
 
 ## 🔗 Related Repositories
 

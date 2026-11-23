@@ -39,9 +39,9 @@ plugins:
         Using the Player:
           - index.md: "What the player is, its key features, a data-flow diagram from `.sspj` to playback, the supported Godot Engine and SpriteStudio versions, and the related repositories."
           - setup/install.md: "The GDExtension from a release ZIP: copy its `addons` folder into the project root and restart the editor, then continue by whether you already have an `.ssab`. The custom-module build is in the Build Guide."
-          - workflow/usage_basic.md: "Placing an `.ssab` in a scene (drag it into the 2D view, or add `SpriteStudioPlayer2D` and set `Ssab`), the Inspector properties (`Current Animation`, `Autoplay`, `Loop Count`, `Speed Scale`, `Sub Frame Enabled`, animation section, process mode), the bottom-panel preview with its shortcuts, and mask parts."
           - workflow/usage_asset_pipeline.md: "Converting a `.sspj` by dropping it on the SS Importer dock (the output folder, `res://ssab_generated`), then the loop of **Open SSPJ**, editing in SpriteStudio and **Reconvert**, also from the FileSystem dock's right-click menu. Sharing `.ssplayer_sources.cfg` in a team, re-linking a moved `.sspj`, and no Open SSPJ button on Linux."
-          - workflow/usage_scripting.md: "The GDScript API: `set_animation()`, `play()`, `pause()`, `resume()` and the three playback states, signals (`animation_finished`, `animation_looped`, `user_data`, `signal_emitted`), `set_cellmap_texture()` for outfit swaps, `SpriteStudioPartAttachment2D` and `get_part_transform()` for following a part, and part color, cell and visibility overrides with their `blend_op` and `priority` values."
+          - workflow/usage_basic.md: "Placing an `.ssab` in a scene (drag it into the 2D view, or add `SpriteStudioPlayer2D` and set `Ssab`), the main Inspector properties (`Current Animation`, `Autoplay`, `Loop Count`, `Speed Scale`), the bottom-panel preview with its shortcuts, and mask parts."
+          - workflow/usage_scripting.md: "The GDScript API: `set_animation()`, `play()`, `pause()`, `resume()` and the three playback states, what an animation change keeps, signals (`animation_finished`, `animation_looped`, `user_data`, `signal_emitted`), `set_cellmap_texture()` for outfit swaps, `SpriteStudioPartAttachment2D` and `get_part_transform()` for following a part, and part color, cell and visibility overrides with their `blend_op` and `priority` values."
           - workflow/motion_blending.md: "Stacking animations on tracks: overlays with `set_track_animation()` and `set_track_alpha()`, additive tracks, `crossfade()` and `fade_track()`, mixing by weight on one track, `set_track_sync()` to start in phase, per-track speed and loop count, which source fires events, and the limits."
           - workflow/ui_buttons.md: "`SpriteStudioButton`, an animation as a Godot button: a section of the animation per state from labels (`normal`, `hover`, `pressed`, `disabled`, `focused`, and `selected_` for toggles), `state_clips`, fitting the artwork, clicks only on `hit_parts`, `reduced_motion`, and `accessibility_name`."
           - workflow/audio.md: "Sound from the audio keys: the built-in playback and its properties (`play_audio`, `audio_volume`, `audio_bus`), what fire-and-forget means (forward only, nothing on a seek, re-fires overlap), observing the `audio` signal and its payload, and routing sound to your own audio stack with a `SpriteStudioAudioBackend`."
@@ -68,8 +68,8 @@ nav:
   - 🚀 Setup:
       - Installation: setup/install.md
   - 🎬 Workflow:
-      - Basic Usage: workflow/usage_basic.md
       - Asset Import & Editor Integration: workflow/usage_asset_pipeline.md
+      - Basic Usage: workflow/usage_basic.md
       - Scripting & Events: workflow/usage_scripting.md
       - Motion Blending: workflow/motion_blending.md
       - UI Buttons: workflow/ui_buttons.md
