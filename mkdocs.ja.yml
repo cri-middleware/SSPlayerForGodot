@@ -35,9 +35,9 @@ plugins:
         Player の使い方:
           - index.md: "この Player の概要、主な機能、`.sspj` から再生までのデータの流れの図、対応する Godot Engine と SpriteStudio のバージョン、関連リポジトリ。"
           - setup/install.md: "リリースの ZIP から GDExtension を導入する手順。`addons` フォルダをプロジェクトのルートにコピーしてエディタを再起動し、`.ssab` を持っているかどうかで次のページへ進む。カスタムモジュール版はビルドガイドにある。"
-          - workflow/usage_basic.md: "`.ssab` をシーンに置いて再生する手順。2D ビューへのドラッグ＆ドロップ、または `SpriteStudioPlayer2D` を追加して `Ssab` を設定する方法、インスペクターのプロパティ（`Current Animation`、`Autoplay`、`Loop Count`、`Speed Scale`、`Sub Frame Enabled`、再生区間、処理モード）、下部パネルでのプレビューとショートカット、マスクパーツへの対応。"
           - workflow/usage_asset_pipeline.md: "`.sspj` を SS Importer ドックにドロップして変換する初回の手順（出力先は `res://ssab_generated`）と、そのあとの往復。**Open SSPJ** で SpriteStudio を開いて編集し、**Reconvert** で戻す。ファイルシステムドックの右クリックメニューからもできる。チーム開発での `.ssplayer_sources.cfg` の共有、移動した `.sspj` の再リンク、Linux では Open SSPJ が出ないこと。"
-          - workflow/usage_scripting.md: "GDScript から使う API。`set_animation()`・`play()`・`pause()`・`resume()` と 3 つの再生状態、シグナル（`animation_finished`、`animation_looped`、`user_data`、`signal_emitted`）、着せ替えのための `set_cellmap_texture()`、パーツに追従する `SpriteStudioPartAttachment2D` と `get_part_transform()`、パーツの色・セル・表示の上書きと `blend_op`・`priority` の値。"
+          - workflow/usage_basic.md: "`.ssab` をシーンに置いて再生する手順。2D ビューへのドラッグ＆ドロップ、または `SpriteStudioPlayer2D` を追加して `Ssab` を設定する方法、主なインスペクタープロパティ（`Current Animation`、`Autoplay`、`Loop Count`、`Speed Scale`）、下部パネルでのプレビューとショートカット、マスクパーツへの対応。"
+          - workflow/usage_scripting.md: "GDScript から使う API。`set_animation()`・`play()`・`pause()`・`resume()` と 3 つの再生状態、アニメーション切り替えで残る設定、シグナル（`animation_finished`、`animation_looped`、`user_data`、`signal_emitted`）、着せ替えのための `set_cellmap_texture()`、パーツに追従する `SpriteStudioPartAttachment2D` と `get_part_transform()`、パーツの色・セル・表示の上書きと `blend_op`・`priority` の値。"
           - workflow/motion_blending.md: "アニメーションをトラックに重ねる方法。`set_track_animation()` と `set_track_alpha()` によるオーバーレイ、加算トラック、`crossfade()` と `fade_track()`、1 つのトラックで重みを付けて混ぜる方法、`set_track_sync()` で位相をそろえて始めること、トラックごとの速度とループ回数、どのソースがイベントを発火するか、制約。"
           - workflow/ui_buttons.md: "`SpriteStudioButton` でアニメーションを Godot のボタンにする。状態ごとにラベルから再生する区間（`normal`・`hover`・`pressed`・`disabled`・`focused`、トグルの `selected_`）、`state_clips`、絵の収め方、`hit_parts` による絵の上でだけのクリック、`reduced_motion`、`accessibility_name`。"
           - workflow/audio.md: "サウンドキーの再生。組み込みの再生とそのプロパティ（`play_audio`、`audio_volume`、`audio_bus`）、撃ちっぱなし（fire-and-forget）の性質（順方向のみ、シークでは鳴らない、再発火は重なる）、`audio` シグナルとその payload での観測、`SpriteStudioAudioBackend` による自前のオーディオ基盤への振り分け。"
@@ -64,8 +64,8 @@ nav:
   - 🚀 セットアップ:
       - インストール: setup/install.md
   - 🎬 ワークフロー:
-      - 基本的な使い方: workflow/usage_basic.md
       - アセットのインポートとエディタ連携: workflow/usage_asset_pipeline.md
+      - 基本的な使い方: workflow/usage_basic.md
       - スクリプト制御とイベント: workflow/usage_scripting.md
       - モーションブレンド: workflow/motion_blending.md
       - UI ボタン: workflow/ui_buttons.md

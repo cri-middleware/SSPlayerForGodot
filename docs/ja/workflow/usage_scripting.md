@@ -37,6 +37,11 @@ func _process(delta):
 >
 > **`play()` は「再開」ではありません。** 区間の先頭へ巻き戻し、ループ回数を再設定します。保持の解除は `resume()`、停止位置からの続きは `play(get_frame_no())` を使ってください。
 
+> [!NOTE]
+> **アニメーション切り替えで残るもの。** 設定したものはすべて残ります。`Loop Count` / `Speed Scale` / `Frame Skip Enabled` / `Sub Frame Enabled`、`frame_rate` の上書き、再生**方向とスタイル** はいずれも `set_animation()` を跨いで保持されます。リセットされるのは **再生区間** だけで、新しいクリップ自身の範囲に戻ります。
+>
+> 方向・スタイル・`frame_rate` はスクリプトから設定し（`player.playback_direction` / `player.frame_rate`）、シーンには保存されません。
+
 ---
 
 ## シグナルによるイベント駆動の実装
