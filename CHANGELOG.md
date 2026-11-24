@@ -78,7 +78,7 @@ converted binaries (`.ssab`) instead of parsing `.sspj` at runtime. See the
   composite as Mix.
 - Sequence playback is not implemented. `SSQBResource` loads `.ssqb` files, but no node
   consumes them yet.
-- Web builds are single-threaded only and require WebAssembly SIMD, plus an engine template
-  built with `dlink_enabled=yes`.
+- Web builds are single-threaded only and require WebAssembly SIMD, and the GDExtension needs
+  Extensions Support turned on in the Web export preset.
 - For the playback constraints inherited from the shared runtime, see
   [Limitations & Scope](./docs/en/limitations.md).
