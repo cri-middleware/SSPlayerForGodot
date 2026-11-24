@@ -12,7 +12,8 @@ on:
     types: [published]
   workflow_dispatch:
 
-# Read-only by default. Only the deploy job gets what the artifact-based Pages
+# Read-only by default; contents:read is also what lets the build job download
+# the Release's addon zip. Only the deploy job gets what the artifact-based Pages
 # deploy needs (pages: write, id-token: write); the build job runs the
 # repository's scripts and does not need them. No contents:write — nothing is
 # pushed to a branch.
@@ -68,11 +69,21 @@ jobs:
     needs: channel
     if: needs.channel.outputs.deploy == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
+      # The submodules are for the demo, not the docs: deploy-examples.sh converts
+      # SpriteStudio-SDK/tests/Ringo into the .ssab the demo plays, with
+      # ssconverter-cli built from that same source. The extension itself is not
+      # built here -- the demo takes it from the Release's addon zip.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          submodules: true
           persist-credentials: false
+
+      - name: Setup Rust (Stable)
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: stable
 
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
@@ -94,26 +105,31 @@ jobs:
       - name: Install dependencies
         run: ./scripts/prepare-docs.sh
 
-      # scripts/build-pages.sh is the tree this job uploads. Here that is the two locale
-      # builds and nothing else — the site carries no demo and no examples — so it runs
-      # build-docs.sh and adds only what a working tree needs on top (the toolchain, and
-      # a server to look at the result). Running it here is what keeps CI and the local
+      # scripts/build-pages.sh is the tree this job uploads: the two locale builds, then
+      # the Web demo into site/demo. Running it here is what keeps CI and the local
       # build from drifting apart, and it is the same command in every repository in the
       # family, whatever else that repository's site carries.
       #
       # One build per locale, English first, because the English build wipes site/ and the Japanese site
       # lives inside it at site/ja. build-docs.sh owns that order; the reason it exists is
       # that the opposite order silently publishes a site with no Japanese pages at all.
+      # The demo goes in last for the same reason.
       #
       # --strict fails the build on broken links, so a publish
       # aborts rather than deploying a site with a dead link.
       #
+      # The demo is exported with the addon zip of the Release being deployed (tag=), so
+      # it is what that release's users download. A dispatch runs from a tag, which the
+      # channel job has already insisted on, and takes that tag's Release.
+      #
       # Every option is spelled out rather than left to the script's defaults: they are
       # chosen for a working tree, and a publish should not change because one of them did.
-      - name: Build the Pages tree (docs, both locales, strict validation)
-        run: ./scripts/build-pages.sh prepare=no serve=no
+      - name: Build the Pages tree (docs both locales, strict validation, Web demo)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name || github.ref_name }}
+        run: ./scripts/build-pages.sh prepare=no serve=no demo=yes "tag=$TAG"
 
-      # Only the MkDocs output (site/) is served — no examples/demos to bundle.
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:

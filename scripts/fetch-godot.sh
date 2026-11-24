@@ -2,14 +2,16 @@
 #
 # Download the stock Godot editor pinned in scripts/GODOT_VERSION.txt into
 # godot-bin/ (gitignored), for scripts/run-tests.sh to run the headless suite
-# against.
+# against and for scripts/build-pages.sh to export the Web demo with.
 #
-# Nothing calls this on your behalf. run-tests.sh looks for a binary you
+# run-tests.sh does not call this on your behalf. It looks for a binary you
 # already have -- godot=<path>, $GODOT, godot-bin/, godot/bin/, PATH -- and
 # prints this command rather than downloading tens of MB without being asked.
+# build-pages.sh does call it: building the demo is a download already.
 #
-# The editor build is the whole download, and it is all that is needed: the
-# export templates are another ~1.2 GB and the suite exports nothing.
+# The editor build is the whole download: the export templates are another
+# ~1.2 GB, the suite exports nothing, and the demo takes its one template with
+# scripts/fetch-godot-template.py.
 #
 # This is deliberately NOT the same binary as godot/bin/*. That one is a custom
 # module build of the engine, which has SpriteStudio compiled in -- it would

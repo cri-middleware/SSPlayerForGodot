@@ -61,5 +61,7 @@ jobs:
       - name: Install dependencies
         run: ./scripts/prepare-docs.sh
 
+      # The documentation half of what pages.yml builds. The Web demo is exported with
+      # a Release's addon zip, which a change under review does not have yet.
       - name: Build the Pages tree (docs, both locales, strict validation)
-        run: ./scripts/build-pages.sh prepare=no serve=no
+        run: ./scripts/build-pages.sh prepare=no serve=no demo=no
