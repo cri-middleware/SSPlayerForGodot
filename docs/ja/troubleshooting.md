@@ -122,7 +122,7 @@ Linux 上の Godot エディタではこのボタンは表示されません。�
 
 ## Web エクスポート
 
-- **「GDExtension libraries are not supported by this engine version.」** — 素の Web テンプレートは GDExtension を読み込めません。`dlink_enabled=yes` でビルドしたエンジンテンプレートを用意してエクスポートプリセットで **Extensions Support** を有効にするか、どちらも不要な**カスタムモジュール**形態を使ってください。[プロジェクトのエクスポート → Web](workflow/export.md#web) を参照。
+- **「GDExtension libraries are not supported by this engine version.」** — Web エクスポートプリセットの **Extensions Support** が OFF です。ON にして書き出し直すか、これが不要な**カスタムモジュール**形態を使ってください。[プロジェクトのエクスポート → Web](workflow/export.md#web) を参照。
 - **ページは開くがアニメーションが出ない** — ランタイムは WebAssembly SIMD 付きでビルドされており、SIMD 非対応のブラウザでは動作しません。配信要件として扱ってください。
 - **COOP/COEP ヘッダは不要**です。Web ビルドは意図的にシングルスレッド (`nothread`) のため、通常の静的サーバーで動作します。
 

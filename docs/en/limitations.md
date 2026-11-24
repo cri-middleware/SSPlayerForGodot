@@ -51,7 +51,7 @@ Per-platform caveats to keep in mind:
 > [!WARNING]
 > - **Single-threaded (`nothread`) only.** On the Web the plugin runs without threads. The upside is that no cross-origin isolation (COOP/COEP) headers are required, so a plain HTTP server is enough to run an export. Leave **Thread Support** off in the export preset.
 > - **WebAssembly SIMD is required.** The runtime is built with WebAssembly SIMD instructions and will **not run on browsers without SIMD support**. Treat SIMD support as a browser requirement for your distribution.
-> - **GDExtension on the Web needs a dlink-enabled engine template.** The official Godot Web export templates do not support GDExtension libraries. You must supply an engine template built with `dlink_enabled=yes` and turn on **"Extensions Support"** in the export preset — otherwise the exported page fails with *"GDExtension libraries are not supported by this engine version."* See [Exporting Your Project → Web](workflow/export.md#web) for the steps. (The **custom module** variant embeds the code into the engine itself and does not need this.)
+> - **GDExtension on the Web needs Extensions Support.** Turn on **Extensions Support** in the Web export preset; Godot's official export templates include the template it selects. Without it, the exported page fails with *"GDExtension libraries are not supported by this engine version."* See [Exporting Your Project → Web](workflow/export.md#web). (The **custom module** variant embeds the code into the engine itself and does not need this.)
 
 ## Motion Blending
 

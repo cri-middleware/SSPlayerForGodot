@@ -122,7 +122,7 @@ Select the node and use the **SpriteStudio** bottom panel — play from start / 
 
 ## Web export
 
-- **"GDExtension libraries are not supported by this engine version."** — the stock Web templates cannot load GDExtension. Supply an engine template built with `dlink_enabled=yes` and enable **Extensions Support** in the export preset, or use the **custom module** build, which needs neither. See [Exporting Your Project → Web](workflow/export.md#web).
+- **"GDExtension libraries are not supported by this engine version."** — **Extensions Support** is off in the Web export preset. Turn it on and export again, or use the **custom module** build, which does not need it. See [Exporting Your Project → Web](workflow/export.md#web).
 - **The page loads but the animation never appears** — the runtime is built with WebAssembly SIMD and does not run on browsers without it. Treat SIMD as a distribution requirement.
 - **COOP/COEP headers** are *not* needed: the Web build is single-threaded (`nothread`) on purpose, so a plain static server is enough.
 
