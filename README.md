@@ -4,6 +4,8 @@
 
 **Professional 2D animations for your Godot games. A plugin that balances intuitive usability with extreme performance.**
 
+▶️ **[Try the live demo in your browser](https://cri-middleware.github.io/SSPlayerForGodot/demo/)** — a SpriteStudio animation played by Godot's Web export, with nothing to install.
+
 A high-performance extension plugin (GDExtension / Custom Module) for playing animations (`.ssab`) created with **[SpriteStudio](https://www.webtech.co.jp/eng/spritestudio/)** on [Godot Engine](https://godotengine.org/). By combining Godot's powerful features with the expressive capabilities of a dedicated animation tool, it fully supports the development of rich 2D games.
 
 ## ✨ Why use SpriteStudio with Godot?

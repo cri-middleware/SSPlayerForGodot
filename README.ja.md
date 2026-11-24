@@ -4,6 +4,8 @@
 
 **Godot のゲームに、プロフェッショナルな2Dアニメーションを。直感的な使いやすさと、極限のパフォーマンスを両立するプラグイン。**
 
+▶️ **[ブラウザでライブデモを試す](https://cri-middleware.github.io/SSPlayerForGodot/demo/)** — Godot の Web 書き出しで再生する SpriteStudio アニメーションをブラウザで見られます。インストールは要りません。
+
 **[SpriteStudio](https://www.webtech.co.jp/spritestudio/)** のアニメーション (`.ssab`) を [Godot Engine](https://godotengine.org/) 上で再生するためのハイパフォーマンスな拡張プラグイン（GDExtension / カスタムモジュール）です。Godot の強力な機能と、専用アニメーションツールの表現力を組み合わせることで、リッチな2Dゲーム開発をサポートします。
 
 ## ✨ SpriteStudio を Godot で使うメリット
