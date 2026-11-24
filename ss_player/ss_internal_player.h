@@ -94,6 +94,12 @@ struct SsDynamicMesh {
     PackedByteArray vertex_bytes;
     PackedByteArray attribute_bytes;
     PackedByteArray index_bytes;
+#ifdef WEB_ENABLED
+    // The indices the surface holds, which on the Web reach it only when it is
+    // built (see _draw_dynamic_mesh). Empty while it holds the zeros it was
+    // created with.
+    LocalVector<uint8_t> surface_indices;
+#endif
 };
 
 inline void ss_free_dynamic_mesh(RenderingServer* p_rs, SsDynamicMesh& p_mesh) {

@@ -3501,6 +3501,38 @@ void SsInternalPlayer::_emit_partcolor_mesh(RenderingServer* rs, RID ci,
     _draw_dynamic_mesh(rs, _mesh_pool[_mesh_pool_in_use++], ci, streams, texture_rid);
 }
 
+#ifdef WEB_ENABLED
+namespace {
+// Build `m`'s surface again from the streams it holds, which is how the Web
+// gets new indices to the GPU (see _draw_dynamic_mesh).
+void build_dynamic_surface(RenderingServer* rs, const SsDynamicMesh& m, const AABB& aabb) {
+#ifdef SPRITESTUDIO_GODOT_EXTENSION
+    Dictionary surface;
+    surface["primitive"] = (int)RenderingServer::PRIMITIVE_TRIANGLES;
+    surface["format"] = (int64_t)(m.format | RenderingServer::ARRAY_FLAG_FORMAT_CURRENT_VERSION);
+    surface["vertex_data"] = m.vertex_bytes;
+    surface["attribute_data"] = m.attribute_bytes;
+    surface["vertex_count"] = m.vertex_capacity;
+    surface["index_data"] = m.index_bytes;
+    surface["index_count"] = m.index_capacity;
+    surface["aabb"] = aabb;
+#else
+    RenderingServerTypes::SurfaceData surface;
+    surface.primitive = RSE::PRIMITIVE_TRIANGLES;
+    surface.format = m.format | RSE::ARRAY_FLAG_FORMAT_CURRENT_VERSION;
+    surface.vertex_data = m.vertex_bytes;
+    surface.attribute_data = m.attribute_bytes;
+    surface.vertex_count = m.vertex_capacity;
+    surface.index_data = m.index_bytes;
+    surface.index_count = m.index_capacity;
+    surface.aabb = aabb;
+#endif
+    rs->mesh_clear(m.mesh);
+    rs->mesh_add_surface(m.mesh, surface);
+}
+} // namespace
+#endif
+
 void SsInternalPlayer::_draw_dynamic_mesh(RenderingServer* rs, SsDynamicMesh& m, RID ci,
                                           const SsMeshStreams& s, const RID& texture_rid) {
     if (s.vertex_count <= 0 || s.index_count <= 0) {
@@ -3577,6 +3609,9 @@ void SsInternalPlayer::_draw_dynamic_mesh(RenderingServer* rs, SsDynamicMesh& m,
         m.index_bytes.resize(index_capacity * m.index_stride);
         m.vertex_bytes.fill(0);
         m.attribute_bytes.fill(0);
+#ifdef WEB_ENABLED
+        m.surface_indices.clear();
+#endif
     }
 
     // Vertices past `vertex_count` keep what an earlier frame wrote; no index
@@ -3621,13 +3656,34 @@ void SsInternalPlayer::_draw_dynamic_mesh(RenderingServer* rs, SsDynamicMesh& m,
     }
     memset(index_out + s.index_count * m.index_stride, 0, (m.index_capacity - s.index_count) * m.index_stride);
 
+    const AABB aabb(Vector3(aabb_min.x, aabb_min.y, 0.0f),
+                    Vector3(aabb_max.x - aabb_min.x, aabb_max.y - aabb_min.y, 0.0f));
+#ifdef WEB_ENABLED
+    // WebGL 2 cannot take an index-region update: the Compatibility renderer's
+    // MeshStorage::mesh_surface_update_index_region binds the index buffer to
+    // GL_ARRAY_BUFFER to write it, and WebGL refuses to bind a buffer that has
+    // been an ELEMENT_ARRAY_BUFFER to any other target. The indices would stay
+    // the zeros the surface was created with, and nothing would draw. So here
+    // new indices build the surface again, streams and all, and a frame whose
+    // indices the surface already holds rewrites the other two in place.
+    const uint32_t index_size = m.index_bytes.size();
+    if (m.surface_indices.size() != index_size
+        || memcmp(m.surface_indices.ptr(), index_out, index_size) != 0) {
+        build_dynamic_surface(rs, m, aabb);
+        m.surface_indices.resize(index_size);
+        memcpy(m.surface_indices.ptr(), index_out, index_size);
+    } else {
+        rs->mesh_surface_update_vertex_region(m.mesh, 0, 0, m.vertex_bytes);
+        rs->mesh_surface_update_attribute_region(m.mesh, 0, 0, m.attribute_bytes);
+    }
+#else
     rs->mesh_surface_update_vertex_region(m.mesh, 0, 0, m.vertex_bytes);
     rs->mesh_surface_update_attribute_region(m.mesh, 0, 0, m.attribute_bytes);
     rs->mesh_surface_update_index_region(m.mesh, 0, 0, m.index_bytes);
+#endif
     // The surface's own bounds are those of the empty geometry it was created
     // with; the canvas culls the item by these instead.
-    rs->mesh_set_custom_aabb(m.mesh, AABB(Vector3(aabb_min.x, aabb_min.y, 0.0f),
-                                          Vector3(aabb_max.x - aabb_min.x, aabb_max.y - aabb_min.y, 0.0f)));
+    rs->mesh_set_custom_aabb(m.mesh, aabb);
     rs->canvas_item_add_mesh(ci, m.mesh, Transform2D(), Color(1, 1, 1, 1), texture_rid);
 }
 
