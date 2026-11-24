@@ -92,12 +92,12 @@ Once built, open the `examples/overall_gdextension` project in the Godot Editor 
 Pages live as both `docs/en/<path>` and `docs/ja/<path>`; there is no fallback locale, so a page missing from one side is a nav entry pointing at nothing. Each locale also ships its own `docs/<locale>/assets/`, and asset paths are source-relative (`../assets/…`) **including inside raw `<video>` / `<img>` HTML**, which Zensical rewrites the same way it rewrites Markdown links. If you edit a page, build both locales before you finish. CI builds them too, both `--strict`, on a pull request that touches the site's sources, on the release PR and weekly.
 
 ```bash
-scripts/prepare-docs.sh          # once: .venv + the pins in docs/requirements.txt
-scripts/build-docs.sh            # English then Japanese, both --strict
-scripts/build-pages.sh serve=yes # the published tree, both locales -> http://localhost:8000/
+scripts/prepare-docs.sh                  # once: .venv + the pins in docs/requirements.txt
+scripts/build-docs.sh                    # English then Japanese, both --strict
+scripts/build-pages.sh serve=yes demo=no # the published tree, both locales -> http://localhost:8000/
 ```
 
-Both locales, English first: it clears `site/`, which contains `site/ja`, so an English-only build leaves no Japanese site at all. `mkdocs.base.yml` sets `strict: true`; `zensical serve` validates nothing, `--strict` or not, and serves one locale at a time, so `build-pages.sh serve=yes` is the only way to see the language selector resolve. `pages.yml`'s build job **is** that script, so CI builds exactly what a local run with the same options builds. `.ps1` twins on Windows, `key=value` options and `--help` on both.
+Both locales, English first: it clears `site/`, which contains `site/ja`, so an English-only build leaves no Japanese site at all. `mkdocs.base.yml` sets `strict: true`; `zensical serve` validates nothing, `--strict` or not, and serves one locale at a time, so `build-pages.sh serve=yes` is the only way to see the language selector resolve. `pages.yml`'s build job **is** that script, so CI builds exactly what a local run with the same options builds. The published tree also holds the Web demo, `site/demo/`, which `demo=no` leaves out: it is `examples/Ringo` exported with a Release's addon zip, and building it needs the Rust toolchain `deploy-examples` needs (`--help` has the rest). `.ps1` twins on Windows, `key=value` options and `--help` on both.
 
 ## Coding Standards
 
@@ -207,12 +207,12 @@ Godot Engineとのネイティブな統合と高いパフォーマンスを維�
 ページは `docs/en/<path>` と `docs/ja/<path>` の両方に存在します。フォールバックロケールは無いため、片方に欠けたページは行き先の無い nav エントリになります。アセットもロケールごとに `docs/<locale>/assets/` を持ち、パスはソース相対（`../assets/…`）です。**生の `<video>` / `<img>` HTML の中でも同じ**で、Zensical は Markdown リンクと同じ規則で書き換えます。ページを編集したら、仕上げる前に両ロケールをビルドしてください。CI も、サイトのソースに触れるプルリクエスト、リリースのプルリクエスト、週次の実行で、両ロケールを `--strict` でビルドします。
 
 ```bash
-scripts/prepare-docs.sh          # 一度だけ: .venv と docs/requirements.txt のピン
-scripts/build-docs.sh            # 英語 → 日本語の順に、どちらも --strict
-scripts/build-pages.sh serve=yes # 公開ツリー、両ロケール -> http://localhost:8000/
+scripts/prepare-docs.sh                  # 一度だけ: .venv と docs/requirements.txt のピン
+scripts/build-docs.sh                    # 英語 → 日本語の順に、どちらも --strict
+scripts/build-pages.sh serve=yes demo=no # 公開ツリー、両ロケール -> http://localhost:8000/
 ```
 
-必ず両ロケールを、英語を先にビルドします。英語ビルドは `site/`（その中に `site/ja` がある）を消すため、英語だけビルドすると日本語サイトは残らず消えます。`mkdocs.base.yml` が `strict: true` を設定します。`zensical serve` は `--strict` を付けても何も検証せず、1 ロケールずつしか配信しないため、言語セレクタの動作を確認できるのは `build-pages.sh serve=yes` だけです。`pages.yml` のビルドジョブはそのスクリプトなので、CI が建てるものは、同じオプションで手元で建てたものと一致します。Windows は `.ps1` 版を使い、どちらも `key=value` オプションと `--help` を取ります。
+必ず両ロケールを、英語を先にビルドします。英語ビルドは `site/`（その中に `site/ja` がある）を消すため、英語だけビルドすると日本語サイトは残らず消えます。`mkdocs.base.yml` が `strict: true` を設定します。`zensical serve` は `--strict` を付けても何も検証せず、1 ロケールずつしか配信しないため、言語セレクタの動作を確認できるのは `build-pages.sh serve=yes` だけです。`pages.yml` のビルドジョブはそのスクリプトなので、CI が建てるものは、同じオプションで手元で建てたものと一致します。公開ツリーには Web デモ（`site/demo/`）も入り、`demo=no` はそれを外します。デモは `examples/Ringo` を Release の addon zip で書き出したもので、作るには `deploy-examples` と同じ Rust ツールチェーンが要ります（残りは `--help`）。Windows は `.ps1` 版を使い、どちらも `key=value` オプションと `--help` を取ります。
 
 ## コーディング規約
 

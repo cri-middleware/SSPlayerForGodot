@@ -130,7 +130,7 @@ gh run watch "${RUN:?}" --exit-status
 
 **A person runs this step**: the notes are a judgment, and a published Release is permanent. Open the draft on the [Releases](https://github.com/cri-middleware/SSPlayerForGodot/releases) page, check that the add-on zip and `SHA256SUMS` are attached, edit the notes, and **Publish release** as the draft is marked: `scripts/release-channel.sh` made it a pre-release when a full release is already tagged, and left it to become Latest otherwise. Only a Release that becomes Latest deploys the site.
 
-Publishing also starts `pages.yml`, which deploys the [documentation site](https://cri-middleware.github.io/SSPlayerForGodot/). Watch the run through, then open the site; the block waits up to a minute for the run, which appears a few seconds after the Release is published. A failed run leaves the Release published and the site as it was. Once the cause is fixed, re-run it with `gh run rerun <run-id>`, the run the block watched; a re-run builds the same tag.
+Publishing also starts `pages.yml`, which deploys the [documentation site](https://cri-middleware.github.io/SSPlayerForGodot/) and, at `demo/`, the Web demo it exports with the Release's add-on zip. Watch the run through, then open the site and the demo; the block waits up to a minute for the run, which appears a few seconds after the Release is published. A failed run leaves the Release published and the site as it was. Once the cause is fixed, re-run it with `gh run rerun <run-id>`, the run the block watched; a re-run builds the same tag.
 
 ```bash
 git fetch origin --tags
@@ -358,7 +358,7 @@ gh run watch "${RUN:?}" --exit-status
 
 **この手順は人が行います。** リリースノートの中身は判断が要り、公開した Release は取り消せないためです。[Releases](https://github.com/cri-middleware/SSPlayerForGodot/releases) ページで下書きを開き、アドオンの zip と `SHA256SUMS` が添付されていることを確かめ、リリースノートを編集し、下書きの印のまま **Publish release** を押します。`scripts/release-channel.sh` が、正式版のタグがすでにあれば pre-release にし、なければ Latest になるようにしてあります。サイトをデプロイするのは Latest になる Release だけです。
 
-公開すると `pages.yml` が動き、[ドキュメントサイト](https://cri-middleware.github.io/SSPlayerForGodot/) をデプロイします。run を最後まで見届けてから、サイトを開いて確かめます。run は Release の公開から数秒遅れて出るので、ブロックは最大 1 分待ちます。run が失敗しても Release は公開されたままで、サイトは元のまま残ります。原因を直したら、ブロックが見届けた run を `gh run rerun <run-id>` で再実行します。再実行は同じタグをビルドします。
+公開すると `pages.yml` が動き、[ドキュメントサイト](https://cri-middleware.github.io/SSPlayerForGodot/) と、Release のアドオンの zip で書き出した Web デモ（`demo/`）をデプロイします。run を最後まで見届けてから、サイトとデモを開いて確かめます。run は Release の公開から数秒遅れて出るので、ブロックは最大 1 分待ちます。run が失敗しても Release は公開されたままで、サイトは元のまま残ります。原因を直したら、ブロックが見届けた run を `gh run rerun <run-id>` で再実行します。再実行は同じタグをビルドします。
 
 ```bash
 git fetch origin --tags
