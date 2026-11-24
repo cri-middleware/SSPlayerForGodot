@@ -3,6 +3,10 @@
 A plugin for playing back animations created with [SpriteStudio](https://www.webtech.co.jp/eng/spritestudio/) inside [Godot Engine](https://godotengine.org/).
 Drag a `.sspj` onto the **SS Importer** dock, then drop the converted `.ssab` into the 2D viewport — no code to reach the first frame.
 
+!!! tip "Try it in your browser"
+    [▶️ Run the sample project](demo/) — `examples/Ringo` exported for the Web and published
+    alongside this documentation. Nothing to install.
+
 !!! tip "No SpriteStudio data of your own yet?"
     The [official sample data](https://www.webtech.co.jp/help/ja/spritestudio7/download/sample/) works as-is — that page is
     Japanese only, but the downloads themselves are language-neutral.
