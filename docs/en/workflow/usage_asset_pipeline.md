@@ -25,7 +25,7 @@ Drag and drop the generated `.ssab` file into the 2D viewport to place a `Sprite
 > <img src="../assets/1-sspj_import.webp" alt="A .sspj dragged from the file manager onto the SS Importer dock is converted, its .ssab files appear under res://ssab_generated/ in the FileSystem dock, and one dragged into the 2D viewport is placed as a character." width="100%" style="display: none;" loading="lazy">
 
 > [!TIP]
-> If you do not have a `.sspj` yet and just want to try this out, the [official SpriteStudio sample data](https://www.webtech.co.jp/help/ja/spritestudio7/download/sample/) works as-is (that page is only available in Japanese; the downloads themselves are language-neutral). [Ringo](https://www.webtech.co.jp/help/ja/spritestudio7/download/sample/#ringo) is a good character sample, and [Particle](https://www.webtech.co.jp/help/ja/spritestudio7/download/sample/#Perticle_sample) is a good one if you want effects. Drop the downloaded `.sspj` onto the "SS Importer" dock exactly as described above.
+> If you do not have a `.sspj` yet and just want to try this out, the [official SpriteStudio sample data](https://www.webtech.co.jp/help/ja/spritestudio7/download/sample/) works as-is (that page is only available in Japanese; the downloads themselves are language-neutral). [Ringo](https://www.webtech.co.jp/spritestudio/ss6user/download/OPTPiX_SpriteStudio_Ringo_Sample_20220121.zip) is a good character sample, and [Particle](https://www.webtech.co.jp/spritestudio/ss6user/download/OPTPiX_SpriteStudio_ParticleEffect_Sample_20191025.zip) is a good one if you want effects. Drop the downloaded `.sspj` onto the "SS Importer" dock exactly as described above.
 
 ---
 
